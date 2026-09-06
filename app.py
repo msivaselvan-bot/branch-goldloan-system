@@ -285,6 +285,9 @@ else:
                             except Exception as err:
                                 st.error(f"புதுப்பிப்பதில் பிழை: {err}")
 
+       # ==========================================
+        # Tab 3: Customer Report.xls மொத்தப் பதிவேற்றம்
+        # ==========================================
         with tab3:
             st.subheader("📥 பழைய வாடிக்கையாளர் அறிக்கையைப் பதிவேற்றுதல் (Customer Report Import)")
             st.write("உங்கள் `Customer Report.xls` கோப்பை இங்கே பதிவேற்றினால், அதில் உள்ள கிளைக் குறியீடுகளுக்கு (Branch Codes) ஏற்ப வாடிக்கையாளர்கள் தானாகவே பிரிக்கப்பட்டு இணைக்கப்படுவர்.")
@@ -317,17 +320,28 @@ else:
                             b_code_to_id = {b["branch_code"].strip().upper(): b["id"] for b in all_b.data} if all_b.data else {}
 
                             records_to_insert = []
+                            seen_codes = set()
+
                             for idx, row in df_cust.iterrows():
                                 b_code = str(row.get("Branch", "")).strip().upper()
                                 target_branch_id = b_code_to_id.get(b_code)
 
-                                c_no = str(row.get("Customer No", idx + 1)).replace(".0", "")
-                                c_code = f"{b_code}-{c_no}"
+                                # Customer No '0' ஆக இருந்தால் வரிசை எண் சேர்க்கப்படும்
+                                raw_c_no = str(row.get("Customer No", "")).replace(".0", "").strip()
+                                if not raw_c_no or raw_c_no == "0" or raw_c_no == "nan":
+                                    c_code = f"{b_code}-0-{idx+1}"
+                                else:
+                                    c_code = f"{b_code}-{raw_c_no}"
 
-                                mob1 = str(row.get("Mobile No", "")).replace(".0", "")
-                                mob2 = str(row.get("Secondary No", "")).replace(".0", "") if pd.notna(row.get("Secondary No")) else ""
+                                # ஏதேனும் குறியீடு மீண்டும் வந்தால் தனித்துவமாக மாற்றுதல்
+                                if c_code in seen_codes:
+                                    c_code = f"{c_code}-{idx+1}"
+                                seen_codes.add(c_code)
+
+                                mob1 = str(row.get("Mobile No", "")).replace(".0", "").strip()
+                                mob2 = str(row.get("Secondary No", "")).replace(".0", "").strip() if pd.notna(row.get("Secondary No")) else ""
                                 if not mob2 and pd.notna(row.get("Whatsapp No")):
-                                    mob2 = str(row.get("Whatsapp No", "")).replace(".0", "")
+                                    mob2 = str(row.get("Whatsapp No", "")).replace(".0", "").strip()
 
                                 records_to_insert.append({
                                     "branch_id": target_branch_id,
@@ -341,6 +355,7 @@ else:
                                     "nominee_relation": str(row.get("Relation", "")).strip() if pd.notna(row.get("Relation")) else "",
                                 })
 
+                            # Supabase-ல் 100 பதிவுகளாகப் பிரித்துச் சேர்த்தல்
                             batch_size = 100
                             for i in range(0, len(records_to_insert), batch_size):
                                 batch = records_to_insert[i : i + batch_size]
