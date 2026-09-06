@@ -317,6 +317,89 @@ def get_current_branch_cash_drawer(branch_id: int):
     except Exception:
         return empty_stock
 
+def render_staff_attribution_report(selected_branch_id=None):
+    """பணியாளர் வாரியான வணிக நடவடிக்கைகள் மற்றும் தொகையைத் தொகுத்து அறிக்கையாகக் காட்டுகிறது"""
+    st.markdown("### 📊 பணியாளர் வாரியான நடவடிக்கைகள் அறிக்கை (Staff Attribution Report)")
+
+    d_col1, d_col2 = st.columns(2)
+    start_date = d_col1.date_input("தொடக்கத் தேதி (From Date):", value=date.today().replace(day=1), key=f"rep_start_{selected_branch_id}")
+    end_date = d_col2.date_input("முடிவுத் தேதி (To Date):", value=date.today(), key=f"rep_end_{selected_branch_id}")
+
+    if start_date > end_date:
+        st.error("தொடக்கத் தேதி முடிவுத் தேதியை விட அதிகமாக இருக்கக்கூடாது!")
+        return
+
+    start_dt_str = f"{start_date}T00:00:00"
+    end_dt_str = f"{end_date}T23:59:59"
+
+    query = (
+        supabase.table("customer_visits")
+        .select("id, visit_no, branch_id, created_at, branches(branch_name), transactions(*)")
+        .gte("created_at", start_dt_str)
+        .lte("created_at", end_dt_str)
+    )
+
+    if selected_branch_id:
+        query = query.eq("branch_id", selected_branch_id)
+
+    res = query.execute()
+    visits = res.data or []
+
+    flat_data = []
+    for v in visits:
+        b_name = v.get("branches", {}).get("branch_name", "Unknown") if v.get("branches") else "Unknown"
+        for t in v.get("transactions", []):
+            flat_data.append({
+                "தேதி": str(v.get("created_at", ""))[:10],
+                "வருகை எண்": v.get("visit_no", "-"),
+                "கிளை": b_name,
+                "பணியாளர்": t.get("staff_name", "Walk-in"),
+                "நடவடிக்கை வகை": t.get("transaction_type", "-"),
+                "பட்டுவாடா (Paid ₹)": float(t.get("paid_amount", 0.0)),
+                "வரவு (Received ₹)": float(t.get("received_amount", 0.0)),
+                "குறிப்பு": t.get("remarks", "")
+            })
+
+    if not flat_data:
+        st.info("தேர்ந்தெடுக்கப்பட்ட தேதி வரம்பில் பரிவர்த்தனைகள் எதுவும் இல்லை.")
+        return
+
+    df_rep = pd.DataFrame(flat_data)
+
+    tot_txns = len(df_rep)
+    tot_paid = df_rep["பட்டுவாடா (Paid ₹)"].sum()
+    tot_rec = df_rep["வரவு (Received ₹)"].sum()
+
+    m1, m2, m3 = st.columns(3)
+    m1.metric("மொத்த நடவடிக்கைகள்", f"{tot_txns:,}")
+    m2.metric("மொத்த பட்டுவாடா", f"₹{tot_paid:,.2f}")
+    m3.metric("மொத்த வரவு", f"₹{tot_rec:,.2f}")
+
+    st.markdown("---")
+
+    st.markdown("##### 👥 பணியாளர் வாரியான தொகுப்பு விவரங்கள்")
+    staff_summary = df_rep.groupby(["பணியாளர்", "நடவடிக்கை வகை"]).agg(
+        எண்ணிக்கை=("நடவடிக்கை வகை", "count"),
+        வழங்கிய_தொகை=("பட்டுவாடா (Paid ₹)", "sum"),
+        பெற்ற_தொகை=("வரவு (Received ₹)", "sum")
+    ).reset_index()
+
+    staff_summary["நிகர_ரொக்கம்"] = staff_summary["வழங்கிய_தொகை"] - staff_summary["பெற்ற_தொகை"]
+    staff_summary.columns = ["பணியாளர்", "நடவடிக்கை வகை", "எண்ணிக்கை", "பட்டுவாடா (Paid ₹)", "வரவு (Received ₹)", "நிகர ரொக்கம் (Net ₹)"]
+    st.dataframe(staff_summary, use_container_width=True)
+
+    with st.expander("📑 அனைத்து தனிநபர் பரிவர்த்தனைகளின் விரிவான பட்டியல் (Detailed Log)"):
+        st.dataframe(df_rep, use_container_width=True)
+
+    csv = staff_summary.to_csv(index=False).encode('utf-8')
+    st.download_button(
+        label="📥 அறிக்கையைப் பதிவிறக்குக (Download CSV)",
+        data=csv,
+        file_name=f"Staff_Report_{start_date}_to_{end_date}.csv",
+        mime="text/csv",
+        key=f"dl_csv_{selected_branch_id}"
+    )
+
 # ==========================================
 # 3. தற்காலிக சேமிப்பக மாறிகள் (Session State)
 # ==========================================
@@ -425,14 +508,15 @@ else:
     # ----------------------------------------------------
     if st.session_state.user_role == "Admin":
         st.header("⚙️ நிர்வாக மேலாண்மை (Admin Control Panel)")
-        tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(
+        tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(
             [
                 "🏢 கிளைகள்",
                 "👥 பணியாளர்கள்",
                 "📥 மொத்தப் பதிவேற்றம்",
                 "🗂️ வாடிக்கையாளர் மேலாண்மை",
                 "📊 வருகை & பரிவர்த்தனை திருத்தம்",
-                "💰 கிளை துவக்க இருப்பு & கல்லா"
+                "💰 கிளை துவக்க இருப்பு & கல்லா",
+                "📈 பணியாளர் அறிக்கை (Staff Report)"
             ]
         )
 
@@ -814,6 +898,13 @@ else:
                     })
                 st.dataframe(pd.DataFrame(view_records), use_container_width=True)
 
+        with tab7:
+            st.subheader("📈 அனைத்து கிளைகளின் பணியாளர் அறிக்கை (All Branches Report)")
+            rep_b_opts = ["அனைத்து கிளைகளும் (All Branches)"] + list(branch_options.keys())
+            sel_rep_b = st.selectbox("கிளையை வடிகட்டவும்:", rep_b_opts, key="adm_rep_branch_sel")
+            filter_b_id = branch_options.get(sel_rep_b) if sel_rep_b != "அனைத்து கிளைகளும் (All Branches)" else None
+            render_staff_attribution_report(selected_branch_id=filter_b_id)
+
     # ----------------------------------------------------
     # B. அழைப்பு சரிபார்ப்பு திரை (OPERATIONS CALLING DESK)
     # ----------------------------------------------------
@@ -848,19 +939,25 @@ else:
                     btn_op1, btn_op2 = st.columns(2)
                     with btn_op1:
                         if st.button("✅ வாடிக்கையாளர் அழைப்பு சரிபார்க்கப்பட்டது (Call Verified)", key=f"v_call_{item['id']}", type="primary"):
-                            supabase.table("customer_visits").update({
-                                "status": "Pending_Branch_Docs",
-                                "verification_remarks": "Operations: Call Verified"
-                            }).eq("id", item["id"]).execute()
+                            try:
+                                supabase.table("customer_visits").update({
+                                    "status": "Pending_Branch_Docs",
+                                    "verification_remarks": "Operations: Call Verified"
+                                }).eq("id", item["id"]).execute()
+                            except Exception:
+                                supabase.table("customer_visits").update({"status": "Pending_Branch_Docs"}).eq("id", item["id"]).execute()
                             st.success(f"{item['visit_no']} சரிபார்க்கப்பட்டது! கிளை ஆவணங்கள் பதிவேற்றத்திற்கு அனுப்பப்பட்டது.")
                             st.rerun()
                     with btn_op2:
                         if st.button("⚠️ சந்தேகம் / மறுப்பு (Flag Issue)", key=f"flag_call_{item['id']}"):
                             if flag_note.strip():
-                                supabase.table("customer_visits").update({
-                                    "status": "Needs_Clarification",
-                                    "verification_remarks": f"Operations Clarification: {flag_note.strip()}"
-                                }).eq("id", item["id"]).execute()
+                                try:
+                                    supabase.table("customer_visits").update({
+                                        "status": "Needs_Clarification",
+                                        "verification_remarks": f"Operations Clarification: {flag_note.strip()}"
+                                    }).eq("id", item["id"]).execute()
+                                except Exception:
+                                    supabase.table("customer_visits").update({"status": "Needs_Clarification"}).eq("id", item["id"]).execute()
                                 st.warning("கிளையிடம் விளக்கம் கோரப்பட்டது.")
                                 st.rerun()
                             else:
@@ -898,10 +995,14 @@ else:
                     col_a1, col_a2 = st.columns(2)
                     with col_a1:
                         if st.button(f"அங்கீகரி (Approve) - {item['visit_no']}", key=f"app_{item['id']}", type="primary"):
-                            supabase.table("customer_visits").update({
-                                "status": "Approved",
-                                "verification_remarks": "Auditor: Approved"
-                            }).eq("id", item["id"]).execute()
+                            try:
+                                supabase.table("customer_visits").update({
+                                    "status": "Approved",
+                                    "verification_remarks": "Auditor: Approved"
+                                }).eq("id", item["id"]).execute()
+                            except Exception:
+                                supabase.table("customer_visits").update({"status": "Approved"}).eq("id", item["id"]).execute()
+
                             supabase.table("audit_records").update({
                                 "audit_status": "Approved",
                                 "auditor_name": st.session_state.username,
@@ -912,27 +1013,35 @@ else:
                     with col_a2:
                         if st.button("விளக்கம் கேள் (Need Clarification)", key=f"rej_{item['id']}"):
                             if auditor_query.strip():
-                                supabase.table("customer_visits").update({
-                                    "status": "Needs_Clarification",
-                                    "verification_remarks": f"Auditor Clarification: {auditor_query.strip()}"
-                                }).eq("id", item["id"]).execute()
+                                try:
+                                    supabase.table("customer_visits").update({
+                                        "status": "Needs_Clarification",
+                                        "verification_remarks": f"Auditor Clarification: {auditor_query.strip()}"
+                                    }).eq("id", item["id"]).execute()
+                                except Exception:
+                                    supabase.table("customer_visits").update({"status": "Needs_Clarification"}).eq("id", item["id"]).execute()
                                 st.warning("கிளையிடம் விளக்கம் கேட்கப்பட்டது.")
                                 st.rerun()
                             else:
                                 st.error("விளக்கம் கோருவதற்கான காரணத்தை உள்ளிடவும்.")
 
     # ----------------------------------------------------
-    # D. கிளை செயல்பாடுகள் திரை (BRANCH FLOW: COUNTER, DOCS, CLARIFICATIONS & CASH DRAWER)
+    # D. கிளை செயல்பாடுகள் திரை (BRANCH FLOW)
     # ----------------------------------------------------
     else:
-        branch_tab1, branch_tab2, branch_tab3, branch_tab4 = st.tabs([
+        branch_tab1, branch_tab2, branch_tab3, branch_tab4, branch_tab5 = st.tabs([
             "🛒 கவுண்ட்டர் வருகை & OTP",
             "📁 கிளை ஆவணங்கள் பதிவேற்றம் (Doc Desk)",
             "⚠️ விளக்கம் அளிக்க வேண்டியவை (Clarifications)",
-            "💼 கிளை கல்லா & டினாமினேசன் நிலை (Cash Drawer)"
+            "💼 கிளை கல்லா & டினாமினேசன் நிலை (Cash Drawer)",
+            "📈 பணியாளர் அறிக்கை (Staff Report)"
         ])
 
-        # 1. கல்லா கையிருப்பு நிலை
+        # Tab 5: கிளைப் பணியாளர் அறிக்கை
+        with branch_tab5:
+            render_staff_attribution_report(selected_branch_id=st.session_state.branch_id)
+
+        # Tab 4: கல்லா கையிருப்பு நிலை
         with branch_tab4:
             st.subheader("💼 கிளை கல்லா கையிருப்பு & டினாமினேசன் நிலை")
             curr_stock = get_current_branch_cash_drawer(st.session_state.branch_id)
@@ -953,7 +1062,7 @@ else:
             c_s4.metric("₹50 தாள்கள்", f"{curr_stock['50']}")
             c_s4.metric("நாணயங்கள் (Coins)", f"₹{curr_stock['coins']:,.2f}")
 
-        # 2. விளக்கம் அளிக்க வேண்டியவை (Clarifications Desk)
+        # Tab 3: விளக்கம் அளிக்க வேண்டியவை (Clarifications Inbox)
         with branch_tab3:
             st.subheader("⚠️ தலைமை அலுவலக விளக்கங்கள் & மறுப்புகள் (Clarifications Inbox)")
             st.caption("ஆப்பரேஷன்ஸ் அல்லது ஆடிட்டர் விளக்கம் கேட்ட வருகைகள் இங்கே இருக்கும். பதிலளித்து மீண்டும் சமர்ப்பிக்கலாம்.")
@@ -980,7 +1089,6 @@ else:
                                     update_links = []
                                     if re_upload_files:
                                         update_links = upload_files_to_supabase(re_upload_files, c_item["visit_no"])
-                                        # புதிய ஆவணங்களை audit_records-ல் இணைத்தல்
                                         exist_audit = supabase.table("audit_records").select("*").eq("visit_id", c_item["id"]).execute().data
                                         if exist_audit:
                                             old_links = exist_audit[0].get("document_urls") or []
@@ -988,23 +1096,25 @@ else:
                                         else:
                                             supabase.table("audit_records").insert({"visit_id": c_item["id"], "document_urls": update_links, "audit_status": "Pending"}).execute()
 
-                                    # ஆப்பரேஷன்ஸ் கேட்டதா அல்லது ஆடிட்டர் கேட்டதா என கண்டறிந்து அதற்கேற்ப அனுப்புதல்
                                     if "Operations" in v_remarks:
                                         next_st = "Pending_Calling_Verification"
                                     else:
                                         next_st = "Submitted_to_Auditor"
 
-                                    supabase.table("customer_visits").update({
-                                        "status": next_st,
-                                        "verification_remarks": f"Branch Reply: {branch_reply.strip()} (முந்தைய குறிப்பு: {v_remarks})"
-                                    }).eq("id", c_item["id"]).execute()
+                                    try:
+                                        supabase.table("customer_visits").update({
+                                            "status": next_st,
+                                            "verification_remarks": f"Branch Reply: {branch_reply.strip()} (முந்தைய குறிப்பு: {v_remarks})"
+                                        }).eq("id", c_item["id"]).execute()
+                                    except Exception:
+                                        supabase.table("customer_visits").update({"status": next_st}).eq("id", c_item["id"]).execute()
 
                                     st.success("விளக்கம் வெற்றிகரமாக சமர்ப்பிக்கப்பட்டு மறுபரிசீலனைக்கு அனுப்பப்பட்டது!")
                                     st.rerun()
                                 else:
                                     st.error("தயவுசெய்து உங்கள் பதிலை உள்ளிடவும்.")
 
-        # 3. கிளை ஆவணங்கள் பதிவேற்றம்
+        # Tab 2: கிளை ஆவணங்கள் பதிவேற்றம்
         with branch_tab2:
             st.subheader("📁 கிளை ஆவணங்கள் பதிவேற்றம் (Upload Docs Desk)")
             st.caption("OTP முடிந்து, ஆப்பரேஷன்ஸ் அழைப்பு உறுதி செய்யப்பட்ட வருகைகளுக்கு இங்கே ஓய்வான நேரத்தில் ஆவணங்களை இணைக்கலாம்.")
@@ -1039,7 +1149,7 @@ else:
                             else:
                                 st.error("குறைந்தது ஒரு ஆவணமாவது தேர்ந்தெடுக்கப்பட வேண்டும்.")
 
-        # 4. கவுண்ட்டர் வருகை & OTP
+        # Tab 1: கவுண்ட்டர் வருகை & OTP
         with branch_tab1:
             staff_res = supabase.table("users").select("name").eq("branch_id", st.session_state.branch_id).eq("is_active", True).execute()
             current_staff_list = ["Walk-in (நேரடி வருகை)"] + [s["name"] for s in staff_res.data] if staff_res.data else ["Walk-in (நேரடி வருகை)"]
