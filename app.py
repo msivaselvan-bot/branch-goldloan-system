@@ -1,4 +1,6 @@
 from datetime import datetime
+import random
+import requests
 import pandas as pd
 import streamlit as st
 from supabase import Client, create_client
