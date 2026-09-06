@@ -8,7 +8,7 @@ from supabase import Client, create_client
 # பக்க வடிவமைப்பு
 st.set_page_config(page_title="Branch Operations System", layout="wide")
 # ==============================================================================
-# லாவெண்டர் & கோல்டன் பிரீமியம் தீம் (Lavender & Gold Luxury Theme)
+# வைலட் முகப்பு & கோல்டன் பிரீமியம் தீம் (Rich Violet Login & Luxury Gold Theme)
 # ==============================================================================
 st.markdown("""
 <style>
@@ -21,7 +21,7 @@ st.markdown("""
         display: none !important;
     }
 
-    /* 2. முழுத்திரை லாவெண்டர் பின்னணி (Full Screen Soft Lavender Gradient) */
+    /* 2. பொதுவான பின்னணி */
     .stApp {
         background: linear-gradient(135deg, #F5F0FA 0%, #ECE2F8 50%, #E5D6F5 100%) !important;
         color: #2D1A47 !important;
@@ -35,15 +35,54 @@ st.markdown("""
         padding-right: 2rem !important;
     }
 
-    /* 3. கோல்டன் பார்டருடன் கூடிய கார்டுகள் (Lavender Cards with Gold Borders) */
+    /* 3. வைலட் முகப்பு கார்டு (Deep Royal Violet Login Card with Gold Glow) */
+    .login-box {
+        background: linear-gradient(145deg, #3B1E6D 0%, #2A1350 100%) !important;
+        border: 2px solid #D4AF37 !important;
+        border-radius: 16px !important;
+        padding: 30px 25px 25px 25px !important;
+        box-shadow: 0 10px 30px rgba(59, 30, 109, 0.45), 0 0 15px rgba(212, 175, 55, 0.3) !important;
+        color: #FFFFFF !important;
+    }
+
+    .login-box h3 {
+        color: #F5D77F !important;
+        font-weight: 800 !important;
+        text-align: center;
+        letter-spacing: 0.5px;
+        margin-bottom: 2px;
+    }
+
+    .login-box p {
+        color: #E2D4F7 !important;
+        text-align: center;
+        font-size: 0.95rem;
+        margin-bottom: 20px;
+    }
+
+    /* 4. முகப்பு படிவத்தின் உள்ளீட்டுப் புலங்கள் */
+    .login-box .stTextInput input {
+        background-color: #F8F4FD !important;
+        color: #2A1350 !important;
+        font-weight: 600 !important;
+        border: 1.5px solid #D4AF37 !important;
+        border-radius: 8px !important;
+    }
+
+    .login-box .stTextInput label {
+        color: #F3EBFD !important;
+        font-weight: 600 !important;
+    }
+
+    /* 5. பொதுவான கார்டுகள் & கண்டெய்னர்கள் */
     div[data-testid="stExpander"], div[data-testid="stVerticalBlock"] > div[style*="border:"] {
-        background: rgba(255, 255, 255, 0.75) !important;
+        background: rgba(255, 255, 255, 0.85) !important;
         border: 1.5px solid #D4AF37 !important;
         border-radius: 12px !important;
         box-shadow: 0 4px 15px rgba(212, 175, 55, 0.12) !important;
     }
 
-    /* 4. முதன்மை பட்டன்கள் - கோல்டன் கிரேடியன்ட் (Gold Metallic Buttons) */
+    /* 6. முதன்மை கோல்டன் பட்டன்கள் (Gold Metallic Buttons) */
     button[kind="primary"], .stButton > button[type="primary"] {
         background: linear-gradient(135deg, #D4AF37 0%, #F3E5AB 50%, #AA771C 100%) !important;
         color: #2A1800 !important;
@@ -61,46 +100,27 @@ st.markdown("""
         box-shadow: 0 5px 14px rgba(212, 175, 55, 0.45) !important;
     }
 
-    /* 5. இரண்டாம் நிலை பட்டன்கள் (Secondary / Navigation Buttons) */
+    /* 7. இரண்டாம் நிலை பட்டன்கள் (Secondary Buttons) */
     button[kind="secondary"], .stButton > button {
         background-color: #FFFFFF !important;
-        color: #4A2E75 !important;
+        color: #3B1E6D !important;
         border: 1.5px solid #C49A45 !important;
         font-weight: 600 !important;
         border-radius: 8px !important;
     }
 
-    button[kind="secondary"]:hover, .stButton > button:hover {
-        background-color: #F8F4FD !important;
-        border-color: #D4AF37 !important;
-        color: #2D1A47 !important;
-    }
-
-    /* 6. மெட்ரிக் எண்கள் (Gold Highlighted Metrics) */
+    /* 8. மெட்ரிக் எண்கள் (Gold Highlighted Metrics) */
     div[data-testid="stMetricValue"] {
         color: #996515 !important;
         font-weight: 800 !important;
         font-size: 1.35rem !important;
     }
     div[data-testid="stMetricLabel"] {
-        color: #4A2E75 !important;
+        color: #3B1E6D !important;
         font-weight: 600 !important;
     }
 
-    /* 7. உள்ளீட்டுப் புலங்கள் (Inputs & Selectboxes) */
-    .stTextInput>div>div>input, .stNumberInput>div>div>input, .stSelectbox>div>div {
-        background-color: #FFFFFF !important;
-        border: 1.2px solid #CDB7E5 !important;
-        border-radius: 6px !important;
-        color: #2D1A47 !important;
-    }
-
-    .stTextInput>div>div>input:focus, .stNumberInput>div>div>input:focus {
-        border: 1.5px solid #D4AF37 !important;
-        box-shadow: 0 0 8px rgba(212, 175, 55, 0.25) !important;
-    }
-
-    /* 8. Tabs வடிவமைப்பு */
+    /* 9. Tabs வடிவமைப்பு */
     button[data-baseweb="tab"] {
         color: #5C3D8D !important;
         font-weight: 600 !important;
