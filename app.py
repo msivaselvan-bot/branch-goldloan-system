@@ -421,42 +421,148 @@ else:
         else ["Walk-in (நேரடி வருகை)"]
     )
 
-    # படி 1: வருகைப் பதிவு
+    # ----------------------------------------------------
+    # படி 1: வருகைப் பதிவு (Generate Visit Token)
+    # ----------------------------------------------------
     if st.session_state.current_visit is None:
-      st.subheader("படி 1: புதிய வருகைப் பதிவு (Generate Visit Token)")
-      with st.form("visit_form"):
-        v_col1, v_col2, v_col3 = st.columns(3)
-        with v_col1:
-          cust_name = st.text_input("வாடிக்கையாளர் பெயர் (Customer Name)")
-        with v_col2:
-          cust_mobile = st.text_input("மொபைல் எண் (Mobile No)")
-        with v_col3:
-          cust_aadhaar = st.text_input("ஆதார் எண் (Aadhaar No)")
+        st.subheader("படி 1: வாடிக்கையாளர் வருகைப் பதிவு (Visit Token)")
 
-        if st.form_submit_button("வருகையைத் தொடங்கு (Start Visit)"):
-          if cust_name and cust_mobile:
-            cust_res = (
-                supabase.table("customers")
-                .insert({
-                    "name": cust_name,
-                    "mobile": cust_mobile,
-                    "aadhaar": cust_aadhaar,
-                })
-                .execute()
-            )
-            cust_id = cust_res.data[0]["id"] if cust_res.data else None
-            v_num = f"VISIT-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
-            st.session_state.current_visit = {
-                "visit_no": v_num,
-                "customer_id": cust_id,
-                "customer_name": cust_name,
-                "mobile": cust_mobile,
-                "aadhaar": cust_aadhaar,
-                "step": "TRANSACTIONS",
-            }
-            st.rerun()
-          else:
-            st.error("பெயர் மற்றும் மொபைல் எண் அவசியம்.")
+        visit_type = st.radio(
+            "வாடிக்கையாளர் வகை:",
+            ["ஏற்கனவே உள்ள வாடிக்கையாளர் (Existing Customer)", "புதிய வாடிக்கையாளர் பதிவு (New Customer)"],
+            horizontal=True
+        )
+
+        # ==========================================
+        # 1. பழைய வாடிக்கையாளர் தேடல் முறை
+        # ==========================================
+        if "Existing" in visit_type:
+            st.markdown("##### 🔍 வாடிக்கையாளர் தேடல்")
+            search_query = st.text_input("பெயர் / மொபைல் எண் / Customer ID உள்ளிடவும் (குறைந்தது 2 எழுத்துகள்):", placeholder="எ.கா: ராம் அல்லது 98765...")
+
+            if len(search_query.strip()) >= 2:
+                q = search_query.strip()
+                # Supabase-ல் பெயர், மொபைல் அல்லது கஸ்டமர் எண்ணில் தேடுதல்
+                matched_custs = supabase.table("customers").select("*")\
+                    .or_(f"name.ilike.%{q}%,mobile.ilike.%{q}%,customer_code.ilike.%{q}%")\
+                    .limit(10)\
+                    .execute()
+
+                if matched_custs.data:
+                    st.write(f"கண்டறியப்பட்ட வாடிக்கையாளர்கள் ({len(matched_custs.data)}):")
+                    
+                    for c in matched_custs.data:
+                        with st.container(border=True):
+                            c_col1, c_col2, c_col3 = st.columns([1, 2.5, 1])
+                            
+                            with c_col1:
+                                if c.get("photo_url"):
+                                    st.image(c["photo_url"], width=110)
+                                else:
+                                    st.info("படம் இல்லை")
+
+                            with c_col2:
+                                st.markdown(f"### {c['name']} <small style='color:gray;'>({c.get('customer_code', 'CUST-ID')})</small>", unsafe_allow_html=True)
+                                st.write(f"📞 **மொபைல் 1:** {c.get('mobile', '-')} | **மொபைல் 2:** {c.get('mobile2', '-')}")
+                                st.write(f"👨‍👦 **கார்டியன் பெயர்:** {c.get('guardian_name', '-')} | **பிறந்த தேதி:** {c.get('dob', '-')}")
+                                st.write(f"🏠 **முகவரி:** {c.get('address', '-')}")
+                                st.write(f"🤝 **நாமினி:** {c.get('nominee_name', '-')} ({c.get('nominee_relation', '-')})")
+
+                            with c_col3:
+                                st.write("")
+                                st.write("")
+                                if st.button("வருகையைத் தொடங்கு ➔", key=f"start_visit_{c['id']}", use_container_width=True):
+                                    v_num = f"VISIT-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+                                    st.session_state.current_visit = {
+                                        "visit_no": v_num,
+                                        "customer_id": c["id"],
+                                        "customer_name": c["name"],
+                                        "customer_code": c.get("customer_code", ""),
+                                        "mobile": c.get("mobile", ""),
+                                        "step": "TRANSACTIONS"
+                                    }
+                                    st.rerun()
+                else:
+                    st.warning("பொருந்தும் வாடிக்கையாளர் விவரங்கள் எதுவும் இல்லை. புதிய வாடிக்கையாளராகப் பதிவு செய்யவும்.")
+
+        # ==========================================
+        # 2. புதிய வாடிக்கையாளர் பதிவு முறை
+        # ==========================================
+        else:
+            st.markdown("##### 📝 புதிய வாடிக்கையாளர் பதிவுப் படிவம்")
+            with st.form("new_customer_form"):
+                col_n1, col_n2, col_n3 = st.columns(3)
+                
+                with col_n1:
+                    new_name = st.text_input("வாடிக்கையாளர் பெயர் *")
+                    new_guardian = st.text_input("கார்டியன் / தந்தை / கணவர் பெயர்")
+                    new_dob = st.date_input("பிறந்த தேதி (DOB)", min_value=datetime(1940, 1, 1), max_value=datetime.today())
+                    new_gender = st.selectbox("பாலினம் (Gender)", ["ஆண் (Male)", "பெண் (Female)", "மற்றவை (Other)"])
+
+                with col_n2:
+                    new_mob1 = st.text_input("முதன்மை மொபைல் எண் (Mobile 1) *")
+                    new_mob2 = st.text_input("கூடுதல் மொபைல் எண் (Mobile 2)")
+                    new_aadhaar = st.text_input("ஆதார் எண்")
+                    new_photo = st.file_uploader("வாடிக்கையாளர் புகைப்படம் (Photo)", type=["jpg", "jpeg", "png"])
+
+                with col_n3:
+                    new_address = st.text_area("முழு முகவரி (Address)", rows=3)
+                    new_nominee = st.text_input("நாமினி பெயர் (Nominee Name)")
+                    new_relation = st.text_input("உறவுமுறை (Nominee Relation, எ.கா: மனைவி, மகன்)")
+
+                submit_new_cust = st.form_submit_button("வாடிக்கையாளரைப் பதிவு செய்து வருகையைத் தொடங்கு ➔", type="primary")
+
+                if submit_new_cust:
+                    if new_name.strip() and new_mob1.strip():
+                        try:
+                            # 1. வாடிக்கையாளர் புகைப்படத்தை Supabase Storage-ல் சேமித்தல்
+                            photo_url = None
+                            if new_photo:
+                                photo_path = f"customer_profiles/{datetime.now().strftime('%Y%m%d%H%M%S')}_{new_photo.name}"
+                                supabase.storage.from_("branch-documents").upload(
+                                    path=photo_path,
+                                    file=new_photo.getvalue(),
+                                    file_options={"content-type": new_photo.type, "upsert": "true"}
+                                )
+                                photo_url = supabase.storage.from_("branch-documents").get_public_url(photo_path)
+
+                            # 2. வாடிக்கையாளர் எண் தானாக உருவாக்குதல் (எ.கா: CUST-10025)
+                            timestamp_code = f"CUST-{datetime.now().strftime('%m%d%H%M%S')}"
+
+                            # 3. Supabase-ல் பதிவு செய்தல்
+                            insert_data = {
+                                "customer_code": timestamp_code,
+                                "name": new_name.strip(),
+                                "guardian_name": new_guardian.strip(),
+                                "dob": str(new_dob),
+                                "gender": new_gender,
+                                "mobile": new_mob1.strip(),
+                                "mobile2": new_mob2.strip(),
+                                "aadhaar": new_aadhaar.strip(),
+                                "address": new_address.strip(),
+                                "nominee_name": new_nominee.strip(),
+                                "nominee_relation": new_relation.strip(),
+                                "photo_url": photo_url
+                            }
+                            cust_insert_res = supabase.table("customers").insert(insert_data).execute()
+
+                            if cust_insert_res.data:
+                                created_cust = cust_insert_res.data[0]
+                                v_num = f"VISIT-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+                                st.session_state.current_visit = {
+                                    "visit_no": v_num,
+                                    "customer_id": created_cust["id"],
+                                    "customer_name": created_cust["name"],
+                                    "customer_code": created_cust["customer_code"],
+                                    "mobile": created_cust["mobile"],
+                                    "step": "TRANSACTIONS"
+                                }
+                                st.success(f"வாடிக்கையாளர் எண் {timestamp_code} உடன் வெற்றிகரமாகப் பதிவு செய்யப்பட்டார்!")
+                                st.rerun()
+                        except Exception as e:
+                            st.error(f"பதிவு செய்வதில் பிழை: {e}")
+                    else:
+                        st.error("பெயர் மற்றும் முதன்மை மொபைல் எண் கட்டாயம் தேவை.")
 
     # படி 2: நடவடிக்கைகள் சேர்த்தல் (Cart)
     elif st.session_state.current_visit["step"] == "TRANSACTIONS":
