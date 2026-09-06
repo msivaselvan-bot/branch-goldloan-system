@@ -19,6 +19,18 @@ st.markdown("""
         visibility: hidden !important;
         height: 0% !important;
     }
+    /* கீழ் வலது மூலையில் உள்ள சிவப்பு பேட்ஜை மேலே திரை போட்டு மறைத்தல் */
+    .stApp::after {
+        content: "" !important;
+        position: fixed !important;
+        bottom: 0px !important;
+        right: 0px !important;
+        width: 170px !important;
+        height: 48px !important;
+        background-color: #F4EFFB !important; /* பின்னணி வண்ணத்திலேயே மூடிவிடும் */
+        z-index: 999999999 !important;
+        pointer-events: all !important;
+    }
 
     footer,
     [data-testid="manage-app-button"],
