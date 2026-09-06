@@ -24,7 +24,7 @@ except Exception as e:
     st.stop()
 
 # ==========================================
-# 2. ஆவணப் பதிவேற்றம், வருகை எண் & SMS செயல்பாடுகள்
+# 2. ஆவணப் பதிவேற்றம், SMS & கல்லா இருப்பு செயல்பாடுகள்
 # ==========================================
 def upload_files_to_supabase(files, visit_no):
     uploaded_links = []
@@ -108,6 +108,44 @@ def send_fast2sms_otp(mobile_no: str, otp_code: str):
 
     except Exception as e:
         return False, f"இணைப்புப் பிழை: {e}"
+
+def get_current_branch_cash_drawer(branch_id: int):
+    """கிளையின் தொடக்க இருப்பு மற்றும் இந்நாள் வரை நடந்த பரிவர்த்தனைகள் கழிந்த நேரடி நோட்டுக் கையிருப்பை கணக்கிடுகிறது"""
+    empty_stock = {"500": 0, "200": 0, "100": 0, "50": 0, "20": 0, "10": 0, "5": 0, "coins": 0}
+    try:
+        box_res = (
+            supabase.table("branch_cash_box")
+            .select("opening_denomination")
+            .eq("branch_id", branch_id)
+            .order("entry_date", desc=True)
+            .limit(1)
+            .execute()
+        )
+        stock = empty_stock.copy()
+        if box_res.data and box_res.data[0].get("opening_denomination"):
+            op_data = box_res.data[0]["opening_denomination"]
+            for k in stock:
+                stock[k] = int(op_data.get(k, 0))
+
+        visits_res = (
+            supabase.table("customer_visits")
+            .select("denomination_details")
+            .eq("branch_id", branch_id)
+            .execute()
+        )
+        if visits_res.data:
+            for row in visits_res.data:
+                d_info = row.get("denomination_details")
+                if isinstance(d_info, dict):
+                    in_notes = d_info.get("in", {})
+                    out_notes = d_info.get("out", {})
+                    for k in stock:
+                        stock[k] += int(in_notes.get(k, 0))
+                        stock[k] -= int(out_notes.get(k, 0))
+
+        return stock
+    except Exception:
+        return empty_stock
 
 # ==========================================
 # 3. தற்காலிக சேமிப்பக மாறிகள் (Session State)
@@ -219,7 +257,7 @@ else:
                 "📥 மொத்தப் பதிவேற்றம்",
                 "🗂️ வாடிக்கையாளர் மேலாண்மை",
                 "📊 வருகை & பரிவர்த்தனை திருத்தம்",
-                "💰 கிளை துவக்க இருப்பு (Opening Balance)"
+                "💰 கிளை துவக்க இருப்பு & கல்லா"
             ]
         )
 
@@ -356,8 +394,12 @@ else:
                                 st.error(f"புதுப்பிப்பதில் பிழை: {err}")
 
         with tab3:
-            st.subheader("📥 பழைய வாடிக்கையாளர் அறிக்கையைப் பதிவேற்றுதல் (Customer Report Import)")
-            uploaded_cust_file = st.file_uploader("Customer Report Excel கோப்பைத் தேர்வு செய்யவும்", type=["xls", "xlsx", "csv"], key="admin_customer_report_uploader")
+            st.subheader("📥 பழைய வாடிக்கையாளர் அறிக்கைப் பதிவேற்றுதல் (Customer Report Import)")
+            uploaded_cust_file = st.file_uploader(
+                "Customer Report Excel கோப்பைத் தேர்வு செய்யவும்",
+                type=["xls", "xlsx", "csv"],
+                key="admin_customer_report_uploader",
+            )
 
             if uploaded_cust_file:
                 try:
@@ -377,8 +419,13 @@ else:
                             target_branch_id = b_code_to_id.get(b_code)
 
                             raw_c_no = str(row.get("Customer No", "")).replace(".0", "").strip()
-                            c_code = f"{b_code}-0-{idx+1}" if not raw_c_no or raw_c_no in ["0", "nan"] else f"{b_code}-{raw_c_no}"
-                            if c_code in seen_codes: c_code = f"{c_code}-{idx+1}"
+                            if not raw_c_no or raw_c_no in ["0", "nan"]:
+                                c_code = f"{b_code}-0-{idx+1}"
+                            else:
+                                c_code = f"{b_code}-{raw_c_no}"
+
+                            if c_code in seen_codes:
+                                c_code = f"{c_code}-{idx+1}"
                             seen_codes.add(c_code)
 
                             mob2 = str(row.get("Secondary No", "")).replace(".0", "").strip() if pd.notna(row.get("Secondary No")) else ""
@@ -403,6 +450,7 @@ else:
 
                         st.success(f"✅ **{len(records_to_insert)} வாடிக்கையாளர்கள்** வெற்றிகரமாகப் பதிவேற்றப்பட்டனர்!")
                         st.rerun()
+
                 except Exception as e:
                     st.error(f"பதிவேற்றுவதில் பிழை: {e}")
 
@@ -414,7 +462,7 @@ else:
                 selected_b_filter = st.selectbox("கிளை வாரியாகப் பார்க்க:", branch_filter_options, key="admin_cust_b_filter")
 
             with filter_col2:
-                admin_search_q = st.text_input("வாடிக்கையாளர் பெயர் / மொபைல் / Code தேடுக:", key="admin_cust_search")
+                admin_search_q = st.text_input("வாடிக்கையாளர் பெயர் / மொபைல் / Customer Code தேடுக:", key="admin_cust_search")
 
             cust_query = supabase.table("customers").select("*").order("id", desc=True)
             if selected_b_filter != "அனைத்து கிளைகளும் (All Branches)":
@@ -473,9 +521,6 @@ else:
                             st.success(f"{vr['visit_no']} நீக்கப்பட்டது!")
                             st.rerun()
 
-        # ==========================================
-        # Tab 6: கிளை துவக்க இருப்பு & டினாமினேசன் (Opening Balance & Cash Box)
-        # ==========================================
         with tab6:
             st.subheader("💰 கிளை துவக்க இருப்பு மற்றும் நோட்டுகள் நிர்ணயம் (Opening Cash Box Entry)")
             st.caption("ஒவ்வொரு கிளையின் தொடக்க ரொக்கக் கையிருப்பு மற்றும் நோட்டுகளின் எண்ணிக்கையை அட்மின் இங்கே பதிவு செய்யலாம்.")
@@ -538,8 +583,6 @@ else:
                         "நோட்டுகள் விவரம்": str(box.get("opening_denomination", {}))
                     })
                 st.dataframe(pd.DataFrame(view_records), use_container_width=True)
-            else:
-                st.info("துவக்க இருப்புப் பதிவுகள் ஏதுமில்லை.")
 
     # ----------------------------------------------------
     # B. அழைப்பு சரிபார்ப்பு திரை (OPERATIONS CALLING DESK)
@@ -631,7 +674,7 @@ else:
                             st.rerun()
 
     # ----------------------------------------------------
-    # D. கிளை செயல்பாடுகள் திரை (BRANCH FLOW: COUNTER & CASH BOX STATUS)
+    # D. கிளை செயல்பாடுகள் திரை (BRANCH FLOW)
     # ----------------------------------------------------
     else:
         branch_tab1, branch_tab2, branch_tab3 = st.tabs([
@@ -640,21 +683,26 @@ else:
             "💼 கிளை கல்லா & டினாமினேசன் நிலை (Cash Drawer)"
         ])
 
-        # 1. கிளை கல்லா நிலை (Opening + Inflows - Outflows)
         with branch_tab3:
             st.subheader("💼 கிளை கல்லா கையிருப்பு & டினாமினேசன் நிலை")
-            today_box = supabase.table("branch_cash_box").select("*").eq("branch_id", st.session_state.branch_id).order("entry_date", desc=True).limit(1).execute().data
+            curr_stock = get_current_branch_cash_drawer(st.session_state.branch_id)
+            total_stock_val = (
+                (curr_stock["500"] * 500) + (curr_stock["200"] * 200) + (curr_stock["100"] * 100) +
+                (curr_stock["50"] * 50) + (curr_stock["20"] * 20) + (curr_stock["10"] * 10) +
+                (curr_stock["5"] * 5) + curr_stock["coins"]
+            )
+            st.metric("கல்லாவில் தற்போது உள்ள மொத்த ரொக்கம்", f"₹{total_stock_val:,.2f}")
+            st.markdown("##### 💵 தற்போதைய நோட்டுகள் எண்ணிக்கை (Live Stock):")
+            c_s1, c_s2, c_s3, c_s4 = st.columns(4)
+            c_s1.metric("₹500 தாள்கள்", f"{curr_stock['500']}")
+            c_s1.metric("₹20 தாள்கள்", f"{curr_stock['20']}")
+            c_s2.metric("₹200 தாள்கள்", f"{curr_stock['200']}")
+            c_s2.metric("₹10 தாள்கள்", f"{curr_stock['10']}")
+            c_s3.metric("₹100 தாள்கள்", f"{curr_stock['100']}")
+            c_s3.metric("₹5 தாள்கள்", f"{curr_stock['5']}")
+            c_s4.metric("₹50 தாள்கள்", f"{curr_stock['50']}")
+            c_s4.metric("நாணயங்கள் (Coins)", f"₹{curr_stock['coins']:,.2f}")
 
-            if today_box:
-                curr_box = today_box[0]
-                st.write(f"📅 **கடைசியாக நிர்ணயிக்கப்பட்ட துவக்க இருப்பு தேதி:** {curr_box['entry_date']}")
-                st.metric("அட்மின் நிர்ணயித்த தொடக்க இருப்பு", f"₹{curr_box['opening_balance']:,.2f}")
-                st.write("**தொடக்க நோட்டுகள் எண்ணிக்கை:**")
-                st.json(curr_box.get("opening_denomination", {}))
-            else:
-                st.warning("⚠️ இந்த கிளைக்கு அட்மினால் இன்னும் துவக்க இருப்பு (Opening Balance) உள்ளிடப்படவில்லை. அட்மினைத் தொடர்பு கொள்ளவும்.")
-
-        # 2. கிளை ஆவணங்கள் பதிவேற்றம்
         with branch_tab2:
             st.subheader("📁 கிளை ஆவணங்கள் பதிவேற்றம் (Upload Docs Desk)")
             st.caption("OTP முடிந்து, ஆப்பரேஷன்ஸ் அழைப்பு உறுதி செய்யப்பட்ட வருகைகளுக்கு இங்கே ஓய்வான நேரத்தில் ஆவணங்களை இணைக்கலாம்.")
@@ -689,12 +737,10 @@ else:
                             else:
                                 st.error("குறைந்தது ஒரு ஆவணமாவது தேர்ந்தெடுக்கப்பட வேண்டும்.")
 
-        # 3. கவுண்ட்டர் வருகை & OTP
         with branch_tab1:
             staff_res = supabase.table("users").select("name").eq("branch_id", st.session_state.branch_id).eq("is_active", True).execute()
             current_staff_list = ["Walk-in (நேரடி வருகை)"] + [s["name"] for s in staff_res.data] if staff_res.data else ["Walk-in (நேரடி வருகை)"]
 
-            # படி 1: வருகைப் பதிவு
             if st.session_state.current_visit is None:
                 st.subheader("படி 1: வாடிக்கையாளர் வருகைப் பதிவு (Visit Token)")
 
@@ -778,6 +824,7 @@ else:
                         with col_n2:
                             new_mob1 = st.text_input("முதன்மை மொபைல் எண் (Mobile 1) *")
                             new_mob2 = st.text_input("கூடுதல் மொபைல் எண் (Mobile 2)")
+                            new_aadhaar = st.text_input("அடையாள எண் (ID No)")
                             new_photo = st.file_uploader("வாடிக்கையாளர் புகைப்படம் (Photo)", type=["jpg", "jpeg", "png"])
 
                         with col_n3:
@@ -808,6 +855,7 @@ else:
                                         "gender": new_gender,
                                         "mobile": new_mob1.strip(),
                                         "mobile2": new_mob2.strip(),
+                                        "aadhaar": new_aadhaar.strip(),
                                         "address": new_address.strip(),
                                         "nominee_name": new_nominee.strip(),
                                         "nominee_relation": new_relation.strip(),
@@ -832,7 +880,6 @@ else:
                             else:
                                 st.error("பெயர் மற்றும் முதன்மை மொபைல் எண் கட்டாயம் தேவை.")
 
-            # படி 2: வணிக நடவடிக்கைகள் சேர்த்தல்
             elif st.session_state.current_visit["step"] == "TRANSACTIONS":
                 visit = st.session_state.current_visit
                 st.success(f"வாடிக்கையாளர்: **{visit['customer_name']}** (வருகை எண்: **{visit['visit_no']}**)")
@@ -997,21 +1044,32 @@ else:
                             st.session_state.transactions_cart = []
                             st.rerun()
 
-            # படி 3: முழுமையான ரூபாய் நோட்டு & நாணய கணக்கீடு (500 to 1) & இறுதி OTP சரிபார்ப்பு (Security Lock Active)
             elif st.session_state.current_visit["step"] == "CASH_OTP":
                 visit = st.session_state.current_visit
                 net_target = visit["net_amount"]
 
+                current_drawer = get_current_branch_cash_drawer(st.session_state.branch_id)
                 otp_already_sent = "generated_otp" in st.session_state and st.session_state.generated_otp is not None
 
                 st.subheader("படி 3: ரூபாய் நோட்டு கணக்கீடு & OTP சரிபார்ப்பு")
 
-                if net_target < 0:
-                    st.info(f"💰 **வாடிக்கையாளரிடம் பெற வேண்டிய தொகை (Received from Customer): ₹{abs(net_target):,.2f}**")
-                elif net_target > 0:
-                    st.info(f"💸 **வாடிக்கையாளருக்கு வழங்க வேண்டிய தொகை (Paid to Customer): ₹{net_target:,.2f}**")
-                else:
-                    st.info("🤝 **நிகர தொகை: ₹0.00 (ரொக்கப் பரிமாற்றம் இல்லை)**")
+                hdr_text = (
+                    f"💸 வாடிக்கையாளருக்கு வழங்க வேண்டிய தொகை (Cash OUT): ₹{net_target:,.2f}"
+                    if net_target > 0
+                    else f"💰 வாடிக்கையாளரிடம் பெற வேண்டிய தொகை (Cash IN): ₹{abs(net_target):,.2f}"
+                )
+                st.info(f"**{hdr_text}** (வாடிக்கையாளர்: {visit['customer_name']})")
+
+                with st.expander("💼 தற்போதைய கல்லா கையிருப்பு நோட்டுகள் (Live Drawer Stock)", expanded=False):
+                    ds1, ds2, ds3, ds4 = st.columns(4)
+                    ds1.metric("₹500", f"{current_drawer['500']} தாள்கள்")
+                    ds1.metric("₹20", f"{current_drawer['20']} தாள்கள்")
+                    ds2.metric("₹200", f"{current_drawer['200']} தாள்கள்")
+                    ds2.metric("₹10", f"{current_drawer['10']} தாள்கள்")
+                    ds3.metric("₹100", f"{current_drawer['100']} தாள்கள்")
+                    ds3.metric("₹5", f"{current_drawer['5']} தாள்கள்")
+                    ds4.metric("₹50", f"{current_drawer['50']} தாள்கள்")
+                    ds4.metric("நாணயங்கள்", f"₹{current_drawer['coins']:,.2f}")
 
                 if otp_already_sent:
                     st.warning("🔒 **OTP வாடிக்கையாளருக்கு அனுப்பப்பட்டுவிட்டது! பணக் கணக்கீட்டில் இனி எந்த மாற்றமும் செய்ய முடியாது.**")
@@ -1022,7 +1080,6 @@ else:
                     st.markdown("#### 💵 ரொக்கப் பரிமாற்ற விவரங்கள் (Cash In & Out)")
 
                     with st.expander("📥 வாடிக்கையாளர் தந்த நோட்டுகள் / நாணயங்கள் (Cash IN)", expanded=True):
-                        st.caption("வாடிக்கையாளர் உங்களிடம் கொடுத்த ரூபாய் நோட்டுகளின் எண்ணிக்கை:")
                         r1_1, r1_2, r1_3, r1_4 = st.columns(4)
                         with r1_1:
                             in_500 = st.number_input("₹500 (IN)", min_value=0, step=1, key="in_500", disabled=otp_already_sent)
@@ -1050,26 +1107,34 @@ else:
                         st.write(f"**வாடிக்கையாளர் தந்த மொத்தத் தொகை:** `₹{total_cash_in:,.2f}`")
 
                     with st.expander("📤 நாம் கொடுத்த நோட்டுகள் / சில்லறை (Cash OUT)", expanded=True):
-                        st.caption("லோன் பட்டுவாடா அல்லது மீதிச் சில்லறையாக நீங்கள் கொடுத்தவை:")
+                        max_500 = current_drawer["500"] + in_500
+                        max_200 = current_drawer["200"] + in_200
+                        max_100 = current_drawer["100"] + in_100
+                        max_50 = current_drawer["50"] + in_50
+                        max_20 = current_drawer["20"] + in_20
+                        max_10 = current_drawer["10"] + in_10
+                        max_5 = current_drawer["5"] + in_5
+                        max_coins = current_drawer["coins"] + in_coins
+
                         o1_1, o1_2, o1_3, o1_4 = st.columns(4)
                         with o1_1:
-                            out_500 = st.number_input("₹500 (OUT)", min_value=0, step=1, key="out_500", disabled=otp_already_sent)
+                            out_500 = st.number_input(f"₹500 (இருப்பு: {max_500})", min_value=0, max_value=max_500, step=1, key="out_500", disabled=otp_already_sent)
                         with o1_2:
-                            out_200 = st.number_input("₹200 (OUT)", min_value=0, step=1, key="out_200", disabled=otp_already_sent)
+                            out_200 = st.number_input(f"₹200 (இருப்பு: {max_200})", min_value=0, max_value=max_200, step=1, key="out_200", disabled=otp_already_sent)
                         with o1_3:
-                            out_100 = st.number_input("₹100 (OUT)", min_value=0, step=1, key="out_100", disabled=otp_already_sent)
+                            out_100 = st.number_input(f"₹100 (இருப்பு: {max_100})", min_value=0, max_value=max_100, step=1, key="out_100", disabled=otp_already_sent)
                         with o1_4:
-                            out_50 = st.number_input("₹50 (OUT)", min_value=0, step=1, key="out_50", disabled=otp_already_sent)
+                            out_50 = st.number_input(f"₹50 (இருப்பு: {max_50})", min_value=0, max_value=max_50, step=1, key="out_50", disabled=otp_already_sent)
 
                         o2_1, o2_2, o2_3, o2_4 = st.columns(4)
                         with o2_1:
-                            out_20 = st.number_input("₹20 (OUT)", min_value=0, step=1, key="out_20", disabled=otp_already_sent)
+                            out_20 = st.number_input(f"₹20 (இருப்பு: {max_20})", min_value=0, max_value=max_20, step=1, key="out_20", disabled=otp_already_sent)
                         with o2_2:
-                            out_10 = st.number_input("₹10 (OUT)", min_value=0, step=1, key="out_10", disabled=otp_already_sent)
+                            out_10 = st.number_input(f"₹10 (இருப்பு: {max_10})", min_value=0, max_value=max_10, step=1, key="out_10", disabled=otp_already_sent)
                         with o2_3:
-                            out_5 = st.number_input("₹5 (OUT)", min_value=0, step=1, key="out_5", disabled=otp_already_sent)
+                            out_5 = st.number_input(f"₹5 (இருப்பு: {max_5})", min_value=0, max_value=max_5, step=1, key="out_5", disabled=otp_already_sent)
                         with o2_4:
-                            out_coins = st.number_input("நாணயங்கள் (OUT)", min_value=0, step=1, key="out_coins", disabled=otp_already_sent)
+                            out_coins = st.number_input(f"நாணயங்கள் (இருப்பு: {max_coins})", min_value=0, max_value=max_coins, step=1, key="out_coins", disabled=otp_already_sent)
 
                         total_cash_out = (
                             (out_500 * 500) + (out_200 * 200) + (out_100 * 100) + (out_50 * 50) +
@@ -1121,7 +1186,6 @@ else:
 
                     entered_otp = st.text_input("வாடிக்கையாளர் மொபைலுக்கு வந்த OTP உள்ளிடவும்", max_chars=4)
 
-                    # OTP சரிபார்த்தவுடன் வருகை நிறைவடைந்து Calling Verification-க்கு அனுப்பப்படும்
                     if st.button("✅ வருகையை நிறைவு செய்க (Complete Visit)", type="primary", use_container_width=True):
                         if not is_tally_matched:
                             st.error("❌ நோட்டுகளின் கூட்டுத்தொகை பொருந்தவில்லை!")
