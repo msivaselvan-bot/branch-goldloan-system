@@ -115,70 +115,76 @@ else:
     # ----------------------------------------------------
     if st.session_state.user_role == "Admin":
         st.header("⚙️ நிர்வாக மேலாண்மை (Admin Control Panel)")
-        tab1, tab2 = st.tabs(["புதிய கிளை சேர்த்தல்", "புதிய பயனாளர் (User) சேர்த்தல்"])
+        
+        tab1, tab2 = st.tabs(["🏢 புதிய கிளை சேர்த்தல் / மேலாண்மை", "👥 புதிய பணியாளர் (User) சேர்த்தல்"])
 
+        # கிளைகள் சேர்க்கும் தப்
         with tab1:
-            st.subheader("ஏற்கனவே உள்ள கிளைகள்:")
-            existing_branches = supabase.table("branches").select("id, branch_name, branch_code").execute()
-            if existing_branches.data:
-                df_b = pd.DataFrame(existing_branches.data)
-                st.dataframe(df_b, use_container_width=True)
+            st.subheader("➕ புதிய கிளை சேர்த்தல்")
+            with st.form("add_branch_form", clear_on_submit=True):
+                b_name = st.text_input("கிளையின் பெயர் (Branch Name)", placeholder="எ.கா: திங்கள்நகர் கிளை")
+                b_code = st.text_input("கிளை குறியீடு (Branch Code)", placeholder="எ.கா: TGL01")
+                btn_add_b = st.form_submit_button("கிளையைச் சேர் (Add Branch)")
                 
-                # கிளையை நீக்கும் பகுதி
-                st.markdown("##### கிளையை நீக்குதல் (Delete Branch):")
-                del_col1, del_col2 = st.columns([3, 1])
-                with del_col1:
-                    branch_to_del = st.selectbox(
-                        "நீக்க வேண்டிய கிளையைத் தேர்ந்தெடுக்கவும்", 
-                        options=[(b["id"], f"{b['branch_name']} ({b['branch_code']})") for b in existing_branches.data],
-                        format_func=lambda x: x[1]
-                    )
-                with del_col2:
-                    st.write("") # இடைவெளிக்காக
-                    st.write("")
-                    if st.button("கிளையை நீக்கு", type="primary"):
+                if btn_add_b:
+                    if b_name.strip() and b_code.strip():
                         try:
-                            supabase.table("branches").delete().eq("id", branch_to_del[0]).execute()
-                            st.success("கிளை வெற்றிகரமாக நீக்கப்பட்டது!")
+                            supabase.table("branches").insert({
+                                "branch_name": b_name.strip(),
+                                "branch_code": b_code.strip().upper()
+                            }).execute()
+                            st.success(f"'{b_name}' வெற்றிகரமாகச் சேர்க்கப்பட்டது!")
                             st.rerun()
-                        except Exception as e:
-                            st.error(f"நீக்குவதில் பிழை: {e}")
-
-        with tab2:
-            st.subheader("ஏற்கனவே உள்ள பயனாளர்கள்:")
-            existing_users = supabase.table("users").select("id, name, username, role, branch_id").execute()
-            if existing_users.data:
-                st.dataframe(pd.DataFrame(existing_users.data), use_container_width=True)
+                        except Exception as err:
+                            st.error(f"பிழை: {err}")
+                    else:
+                        st.warning("கிளையின் பெயர் மற்றும் குறியீட்டை உள்ளிடவும்.")
 
             st.markdown("---")
-            with st.form("add_user_form"):
+            st.subheader("📋 ஏற்கனவே உள்ள கிளைகள் பட்டியல்")
+            b_list_res = supabase.table("branches").select("id, branch_name, branch_code").order("id").execute()
+            if b_list_res.data:
+                st.dataframe(pd.DataFrame(b_list_res.data), use_container_width=True)
+            else:
+                st.info("இதுவரை கிளைகள் எதுவும் சேர்க்கப்படவில்லை.")
+
+        # பணியாளர்கள் சேர்க்கும் தப்
+        with tab2:
+            st.subheader("➕ புதிய பணியாளர் சேர்த்தல்")
+            
+            # புதிய கிளைகளின் பட்டியலை உடனுக்குடன் பெறுதல்
+            b_all = supabase.table("branches").select("id, branch_name").execute()
+            branch_dict = {b["branch_name"]: b["id"] for b in b_all.data} if b_all.data else {}
+
+            with st.form("add_user_form", clear_on_submit=True):
                 u_name = st.text_input("பணியாளர் முழுப் பெயர்")
                 u_username = st.text_input("உள்நுழைவு பெயர் (Username)")
                 u_pass = st.text_input("கடவுச்சொல் (Password)", type="password")
                 u_role = st.selectbox("பணி நிலை (Role)", ["Branch Head / Cashier", "Staff", "Auditor", "Admin"])
-                u_branch = st.selectbox(
-                    "கிளை",
-                    options=[(k, v) for k, v in branch_options.items()],
-                    format_func=lambda x: x[0] if branch_options else "கிளைகள் இல்லை"
+                
+                b_selection = st.selectbox(
+                    "கிளையைத் தேர்ந்தெடுக்கவும்",
+                    options=list(branch_dict.keys()) if branch_dict else ["கிளைகள் இல்லை"]
                 )
 
-                if st.form_submit_button("பயனாளரை உருவாக்கு"):
-                    if u_name and u_username and u_pass:
-                        branch_id_val = None if u_role in ["Admin", "Auditor"] else (u_branch[1] if branch_options else None)
+                btn_add_u = st.form_submit_button("பயனாளரை உருவாக்கு (Create User)")
+                if btn_add_u:
+                    if u_name.strip() and u_username.strip() and u_pass.strip():
+                        b_id = branch_dict.get(b_selection) if u_role not in ["Admin", "Auditor"] else None
                         try:
                             supabase.table("users").insert({
                                 "name": u_name.strip(),
                                 "username": u_username.strip(),
                                 "password_hash": u_pass.strip(),
                                 "role": u_role,
-                                "branch_id": branch_id_val
+                                "branch_id": b_id
                             }).execute()
-                            st.success(f"{u_username} என்ற புதிய பயனர் வெற்றிகரமாக உருவாக்கப்பட்டார்!")
+                            st.success(f"'{u_username}' என்ற பயனர் உருவாக்கப்பட்டுவிட்டார்!")
                             st.rerun()
-                        except Exception as e:
-                            st.error(f"பயனாளரைச் சேர்ப்பதில் பிழை: {e}")
+                        except Exception as err:
+                            st.error(f"பிழை: {err}")
                     else:
-                        st.error("அனைத்து விவரங்களையும் உள்ளிடவும்.")
+                        st.warning("அனைத்து விவரங்களையும் உள்ளிடவும்.")
 
     # ----------------------------------------------------
     # B. தணிக்கையர் திரை (AUDITOR DESK)
