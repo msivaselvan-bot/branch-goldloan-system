@@ -328,8 +328,7 @@ else:
                     with st.spinner("கூகுள் டிரைவில் ஆவணங்கள் பதிவேற்றப்பட்டு வருகின்றன..."):
                         try:
                             # 1. Google Drive-ல் கோப்புகளை அப்லோட் செய்து லிங்க்குகளைப் பெறுதல்
-                            drive_results = upload_files_to_drive(uploaded_files, visit["visit_no"])
-                            doc_links = [item["link"] for item in drive_results]
+                            doc_links = upload_files_to_supabase(uploaded_files, visit["visit_no"])
 
                             # 2. Supabase-ல் Customer Visit பதிவு
                             visit_data = {
