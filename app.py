@@ -39,6 +39,28 @@ def upload_files_to_supabase(files, visit_no):
         uploaded_links.append(public_url)
 
     return uploaded_links
+    def generate_short_visit_no() -> str:
+    """டேட்டாபேஸிலிருந்து கடைசி வருகை எண்ணை எடுத்து அடுத்த 4 இலக்க VST எண்ணை உருவாக்குகிறது (எ.கா: VST-1001)"""
+    try:
+        res = (
+            supabase.table("customer_visits")
+            .select("visit_no")
+            .order("id", desc=True)
+            .limit(1)
+            .execute()
+        )
+        if res.data and res.data[0].get("visit_no"):
+            last_no = res.data[0]["visit_no"]
+            if last_no.startswith("VST-"):
+                num_part = last_no.split("-")[1]
+                next_val = int(num_part) + 1
+                return f"VST-{next_val:04d}"
+        
+        # ஆரம்ப எண் 1001
+        return "VST-1001"
+    except Exception:
+        # ஏதேனும் பிழை ஏற்பட்டால் தற்காலிக நேர அடிப்படையிலான 4 இலக்கம்
+        return f"VST-{datetime.now().strftime('%M%S')}"
 
 # ==========================================
 # 3. தற்காலிக சேமிப்பக மாறிகள் (Session State)
@@ -590,16 +612,16 @@ else:
                                 st.write("")
                                 st.write("")
                                 if st.button("வருகையைத் தொடங்கு ➔", key=f"start_visit_{selected_cust['id']}", type="primary", use_container_width=True):
-                                    v_num = f"VISIT-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
-                                    st.session_state.current_visit = {
-                                        "visit_no": v_num,
-                                        "customer_id": selected_cust["id"],
-                                        "customer_name": selected_cust["name"],
-                                        "customer_code": selected_cust.get("customer_code", ""),
-                                        "mobile": selected_cust.get("mobile", ""),
-                                        "step": "TRANSACTIONS",
-                                    }
-                                    st.rerun()
+    v_num = generate_short_visit_no()
+    st.session_state.current_visit = {
+        "visit_no": v_num,
+        "customer_id": selected_cust["id"],
+        "customer_name": selected_cust["name"],
+        "customer_code": selected_cust.get("customer_code", ""),
+        "mobile": selected_cust.get("mobile", ""),
+        "step": "TRANSACTIONS",
+    }
+    st.rerun()
                     else:
                         st.warning("உங்கள் கிளையில் பொருந்தும் வாடிக்கையாளர் விவரங்கள் எதுவும் இல்லை. புதிய வாடிக்கையாளராகப் பதிவு செய்யவும்.")
 
@@ -660,18 +682,18 @@ else:
                                 cust_insert_res = supabase.table("customers").insert(insert_data).execute()
 
                                 if cust_insert_res.data:
-                                    created_cust = cust_insert_res.data[0]
-                                    v_num = f"VISIT-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
-                                    st.session_state.current_visit = {
-                                        "visit_no": v_num,
-                                        "customer_id": created_cust["id"],
-                                        "customer_name": created_cust["name"],
-                                        "customer_code": created_cust["customer_code"],
-                                        "mobile": created_cust["mobile"],
-                                        "step": "TRANSACTIONS",
-                                    }
-                                    st.success(f"வாடிக்கையாளர் எண் {timestamp_code} உடன் பதிவு செய்யப்பட்டார்!")
-                                    st.rerun()
+    created_cust = cust_insert_res.data[0]
+    v_num = generate_short_visit_no()
+    st.session_state.current_visit = {
+        "visit_no": v_num,
+        "customer_id": created_cust["id"],
+        "customer_name": created_cust["name"],
+        "customer_code": created_cust["customer_code"],
+        "mobile": created_cust["mobile"],
+        "step": "TRANSACTIONS",
+    }
+    st.success(f"வாடிக்கையாளர் எண் {timestamp_code} உடன் பதிவு செய்யப்பட்டார்!")
+    st.rerun()
                             except Exception as e:
                                 st.error(f"பதிவு செய்வதில் பிழை: {e}")
                         else:
