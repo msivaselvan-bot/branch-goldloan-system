@@ -523,56 +523,85 @@ else:
                 horizontal=True,
             )
 
-            # 1. பழைய வாடிக்கையாளர் தேடல்
+          # 1. பழைய வாடிக்கையாளர் தேடல் (கிளைக் கட்டுப்பாடு & டிராப்டவுன் தேர்வு)
             if "Existing" in visit_type:
                 st.markdown("##### 🔍 வாடிக்கையாளர் தேடல்")
-                search_query = st.text_input("பெயர் / மொபைல் எண் / Customer ID உள்ளிடவும் (குறைந்தது 2 எழுத்துகள்):", placeholder="எ.கா: ராம் அல்லது 98765...")
+                search_query = st.text_input(
+                    "பெயர் / மொபைல் எண் / Customer ID உள்ளிடவும்:", 
+                    placeholder="எ.கா: ராம் அல்லது 98765...",
+                    key="live_cust_search_input"
+                )
 
                 if len(search_query.strip()) >= 2:
                     q = search_query.strip()
-                    matched_custs = (
+                    
+                    # சொந்த கிளையின் Active வாடிக்கையாளர்களை மட்டுமே எடுத்தல்
+                    cust_filter_query = (
                         supabase.table("customers")
                         .select("*")
                         .eq("is_active", True)
+                    )
+                    
+                    # Admin அல்லது Auditor அல்லாத கிளை ஊழியர்களுக்கு சொந்த கிளை மட்டுமே வடிகட்டப்படும்
+                    if st.session_state.user_role not in ["Admin", "Auditor"]:
+                        cust_filter_query = cust_filter_query.eq("branch_id", st.session_state.branch_id)
+                        
+                    matched_custs = (
+                        cust_filter_query
                         .or_(f"name.ilike.%{q}%,mobile.ilike.%{q}%,customer_code.ilike.%{q}%")
-                        .limit(10)
+                        .limit(20)
                         .execute()
                     )
 
                     if matched_custs.data:
-                        st.write(f"கண்டறியப்பட்ட வாடிக்கையாளர்கள் ({len(matched_custs.data)}):")
-                        for c in matched_custs.data:
-                            with st.container(border=True):
-                                c_col1, c_col2, c_col3 = st.columns([1, 2.5, 1])
-                                with c_col1:
-                                    if c.get("photo_url"):
-                                        st.image(c["photo_url"], width=110)
-                                    else:
-                                        st.info("படம் இல்லை")
+                        # டிராப்டவுன் மெனுவிற்கான தேர்வுகள் பட்டியல்
+                        cust_dropdown_dict = {
+                            f"{c['name']} | {c.get('customer_code', '')} | 📞 {c.get('mobile', '')}": c 
+                            for c in matched_custs.data
+                        }
+                        
+                        st.markdown("###### 🎯 பொருந்தும் வாடிக்கையாளர் பட்டியல் (டிராப்டவுனில் தேர்ந்தெடுக்கவும்):")
+                        selected_label = st.selectbox(
+                            "பொருந்தும் வாடிக்கையாளர் பட்டியல்",
+                            options=list(cust_dropdown_dict.keys()),
+                            label_visibility="collapsed",
+                            key="dropdown_cust_select"
+                        )
+                        
+                        selected_cust = cust_dropdown_dict[selected_label]
 
-                                with c_col2:
-                                    st.markdown(f"### {c['name']} <small style='color:gray;'>({c.get('customer_code', 'CUST-ID')})</small>", unsafe_allow_html=True)
-                                    st.write(f"📞 **மொபைல் 1:** {c.get('mobile', '-')} | **மொபைல் 2:** {c.get('mobile2', '-')}")
-                                    st.write(f"👨‍👦 **கார்டியன் பெயர்:** {c.get('guardian_name', '-')} | **பாலினம்:** {c.get('gender', '-')}")
-                                    st.write(f"🏠 **முகவரி:** {c.get('address', '-')}")
-                                    st.write(f"🤝 **நாமினி உறவு:** {c.get('nominee_relation', '-')}")
+                        # தேர்ந்தெடுக்கப்பட்ட வாடிக்கையாளரின் முழு விவர அட்டை (Customer Card)
+                        with st.container(border=True):
+                            c_col1, c_col2, c_col3 = st.columns([1, 2.5, 1])
+                            with c_col1:
+                                if selected_cust.get("photo_url"):
+                                    st.image(selected_cust["photo_url"], width=120)
+                                else:
+                                    st.info("📷 படம் இல்லை")
 
-                                with c_col3:
-                                    st.write("")
-                                    st.write("")
-                                    if st.button("வருகையைத் தொடங்கு ➔", key=f"start_visit_{c['id']}", use_container_width=True):
-                                        v_num = f"VISIT-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
-                                        st.session_state.current_visit = {
-                                            "visit_no": v_num,
-                                            "customer_id": c["id"],
-                                            "customer_name": c["name"],
-                                            "customer_code": c.get("customer_code", ""),
-                                            "mobile": c.get("mobile", ""),
-                                            "step": "TRANSACTIONS",
-                                        }
-                                        st.rerun()
+                            with c_col2:
+                                st.markdown(f"### {selected_cust['name']} <small style='color:gray;'>({selected_cust.get('customer_code', 'CUST-ID')})</small>", unsafe_allow_html=True)
+                                st.write(f"📞 **முதன்மை மொபைல்:** {selected_cust.get('mobile', '-')} | **கூடுதல் மொபைல்:** {selected_cust.get('mobile2', '-')}")
+                                st.write(f"👨‍👦 **கார்டியன் பெயர்:** {selected_cust.get('guardian_name', '-')} | **பாலினம்:** {selected_cust.get('gender', '-')}")
+                                st.write(f"🏠 **முகவரி:** {selected_cust.get('address', '-')}")
+                                st.write(f"🤝 **உறவுமுறை:** {selected_cust.get('nominee_relation', '-')}")
+
+                            with c_col3:
+                                st.write("")
+                                st.write("")
+                                if st.button("வருகையைத் தொடங்கு ➔", key=f"start_visit_{selected_cust['id']}", type="primary", use_container_width=True):
+                                    v_num = f"VISIT-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+                                    st.session_state.current_visit = {
+                                        "visit_no": v_num,
+                                        "customer_id": selected_cust["id"],
+                                        "customer_name": selected_cust["name"],
+                                        "customer_code": selected_cust.get("customer_code", ""),
+                                        "mobile": selected_cust.get("mobile", ""),
+                                        "step": "TRANSACTIONS",
+                                    }
+                                    st.rerun()
                     else:
-                        st.warning("பொருந்தும் வாடிக்கையாளர் விவரங்கள் எதுவும் இல்லை.")
+                        st.warning("உங்கள் கிளையில் பொருந்தும் வாடிக்கையாளர் விவரங்கள் எதுவும் இல்லை. புதிய வாடிக்கையாளராகப் பதிவு செய்யவும்.")
 
             # 2. புதிய வாடிக்கையாளர் பதிவு
             else:
