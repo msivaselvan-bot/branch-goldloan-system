@@ -7,33 +7,108 @@ from supabase import Client, create_client
 
 # பக்க வடிவமைப்பு
 st.set_page_config(page_title="Branch Operations System", layout="wide")
-# Streamlit-ன் இயல்புநிலை தலைப்பு, மெனு, Share, Star, Edit மற்றும் Manage app பட்டன்களை மறைத்தல்
+# ==============================================================================
+# லாவெண்டர் & கோல்டன் பிரீமியம் தீம் (Lavender & Gold Luxury Theme)
+# ==============================================================================
 st.markdown("""
 <style>
-    /* மேல் வலது மூலையில் உள்ள Header மற்றும் Buttons (Share, Star, Edit, MainMenu) மறைக்க */
+    /* 1. Header, Share, Star, Edit மற்றும் Footer-களை மறைத்தல் */
     header[data-testid="stHeader"] {
         visibility: hidden;
         height: 0%;
     }
-    
-    /* கீழ் வலது மூலையில் உள்ள Manage app / Streamlit footer பேட்ஜ் மறைக்க */
-    footer {
-        visibility: hidden;
-    }
-    div[data-testid="stStatusWidget"] {
-        visibility: hidden;
-    }
-    .viewerBadge_container__r5tak, 
-    div[class*="viewerBadge_container"] {
+    footer, div[data-testid="stStatusWidget"], .viewerBadge_container__r5tak, div[class*="viewerBadge_container"] {
         display: none !important;
     }
 
-    /* பக்கத்தின் மேல் உள்ள வெற்று இடத்தை நீக்கி சீரமைக்க */
+    /* 2. முழுத்திரை லாவெண்டர் பின்னணி (Full Screen Soft Lavender Gradient) */
+    .stApp {
+        background: linear-gradient(135deg, #F5F0FA 0%, #ECE2F8 50%, #E5D6F5 100%) !important;
+        color: #2D1A47 !important;
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+
     .block-container {
         padding-top: 1.5rem !important;
-        padding-bottom: 1.5rem !important;
+        padding-bottom: 2rem !important;
         padding-left: 2rem !important;
         padding-right: 2rem !important;
+    }
+
+    /* 3. கோல்டன் பார்டருடன் கூடிய கார்டுகள் (Lavender Cards with Gold Borders) */
+    div[data-testid="stExpander"], div[data-testid="stVerticalBlock"] > div[style*="border:"] {
+        background: rgba(255, 255, 255, 0.75) !important;
+        border: 1.5px solid #D4AF37 !important;
+        border-radius: 12px !important;
+        box-shadow: 0 4px 15px rgba(212, 175, 55, 0.12) !important;
+    }
+
+    /* 4. முதன்மை பட்டன்கள் - கோல்டன் கிரேடியன்ட் (Gold Metallic Buttons) */
+    button[kind="primary"], .stButton > button[type="primary"] {
+        background: linear-gradient(135deg, #D4AF37 0%, #F3E5AB 50%, #AA771C 100%) !important;
+        color: #2A1800 !important;
+        font-weight: 700 !important;
+        border: 1px solid #996515 !important;
+        border-radius: 8px !important;
+        box-shadow: 0 3px 8px rgba(184, 134, 11, 0.3) !important;
+        transition: all 0.3s ease-in-out;
+    }
+
+    button[kind="primary"]:hover, .stButton > button[type="primary"]:hover {
+        background: linear-gradient(135deg, #E5C158 0%, #FFF2B2 50%, #B8860B 100%) !important;
+        border-color: #795200 !important;
+        transform: translateY(-1px);
+        box-shadow: 0 5px 14px rgba(212, 175, 55, 0.45) !important;
+    }
+
+    /* 5. இரண்டாம் நிலை பட்டன்கள் (Secondary / Navigation Buttons) */
+    button[kind="secondary"], .stButton > button {
+        background-color: #FFFFFF !important;
+        color: #4A2E75 !important;
+        border: 1.5px solid #C49A45 !important;
+        font-weight: 600 !important;
+        border-radius: 8px !important;
+    }
+
+    button[kind="secondary"]:hover, .stButton > button:hover {
+        background-color: #F8F4FD !important;
+        border-color: #D4AF37 !important;
+        color: #2D1A47 !important;
+    }
+
+    /* 6. மெட்ரிக் எண்கள் (Gold Highlighted Metrics) */
+    div[data-testid="stMetricValue"] {
+        color: #996515 !important;
+        font-weight: 800 !important;
+        font-size: 1.35rem !important;
+    }
+    div[data-testid="stMetricLabel"] {
+        color: #4A2E75 !important;
+        font-weight: 600 !important;
+    }
+
+    /* 7. உள்ளீட்டுப் புலங்கள் (Inputs & Selectboxes) */
+    .stTextInput>div>div>input, .stNumberInput>div>div>input, .stSelectbox>div>div {
+        background-color: #FFFFFF !important;
+        border: 1.2px solid #CDB7E5 !important;
+        border-radius: 6px !important;
+        color: #2D1A47 !important;
+    }
+
+    .stTextInput>div>div>input:focus, .stNumberInput>div>div>input:focus {
+        border: 1.5px solid #D4AF37 !important;
+        box-shadow: 0 0 8px rgba(212, 175, 55, 0.25) !important;
+    }
+
+    /* 8. Tabs வடிவமைப்பு */
+    button[data-baseweb="tab"] {
+        color: #5C3D8D !important;
+        font-weight: 600 !important;
+    }
+    button[data-baseweb="tab"][aria-selected="true"] {
+        color: #996515 !important;
+        border-bottom: 2.5px solid #D4AF37 !important;
+        font-weight: 700 !important;
     }
 </style>
 """, unsafe_allow_html=True)
