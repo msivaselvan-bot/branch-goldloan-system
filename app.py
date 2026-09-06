@@ -148,80 +148,7 @@ else:
 
   st.markdown("---")
 
-  # ----------------------------------------------------
-  # A. நிர்வாக மேலாண்மை திரை (ADMIN PANEL)
-  # ----------------------------------------------------
-  if st.session_state.user_role == "Admin":
-    st.header("⚙️ நிர்வாக மேலாண்மை (Admin Control Panel)")
-    tab1, tab2 = st.tabs(
-        ["🏢 புதிய கிளை சேர்த்தல் / மேலாண்மை", "👥 பணியாளர்கள் மேலாண்மை"]
-    )
-
-    with tab1:
-      st.subheader("➕ புதிய கிளை சேர்த்தல்")
-      with st.form("add_branch_form", clear_on_submit=True):
-        b_name = st.text_input(
-            "கிளையின் பெயர் (Branch Name)", placeholder="எ.கா: திங்கள்நகர் கிளை"
-        )
-        b_code = st.text_input(
-            "கிளை குறியீடு (Branch Code)", placeholder="எ.கா: TGL01"
-        )
-        if st.form_submit_button("கிளையைச் சேர் (Add Branch)"):
-          if b_name.strip() and b_code.strip():
-            try:
-              supabase.table("branches").insert({
-                  "branch_name": b_name.strip(),
-                  "branch_code": b_code.strip().upper(),
-              }).execute()
-              st.success(f"'{b_name}' வெற்றிகரமாகச் சேர்க்கப்பட்டது!")
-              st.rerun()
-            except Exception as err:
-              st.error(f"பிழை: {err}")
-          else:
-            st.warning("கிளையின் பெயர் மற்றும் குறியீட்டை உள்ளிடவும்.")
-
-      st.markdown("---")
-      st.subheader("📋 ஏற்கனவே உள்ள கிளைகள் பட்டியல்")
-      b_list_res = (
-          supabase.table("branches")
-          .select("id, branch_name, branch_code")
-          .order("id")
-          .execute()
-      )
-      if b_list_res.data:
-        st.dataframe(pd.DataFrame(b_list_res.data), use_container_width=True)
-
-    with tab2:
-      st.subheader("📋 பணியாளர்கள் பட்டியல் (Existing Users)")
-      users_res = (
-          supabase.table("users")
-          .select("id, name, username, role, branch_id, is_active")
-          .order("id")
-          .execute()
-      )
-
-      if users_res.data:
-        user_table_data = []
-        for u in users_res.data:
-          b_name = branch_id_to_name.get(
-              u.get("branch_id"), "Head Office / None"
-          )
-          status_text = (
-              "🟢 Active" if u.get("is_active", True) else "🔴 Inactive"
-          )
-          user_table_data.append({
-              "ID": u["id"],
-              "பெயர்": u["name"],
-              "Username": u["username"],
-              "பணி நிலை (Role)": u["role"],
-              "கிளை": b_name,
-              "நிலை (Status)": status_text,
-          })
-        st.dataframe(pd.DataFrame(user_table_data), use_container_width=True)
-
-      st.markdown("---")
-      sub_col1, sub_col2 = st.columns(2)
- # ----------------------------------------------------
+# ----------------------------------------------------
     # A. நிர்வாக மேலாண்மை திரை (ADMIN PANEL)
     # ----------------------------------------------------
     if st.session_state.user_role == "Admin":
@@ -238,331 +165,330 @@ else:
         # Tab 1: கிளைகள் மேலாண்மை
         # ==========================================
         with tab1:
-          st.subheader("➕ புதிய கிளை சேர்த்தல்")
-          with st.form("add_branch_form", clear_on_submit=True):
-            b_name = st.text_input(
-                "கிளையின் பெயர் (Branch Name)",
-                placeholder="எ.கா: திங்கள்நகர் கிளை",
-            )
-            b_code = st.text_input(
-                "கிளை குறியீடு (Branch Code)", placeholder="எ.கா: TGL01"
-            )
-            if st.form_submit_button("கிளையைச் சேர் (Add Branch)"):
-              if b_name.strip() and b_code.strip():
-                try:
-                  supabase.table("branches").insert({
-                      "branch_name": b_name.strip(),
-                      "branch_code": b_code.strip().upper(),
-                  }).execute()
-                  st.success(f"'{b_name}' வெற்றிகரமாகச் சேர்க்கப்பட்டது!")
-                  st.rerun()
-                except Exception as err:
-                  st.error(f"பிழை: {err}")
-              else:
-                st.warning("கிளையின் பெயர் மற்றும் குறியீட்டை உள்ளிடவும்.")
+            st.subheader("➕ புதிய கிளை சேர்த்தல்")
+            with st.form("admin_add_branch_form", clear_on_submit=True):
+                b_name = st.text_input(
+                    "கிளையின் பெயர் (Branch Name)",
+                    placeholder="எ.கா: திங்கள்நகர் கிளை",
+                )
+                b_code = st.text_input(
+                    "கிளை குறியீடு (Branch Code)", placeholder="எ.கா: TGL01"
+                )
+                if st.form_submit_button("கிளையைச் சேர் (Add Branch)"):
+                    if b_name.strip() and b_code.strip():
+                        try:
+                            supabase.table("branches").insert({
+                                "branch_name": b_name.strip(),
+                                "branch_code": b_code.strip().upper(),
+                            }).execute()
+                            st.success(f"'{b_name}' வெற்றிகரமாகச் சேர்க்கப்பட்டது!")
+                            st.rerun()
+                        except Exception as err:
+                            st.error(f"பிழை: {err}")
+                    else:
+                        st.warning("கிளையின் பெயர் மற்றும் குறியீட்டை உள்ளிடவும்.")
 
-          st.markdown("---")
-          st.subheader("📋 ஏற்கனவே உள்ள கிளைகள் பட்டியல்")
-          b_list_res = (
-              supabase.table("branches")
-              .select("id, branch_name, branch_code")
-              .order("id")
-              .execute()
-          )
-          if b_list_res.data:
-            st.dataframe(
-                pd.DataFrame(b_list_res.data), use_container_width=True
+            st.markdown("---")
+            st.subheader("📋 ஏற்கனவே உள்ள கிளைகள் பட்டியல்")
+            b_list_res = (
+                supabase.table("branches")
+                .select("id, branch_name, branch_code")
+                .order("id")
+                .execute()
             )
+            if b_list_res.data:
+                st.dataframe(
+                    pd.DataFrame(b_list_res.data), use_container_width=True
+                )
 
         # ==========================================
         # Tab 2: பணியாளர்கள் மேலாண்மை
         # ==========================================
         with tab2:
-          st.subheader("📋 பணியாளர்கள் பட்டியல் (Existing Users)")
-          users_res = (
-              supabase.table("users")
-              .select("id, name, username, role, branch_id, is_active")
-              .order("id")
-              .execute()
-          )
-
-          if users_res.data:
-            user_table_data = []
-            for u in users_res.data:
-              b_name = branch_id_to_name.get(
-                  u.get("branch_id"), "Head Office / None"
-              )
-              status_text = (
-                  "🟢 Active" if u.get("is_active", True) else "🔴 Inactive"
-              )
-              user_table_data.append({
-                  "ID": u["id"],
-                  "பெயர்": u["name"],
-                  "Username": u["username"],
-                  "பணி நிலை (Role)": u["role"],
-                  "கிளை": b_name,
-                  "நிலை (Status)": status_text,
-              })
-            st.dataframe(
-                pd.DataFrame(user_table_data), use_container_width=True
+            st.subheader("📋 பணியாளர்கள் பட்டியல் (Existing Users)")
+            users_res = (
+                supabase.table("users")
+                .select("id, name, username, role, branch_id, is_active")
+                .order("id")
+                .execute()
             )
 
-          st.markdown("---")
-          sub_col1, sub_col2 = st.columns(2)
-
-          with sub_col1:
-            st.subheader("➕ புதிய பணியாளர் சேர்த்தல்")
-            with st.form("add_user_form", clear_on_submit=True):
-              u_name = st.text_input("பணியாளர் முழுப் பெயர்")
-              u_username = st.text_input("உள்நுழைவு பெயர் (Username)")
-              u_pass = st.text_input("கடவுச்சொல் (Password)", type="password")
-              u_role = st.selectbox(
-                  "பணி நிலை (Role)",
-                  ["Branch Head / Cashier", "Staff", "Auditor", "Admin"],
-                  key="add_role",
-              )
-              b_selection = st.selectbox(
-                  "கிளையைத் தேர்ந்தெடுக்கவும்",
-                  options=(
-                      list(branch_options.keys())
-                      if branch_options
-                      else ["கிளைகள் இல்லை"]
-                  ),
-                  key="add_branch",
-              )
-
-              if st.form_submit_button("பயனாளரை உருவாக்கு (Create User)"):
-                if u_name.strip() and u_username.strip() and u_pass.strip():
-                  b_id = (
-                      branch_options.get(b_selection)
-                      if u_role not in ["Admin", "Auditor"]
-                      else None
-                  )
-                  try:
-                    supabase.table("users").insert({
-                        "name": u_name.strip(),
-                        "username": u_username.strip(),
-                        "password_hash": u_pass.strip(),
-                        "role": u_role,
-                        "branch_id": b_id,
-                        "is_active": True,
-                    }).execute()
-                    st.success(
-                        f"'{u_username}' என்ற பயனர் வெற்றிகரமாக"
-                        " உருவாக்கப்பட்டுவிட்டார்!"
-                    )
-                    st.rerun()
-                  except Exception as err:
-                    st.error(f"பிழை: {err}")
-                else:
-                  st.warning("அனைத்து விவரங்களையும் உள்ளிடவும்.")
-
-          with sub_col2:
-            st.subheader("✏️ பணியாளர் விவரங்களை திருத்துதல் (Edit)")
             if users_res.data:
-              user_choices = {
-                  f"{u['name']} (@{u['username']})": u for u in users_res.data
-              }
-              selected_user_key = st.selectbox(
-                  "திருத்த வேண்டிய பணியாளரைத் தேர்ந்தெடுக்கவும்",
-                  list(user_choices.keys()),
-              )
-              curr_user = user_choices[selected_user_key]
-
-              with st.form("edit_user_form"):
-                edit_name = st.text_input("பெயர்", value=curr_user["name"])
-                edit_pass = st.text_input(
-                    "புதிய கடவுச்சொல் (மாற்ற விரும்பினால் மட்டும்)",
-                    placeholder="பழைய கடவுச்சொல்லையே தொடர காலியாக விடவும்",
-                    type="password",
-                )
-                roles_list = [
-                    "Branch Head / Cashier",
-                    "Staff",
-                    "Auditor",
-                    "Admin",
-                ]
-                role_index = (
-                    roles_list.index(curr_user["role"])
-                    if curr_user["role"] in roles_list
-                    else 0
-                )
-                edit_role = st.selectbox(
-                    "பணி நிலை (Role)",
-                    roles_list,
-                    index=role_index,
-                    key="edit_role",
-                )
-
-                current_b_name = branch_id_to_name.get(
-                    curr_user.get("branch_id"),
-                    list(branch_options.keys())[0] if branch_options else "",
-                )
-                b_list_keys = list(branch_options.keys())
-                b_idx = (
-                    b_list_keys.index(current_b_name)
-                    if current_b_name in b_list_keys
-                    else 0
-                )
-                edit_branch = st.selectbox(
-                    "கிளை", options=b_list_keys, index=b_idx, key="edit_branch"
-                )
-
-                edit_status = st.radio(
-                    "பயனர் நிலை (Status)",
-                    ["Active (செயலில் உள்ளார்)", "Inactive (முடக்கு)"],
-                    index=0 if curr_user.get("is_active", True) else 1,
-                )
-
-                if st.form_submit_button(
-                    "மாற்றங்களைச் சேமி (Update User)", type="primary"
-                ):
-                  try:
-                    update_payload = {
-                        "name": edit_name.strip(),
-                        "role": edit_role,
-                        "branch_id": (
-                            branch_options.get(edit_branch)
-                            if edit_role not in ["Admin", "Auditor"]
-                            else None
-                        ),
-                        "is_active": True if "Active" in edit_status else False,
-                    }
-                    if edit_pass.strip():
-                      update_payload["password_hash"] = edit_pass.strip()
-
-                    supabase.table("users").update(update_payload).eq(
-                        "id", curr_user["id"]
-                    ).execute()
-                    st.success(
-                        "பணியாளர் விவரங்கள் வெற்றிகரமாகப் புதுப்பிக்கப்பட்டன!"
+                user_table_data = []
+                for u in users_res.data:
+                    b_name = branch_id_to_name.get(
+                        u.get("branch_id"), "Head Office / None"
                     )
-                    st.rerun()
-                  except Exception as err:
-                    st.error(f"புதுப்பிப்பதில் பிழை: {err}")
+                    status_text = (
+                        "🟢 Active" if u.get("is_active", True) else "🔴 Inactive"
+                    )
+                    user_table_data.append({
+                        "ID": u["id"],
+                        "பெயர்": u["name"],
+                        "Username": u["username"],
+                        "பணி நிலை (Role)": u["role"],
+                        "கிளை": b_name,
+                        "நிலை (Status)": status_text,
+                    })
+                st.dataframe(
+                    pd.DataFrame(user_table_data), use_container_width=True
+                )
+
+            st.markdown("---")
+            sub_col1, sub_col2 = st.columns(2)
+
+            with sub_col1:
+                st.subheader("➕ புதிய பணியாளர் சேர்த்தல்")
+                with st.form("admin_add_user_form", clear_on_submit=True):
+                    u_name = st.text_input("பணியாளர் முழுப் பெயர்")
+                    u_username = st.text_input("உள்நுழைவு பெயர் (Username)")
+                    u_pass = st.text_input("கடவுச்சொல் (Password)", type="password")
+                    u_role = st.selectbox(
+                        "பணி நிலை (Role)",
+                        ["Branch Head / Cashier", "Staff", "Auditor", "Admin"],
+                        key="admin_new_role",
+                    )
+                    b_selection = st.selectbox(
+                        "கிளையைத் தேர்ந்தெடுக்கவும்",
+                        options=(
+                            list(branch_options.keys())
+                            if branch_options
+                            else ["கிளைகள் இல்லை"]
+                        ),
+                        key="admin_new_branch",
+                    )
+
+                    if st.form_submit_button("பயனாளரை உருவாக்கு (Create User)"):
+                        if u_name.strip() and u_username.strip() and u_pass.strip():
+                            b_id = (
+                                branch_options.get(b_selection)
+                                if u_role not in ["Admin", "Auditor"]
+                                else None
+                            )
+                            try:
+                                supabase.table("users").insert({
+                                    "name": u_name.strip(),
+                                    "username": u_username.strip(),
+                                    "password_hash": u_pass.strip(),
+                                    "role": u_role,
+                                    "branch_id": b_id,
+                                    "is_active": True,
+                                }).execute()
+                                st.success(
+                                    f"'{u_username}' என்ற பயனர் வெற்றிகரமாக உருவாக்கப்பட்டுவிட்டார்!"
+                                )
+                                st.rerun()
+                            except Exception as err:
+                                st.error(f"பிழை: {err}")
+                        else:
+                            st.warning("அனைத்து விவரங்களையும் உள்ளிடவும்.")
+
+            with sub_col2:
+                st.subheader("✏️ பணியாளர் விவரங்களை திருத்துதல் (Edit)")
+                if users_res.data:
+                    user_choices = {
+                        f"{u['name']} (@{u['username']})": u for u in users_res.data
+                    }
+                    selected_user_key = st.selectbox(
+                        "திருத்த வேண்டிய பணியாளரைத் தேர்ந்தெடுக்கவும்",
+                        list(user_choices.keys()),
+                        key="admin_edit_user_select",
+                    )
+                    curr_user = user_choices[selected_user_key]
+
+                    with st.form("admin_edit_user_form"):
+                        edit_name = st.text_input("பெயர்", value=curr_user["name"])
+                        edit_pass = st.text_input(
+                            "புதிய கடவுச்சொல் (மாற்ற விரும்பினால் மட்டும்)",
+                            placeholder="பழைய கடவுச்சொல்லையே தொடர காலியாக விடவும்",
+                            type="password",
+                        )
+                        roles_list = [
+                            "Branch Head / Cashier",
+                            "Staff",
+                            "Auditor",
+                            "Admin",
+                        ]
+                        role_index = (
+                            roles_list.index(curr_user["role"])
+                            if curr_user["role"] in roles_list
+                            else 0
+                        )
+                        edit_role = st.selectbox(
+                            "பணி நிலை (Role)",
+                            roles_list,
+                            index=role_index,
+                            key="admin_edit_role_select",
+                        )
+
+                        current_b_name = branch_id_to_name.get(
+                            curr_user.get("branch_id"),
+                            list(branch_options.keys())[0] if branch_options else "",
+                        )
+                        b_list_keys = list(branch_options.keys())
+                        b_idx = (
+                            b_list_keys.index(current_b_name)
+                            if current_b_name in b_list_keys
+                            else 0
+                        )
+                        edit_branch = st.selectbox(
+                            "கிளை",
+                            options=b_list_keys,
+                            index=b_idx,
+                            key="admin_edit_branch_select",
+                        )
+
+                        edit_status = st.radio(
+                            "பயனர் நிலை (Status)",
+                            ["Active (செயலில் உள்ளார்)", "Inactive (முடக்கு)"],
+                            index=0 if curr_user.get("is_active", True) else 1,
+                            key="admin_edit_status_radio",
+                        )
+
+                        if st.form_submit_button(
+                            "மாற்றங்களைச் சேமி (Update User)", type="primary"
+                        ):
+                            try:
+                                update_payload = {
+                                    "name": edit_name.strip(),
+                                    "role": edit_role,
+                                    "branch_id": (
+                                        branch_options.get(edit_branch)
+                                        if edit_role not in ["Admin", "Auditor"]
+                                        else None
+                                    ),
+                                    "is_active": True if "Active" in edit_status else False,
+                                }
+                                if edit_pass.strip():
+                                    update_payload["password_hash"] = edit_pass.strip()
+
+                                supabase.table("users").update(update_payload).eq(
+                                    "id", curr_user["id"]
+                                ).execute()
+                                st.success(
+                                    "பணியாளர் விவரங்கள் வெற்றிகரமாகப் புதுப்பிக்கப்பட்டன!"
+                                )
+                                st.rerun()
+                            except Exception as err:
+                                st.error(f"புதுப்பிப்பதில் பிழை: {err}")
 
         # ==========================================
-        # Tab 3: Customer Report.xls மொத்தப் பதிவேற்றம் (இங்கே ஒட்டவும்)
+        # Tab 3: Customer Report.xls மொத்தப் பதிவேற்றம்
         # ==========================================
         with tab3:
-          st.subheader(
-              "📥 பழைய வாடிக்கையாளர் அறிக்கையைப் பதிவேற்றுதல் (Customer"
-              " Report Import)"
-          )
-          st.write(
-              "உங்கள் `Customer Report.xls` கோப்பை இங்கே பதிவேற்றினால், அதில்"
-              " உள்ள கிளைக் குறியீடுகளுக்கு (Branch Codes) ஏற்ப வாடிக்கையாளர்கள்"
-              " தானாகவே பிரிக்கப்பட்டு இணைக்கப்படுவர்."
-          )
+            st.subheader(
+                "📥 பழைய வாடிக்கையாளர் அறிக்கையைப் பதிவேற்றுதல் (Customer Report Import)"
+            )
+            st.write(
+                "உங்கள் `Customer Report.xls` கோப்பை இங்கே பதிவேற்றினால், அதில்"
+                " உள்ள கிளைக் குறியீடுகளுக்கு (Branch Codes) ஏற்ப வாடிக்கையாளர்கள்"
+                " தானாகவே பிரிக்கப்பட்டு இணைக்கப்படுவர்."
+            )
 
-          uploaded_cust_file = st.file_uploader(
-              "Customer Report Excel கோப்பைத் தேர்வு செய்யவும்",
-              type=["xls", "xlsx", "csv"],
-          )
+            uploaded_cust_file = st.file_uploader(
+                "Customer Report Excel கோப்பைத் தேர்வு செய்யவும்",
+                type=["xls", "xlsx", "csv"],
+                key="admin_customer_report_uploader",
+            )
 
-          if uploaded_cust_file:
-            try:
-              if uploaded_cust_file.name.endswith(".csv"):
-                df_raw = pd.read_csv(uploaded_cust_file, skiprows=2)
-              else:
-                df_raw = pd.read_excel(uploaded_cust_file, skiprows=2)
+            if uploaded_cust_file:
+                try:
+                    if uploaded_cust_file.name.endswith(".csv"):
+                        df_raw = pd.read_csv(uploaded_cust_file, skiprows=2)
+                    else:
+                        df_raw = pd.read_excel(uploaded_cust_file, skiprows=2)
 
-              df_cust = df_raw.dropna(subset=["Full Name", "Mobile No"]).copy()
+                    df_cust = df_raw.dropna(subset=["Full Name", "Mobile No"]).copy()
 
-              st.success(
-                  f"📊 மொத்த வாடிக்கையாளர்கள் கண்டறியப்பட்டனர்: **{len(df_cust)}**"
-              )
-
-              branch_counts = df_cust["Branch"].value_counts().to_dict()
-              st.write("**கிளை வாரியான விவரங்கள்:**")
-              st.json(branch_counts)
-
-              st.dataframe(df_cust.head(3), use_container_width=True)
-
-              if st.button(
-                  "🚀 அனைத்து வாடிக்கையாளர்களையும் டேட்டாபேஸில் உடனே இணை (Start"
-                  " Bulk Upload)",
-                  type="primary",
-              ):
-                with st.spinner(
-                    "வாடிக்கையாளர் தரவுகள் டேட்டாபேஸில்"
-                    " பதிவேற்றப்படுகின்றன..."
-                ):
-                  all_b = (
-                      supabase.table("branches")
-                      .select("id, branch_code")
-                      .execute()
-                  )
-                  b_code_to_id = (
-                      {
-                          b["branch_code"].strip().upper(): b["id"]
-                          for b in all_b.data
-                      }
-                      if all_b.data
-                      else {}
-                  )
-
-                  records_to_insert = []
-                  for idx, row in df_cust.iterrows():
-                    b_code = str(row.get("Branch", "")).strip().upper()
-                    target_branch_id = b_code_to_id.get(b_code)
-
-                    c_no = str(row.get("Customer No", idx + 1)).replace(
-                        ".0", ""
+                    st.success(
+                        f"📊 மொத்த வாடிக்கையாளர்கள் கண்டறியப்பட்டனர்: **{len(df_cust)}**"
                     )
-                    c_code = f"{b_code}-{c_no}"
 
-                    mob1 = str(row.get("Mobile No", "")).replace(".0", "")
-                    mob2 = (
-                        str(row.get("Secondary No", "")).replace(".0", "")
-                        if pd.notna(row.get("Secondary No"))
-                        else ""
-                    )
-                    if not mob2 and pd.notna(row.get("Whatsapp No")):
-                      mob2 = str(row.get("Whatsapp No", "")).replace(".0", "")
+                    branch_counts = df_cust["Branch"].value_counts().to_dict()
+                    st.write("**கிளை வாரியான விவரங்கள்:**")
+                    st.json(branch_counts)
 
-                    records_to_insert.append({
-                        "branch_id": target_branch_id,
-                        "customer_code": c_code,
-                        "name": str(row.get("Full Name", "")).strip(),
-                        "guardian_name": (
-                            str(row.get("Guardian", "")).strip()
-                            if pd.notna(row.get("Guardian"))
-                            else ""
-                        ),
-                        "gender": (
-                            str(row.get("Gender", "")).strip()
-                            if pd.notna(row.get("Gender"))
-                            else "Male"
-                        ),
-                        "mobile": mob1,
-                        "mobile2": mob2,
-                        "address": (
-                            str(row.get("Comm Address", "")).strip()
-                            if pd.notna(row.get("Comm Address"))
-                            else ""
-                        ),
-                        "nominee_relation": (
-                            str(row.get("Relation", "")).strip()
-                            if pd.notna(row.get("Relation"))
-                            else ""
-                        ),
-                    })
+                    st.dataframe(df_cust.head(3), use_container_width=True)
 
-                  batch_size = 100
-                  for i in range(0, len(records_to_insert), batch_size):
-                    batch = records_to_insert[i : i + batch_size]
-                    supabase.table("customers").insert(batch).execute()
+                    if st.button(
+                        "🚀 அனைத்து வாடிக்கையாளர்களையும் டேட்டாபேஸில் உடனே இணை (Start Bulk Upload)",
+                        type="primary",
+                        key="admin_start_bulk_upload_btn",
+                    ):
+                        with st.spinner(
+                            "வாடிக்கையாளர் தரவுகள் டேட்டாபேஸில் பதிவேற்றப்படுகின்றன..."
+                        ):
+                            all_b = (
+                                supabase.table("branches")
+                                .select("id, branch_code")
+                                .execute()
+                            )
+                            b_code_to_id = (
+                                {
+                                    b["branch_code"].strip().upper(): b["id"]
+                                    for b in all_b.data
+                                }
+                                if all_b.data
+                                else {}
+                            )
 
-                  st.success(
-                      f"✅ **{len(records_to_insert)} வாடிக்கையாளர்கள்**"
-                      " வெற்றிகரமாக டேட்டாபேஸில் இணைக்கப்பட்டுவிட்டனர்!"
-                  )
-                  st.rerun()
+                            records_to_insert = []
+                            for idx, row in df_cust.iterrows():
+                                b_code = str(row.get("Branch", "")).strip().upper()
+                                target_branch_id = b_code_to_id.get(b_code)
 
-            except Exception as e:
-              st.error(f"பதிவேற்றுவதில் பிழை: {e}")
-  # ----------------------------------------------------
+                                c_no = str(row.get("Customer No", idx + 1)).replace(".0", "")
+                                c_code = f"{b_code}-{c_no}"
+
+                                mob1 = str(row.get("Mobile No", "")).replace(".0", "")
+                                mob2 = (
+                                    str(row.get("Secondary No", "")).replace(".0", "")
+                                    if pd.notna(row.get("Secondary No"))
+                                    else ""
+                                )
+                                if not mob2 and pd.notna(row.get("Whatsapp No")):
+                                    mob2 = str(row.get("Whatsapp No", "")).replace(".0", "")
+
+                                records_to_insert.append({
+                                    "branch_id": target_branch_id,
+                                    "customer_code": c_code,
+                                    "name": str(row.get("Full Name", "")).strip(),
+                                    "guardian_name": (
+                                        str(row.get("Guardian", "")).strip()
+                                        if pd.notna(row.get("Guardian"))
+                                        else ""
+                                    ),
+                                    "gender": (
+                                        str(row.get("Gender", "")).strip()
+                                        if pd.notna(row.get("Gender"))
+                                        else "Male"
+                                    ),
+                                    "mobile": mob1,
+                                    "mobile2": mob2,
+                                    "address": (
+                                        str(row.get("Comm Address", "")).strip()
+                                        if pd.notna(row.get("Comm Address"))
+                                        else ""
+                                    ),
+                                    "nominee_relation": (
+                                        str(row.get("Relation", "")).strip()
+                                        if pd.notna(row.get("Relation"))
+                                        else ""
+                                    ),
+                                })
+
+                            batch_size = 100
+                            for i in range(0, len(records_to_insert), batch_size):
+                                batch = records_to_insert[i : i + batch_size]
+                                supabase.table("customers").insert(batch).execute()
+
+                            st.success(
+                                f"✅ **{len(records_to_insert)} வாடிக்கையாளர்கள்** வெற்றிகரமாக டேட்டாபேஸில் இணைக்கப்பட்டுவிட்டனர்!"
+                            )
+                            st.rerun()
+
+                except Exception as e:
+                    st.error(f"பதிவேற்றுவதில் பிழை: {e}")  # ----------------------------------------------------
   # B. தணிக்கையர் திரை (AUDITOR DESK)
   # ----------------------------------------------------
   elif st.session_state.user_role == "Auditor":
