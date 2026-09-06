@@ -1026,8 +1026,9 @@ else:
                         st.success("✅ நோட்டுகளின் கணக்கீடு (Denomination Tally) கச்சிதமாகப் பொருந்துகிறது!")
                     else:
                         diff = abs(target_needed - calculated_handover)
-                        st.error(f"❌ நோட்டு கணக்கீடு பொருந்தவில்லை! வித்தியாசம்: ₹{diff:,.2f}"
-                                 with col_den2:
+                        st.error(f"❌ நோட்டு கணக்கீடு பொருந்தவில்லை! வித்தியாசம்: ₹{diff:,.2f}")
+                        
+                with col_den2:
                 st.markdown("#### 📲 OTP சரிபார்ப்பு (Fast2SMS DLT)")
                 st.write(f"வாடிக்கையாளர்: **{visit['customer_name']}**")
                 st.write(f"மொபைல் எண்: **{visit['mobile']}**")
