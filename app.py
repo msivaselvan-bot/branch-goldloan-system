@@ -3,74 +3,32 @@ import random
 import requests
 import pandas as pd
 import streamlit as st
-import streamlit.components.v1 as components
 from supabase import Client, create_client
 
-# பக்க வடிவமைப்பு
+# 1. பக்க வடிவமைப்பு
 st.set_page_config(page_title="Branch Operations System", layout="wide")
 
 # ==============================================================================
-# 0. JavaScript Injection: மிதக்கும் Streamlit Cloud பேட்ஜ்களை DOM-லிருந்து நீக்குதல்
-# ==============================================================================
-components.html("""
-<script>
-    function purgeStreamlitBadges() {
-        try {
-            const rootDoc = window.parent ? window.parent.document : document;
-            const targetSelectors = [
-                '[data-testid="manage-app-button"]',
-                '.viewerBadge_container__r5tak',
-                '.viewerBadge_link__qRIco',
-                'div[class*="viewerBadge"]',
-                'div[class*="manage-app"]',
-                'div[class*="floating-actions"]',
-                'div[class*="StatusWidget"]',
-                '#manage-app-button',
-                'footer',
-                'header'
-            ];
-            
-            targetSelectors.forEach(selector => {
-                const nodes = rootDoc.querySelectorAll(selector);
-                nodes.forEach(el => {
-                    el.style.display = 'none';
-                    el.style.visibility = 'hidden';
-                    el.style.opacity = '0';
-                    el.remove();
-                });
-            });
-        } catch (e) {
-            // Cross-origin restriction fallback
-        }
-    }
-
-    purgeStreamlitBadges();
-    setInterval(purgeStreamlitBadges, 250);
-</script>
-""", height=0, width=0)
-
-# ==============================================================================
-# 1. ஹை-லுக் ஆப் தீம் (Native App Feel - Lavender, Deep Violet & Luxury Gold)
+# ஹை-லுக் ஆப் தீம் (Native App Feel - Lavender, Deep Violet & Luxury Gold)
 # ==============================================================================
 st.markdown("""
 <style>
-    /* 1. பிரவுசர் & Streamlit கட்டுப்பாடுகளை முழுமையாக மறைத்தல் */
+    /* 1. Streamlit Header, Footer மற்றும் Floating Badges-களை முழுமையாக மறைத்தல் */
     header[data-testid="stHeader"] {
         display: none !important;
         visibility: hidden !important;
         height: 0% !important;
     }
 
-    /* 'Hosted with Streamlit' & Manage App பேட்ஜை முற்றிலும் முடக்குதல் */
     footer,
     [data-testid="manage-app-button"],
     .viewerBadge_container__r5tak,
     .viewerBadge_link__qRIco,
-    div[class*="viewerBadge_container"],
-    div[class*="viewerBadge_link"],
+    div[class*="viewerBadge"],
     div[class*="manage-app"],
-    span[class*="viewerBadge"],
-    a[href*="streamlit.io"],
+    div[class*="floating-actions"],
+    div[class*="StatusWidget"],
+    #manage-app-button,
     div[data-testid="stStatusWidget"],
     div[class*="floating"],
     div[class*="badge"],
@@ -94,7 +52,7 @@ st.markdown("""
     }
 
     .block-container {
-        padding-top: 1rem !important;
+        padding-top: 1.5rem !important;
         padding-bottom: 2.5rem !important;
         padding-left: 1.5rem !important;
         padding-right: 1.5rem !important;
@@ -230,7 +188,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 1. Supabase இணைப்பு
+# 2. Supabase இணைப்பு
 # ==========================================
 @st.cache_resource
 def get_supabase_client() -> Client:
@@ -245,7 +203,7 @@ except Exception as e:
     st.stop()
 
 # ==========================================
-# 2. ஆவணப் பதிவேற்றம், SMS & கல்லா இருப்பு செயல்பாடுகள்
+# 3. ஆவணப் பதிவேற்றம், SMS & கல்லா இருப்பு செயல்பாடுகள்
 # ==========================================
 def upload_files_to_supabase(files, visit_no):
     uploaded_links = []
@@ -455,7 +413,7 @@ def render_staff_attribution_report(selected_branch_id=None):
     )
 
 # ==========================================
-# 3. தற்காலிக சேமிப்பக மாறிகள் (Session State)
+# 4. தற்காலிக சேமிப்பக மாறிகள் (Session State)
 # ==========================================
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
@@ -483,16 +441,17 @@ branch_id_to_name = (
 )
 
 # ==========================================
-# 4. உள்நுழைவு திரை (Royal Violet Theme)
+# 5. உள்நுழைவு திரை (Royal Violet Theme)
 # ==========================================
 if not st.session_state.logged_in:
-    col_left, col_center, col_right = st.columns([1.3, 1.4, 1.3])
+    col_left, col_center, col_right = st.columns([1.2, 1.4, 1.2])
 
     with col_center:
         st.markdown("""
         <div class="login-box">
             <h3>🏦 கிளை சிஸ்டம்</h3>
             <p>பணியாளர் பாதுகாப்பான உள்நுழைவு</p>
+        </div>
         """, unsafe_allow_html=True)
 
         with st.form("login_form"):
@@ -536,10 +495,8 @@ if not st.session_state.logged_in:
                 else:
                     st.warning("விவரங்களை உள்ளிடவும்.")
 
-        st.markdown("</div>", unsafe_allow_html=True)
-
 # ==========================================
-# 5. முதன்மை திரை
+# 6. முதன்மை திரை
 # ==========================================
 else:
     top_col1, top_col2, top_col3 = st.columns([3, 2, 1])
