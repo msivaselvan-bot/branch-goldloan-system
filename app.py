@@ -3,12 +3,11 @@ import random
 import requests
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
 from supabase import Client, create_client
 
 # பக்க வடிவமைப்பு
 st.set_page_config(page_title="Branch Operations System", layout="wide")
-
-import streamlit.components.v1 as components
 
 # ==============================================================================
 # 0. JavaScript Injection: மிதக்கும் Streamlit Cloud பேட்ஜ்களை DOM-லிருந்து நீக்குதல்
@@ -16,35 +15,35 @@ import streamlit.components.v1 as components
 components.html("""
 <script>
     function purgeStreamlitBadges() {
-        // Parent window (Streamlit Cloud shell) மற்றும் தற்போதைய iframe இரண்டிலும் தேடுதல்
-        const rootDoc = window.parent ? window.parent.document : document;
-        
-        // கீழ் வலது பேட்ஜ்கள், சிவப்பு பட்டன்கள் மற்றும் வாட்டர்மார்க்குகள்
-        const targetSelectors = [
-            '[data-testid="manage-app-button"]',
-            '.viewerBadge_container__r5tak',
-            '.viewerBadge_link__qRIco',
-            'div[class*="viewerBadge"]',
-            'div[class*="manage-app"]',
-            'div[class*="floating-actions"]',
-            'div[class*="StatusWidget"]',
-            '#manage-app-button',
-            'footer',
-            'header'
-        ];
-        
-        targetSelectors.forEach(selector => {
-            const nodes = rootDoc.querySelectorAll(selector);
-            nodes.forEach(el => {
-                el.style.display = 'none';
-                el.style.visibility = 'hidden';
-                el.style.opacity = '0';
-                el.remove();
+        try {
+            const rootDoc = window.parent ? window.parent.document : document;
+            const targetSelectors = [
+                '[data-testid="manage-app-button"]',
+                '.viewerBadge_container__r5tak',
+                '.viewerBadge_link__qRIco',
+                'div[class*="viewerBadge"]',
+                'div[class*="manage-app"]',
+                'div[class*="floating-actions"]',
+                'div[class*="StatusWidget"]',
+                '#manage-app-button',
+                'footer',
+                'header'
+            ];
+            
+            targetSelectors.forEach(selector => {
+                const nodes = rootDoc.querySelectorAll(selector);
+                nodes.forEach(el => {
+                    el.style.display = 'none';
+                    el.style.visibility = 'hidden';
+                    el.style.opacity = '0';
+                    el.remove();
+                });
             });
-        });
+        } catch (e) {
+            // Cross-origin restriction fallback
+        }
     }
 
-    // பக்கம் ஏற்றப்படும் போதும், புதிய மாற்றங்கள் நிகழும் போதும் கண்காணித்து நீக்குதல்
     purgeStreamlitBadges();
     setInterval(purgeStreamlitBadges, 250);
 </script>
