@@ -31,29 +31,27 @@ def get_drive_service():
     return build("drive", "v3", credentials=creds)
 
 # 3. ஆவணங்களை கூகுள் டிரைவில் அப்லோட் செய்யும் செயல்பாடு
-def upload_files_to_drive(files, visit_no):
-    drive_service = get_drive_service()
-    parent_folder_id = st.secrets["drive"]["parent_folder_id"]
-
-    # வருகை எண்ணுக்கு (Visit No) தனி சப்-ஃபோல்டர் உருவாக்குதல்
-    folder_metadata = {
-        "name": visit_no,
-        "mimeType": "application/vnd.google-apps.folder",
-        "parents": [parent_folder_id],
-    }
-    created_folder = drive_service.files().create(body=folder_metadata, fields="id").execute()
-    sub_folder_id = created_folder.get("id")
-
+def upload_files_to_supabase(files, visit_no):
     uploaded_links = []
+    bucket_name = "branch-documents"
+
     for f in files:
-        file_metadata = {"name": f.name, "parents": [sub_folder_id]}
-        media = MediaIoBaseUpload(io.BytesIO(f.getvalue()), mimetype=f.type, resumable=True)
-        uploaded = drive_service.files().create(
-            body=file_metadata,
-            media_body=media,
-            fields="id, webViewLink"
-        ).execute()
-        uploaded_links.append({"name": f.name, "link": uploaded.get("webViewLink")})
+        # தனித்துவமான ஃபைல் பாதை (எ.கா: VISIT-2026/aadhar.jpg)
+        file_path = f"{visit_no}/{f.name}"
+        file_bytes = f.getvalue()
+
+        # Supabase Storage-ல் அப்லோட் செய்தல்
+        res = supabase.storage.from_(bucket_name).upload(
+            path=file_path,
+            file=file_bytes,
+            file_options={"content-type": f.type, "upsert": "true"},
+        )
+
+        # பார்வைக்கான நேரடி லிங்க் பெறுதல்
+        public_url = supabase.storage.from_(bucket_name).get_public_url(
+            file_path
+        )
+        uploaded_links.append(public_url)
 
     return uploaded_links
 
