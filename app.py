@@ -148,43 +148,120 @@ else:
             else:
                 st.info("இதுவரை கிளைகள் எதுவும் சேர்க்கப்படவில்லை.")
 
-        # பணியாளர்கள் சேர்க்கும் தப்
+        # பணியாளர்கள் மேலாண்மை (User Management Tab)
         with tab2:
-            st.subheader("➕ புதிய பணியாளர் சேர்த்தல்")
+            st.subheader("📋 பணியாளர்கள் பட்டியல் (Existing Users)")
             
-            # புதிய கிளைகளின் பட்டியலை உடனுக்குடன் பெறுதல்
+            # கிளைகளுடன் சேர்த்து பயனாளர்களைப் பெறுதல்
+            users_res = supabase.table("users").select("id, name, username, role, branch_id, is_active").order("id").execute()
             b_all = supabase.table("branches").select("id, branch_name").execute()
             branch_dict = {b["branch_name"]: b["id"] for b in b_all.data} if b_all.data else {}
+            branch_id_to_name = {b["id"]: b["branch_name"] for b in b_all.data} if b_all.data else {}
 
-            with st.form("add_user_form", clear_on_submit=True):
-                u_name = st.text_input("பணியாளர் முழுப் பெயர்")
-                u_username = st.text_input("உள்நுழைவு பெயர் (Username)")
-                u_pass = st.text_input("கடவுச்சொல் (Password)", type="password")
-                u_role = st.selectbox("பணி நிலை (Role)", ["Branch Head / Cashier", "Staff", "Auditor", "Admin"])
-                
-                b_selection = st.selectbox(
-                    "கிளையைத் தேர்ந்தெடுக்கவும்",
-                    options=list(branch_dict.keys()) if branch_dict else ["கிளைகள் இல்லை"]
-                )
+            if users_res.data:
+                user_table_data = []
+                for u in users_res.data:
+                    b_name = branch_id_to_name.get(u.get("branch_id"), "Head Office / None")
+                    status_text = "🟢 Active" if u.get("is_active", True) else "🔴 Inactive"
+                    user_table_data.append({
+                        "ID": u["id"],
+                        "பெயர்": u["name"],
+                        "Username": u["username"],
+                        "பணி நிலை (Role)": u["role"],
+                        "கிளை": b_name,
+                        "நிலை (Status)": status_text
+                    })
+                st.dataframe(pd.DataFrame(user_table_data), use_container_width=True)
+            else:
+                st.info("இதுவரை பயனாளர்கள் யாரும் சேர்க்கப்படவில்லை.")
 
-                btn_add_u = st.form_submit_button("பயனாளரை உருவாக்கு (Create User)")
-                if btn_add_u:
-                    if u_name.strip() and u_username.strip() and u_pass.strip():
-                        b_id = branch_dict.get(b_selection) if u_role not in ["Admin", "Auditor"] else None
-                        try:
-                            supabase.table("users").insert({
-                                "name": u_name.strip(),
-                                "username": u_username.strip(),
-                                "password_hash": u_pass.strip(),
-                                "role": u_role,
-                                "branch_id": b_id
-                            }).execute()
-                            st.success(f"'{u_username}' என்ற பயனர் உருவாக்கப்பட்டுவிட்டார்!")
-                            st.rerun()
-                        except Exception as err:
-                            st.error(f"பிழை: {err}")
-                    else:
-                        st.warning("அனைத்து விவரங்களையும் உள்ளிடவும்.")
+            st.markdown("---")
+
+            # இரண்டு பிரிவுகளாகப் பிரித்தல்: புதிய பயனர் சேர்த்தல் & பயனர் திருத்தம் (Edit)
+            sub_col1, sub_col2 = st.columns(2)
+
+            # 1. புதிய பயனர் சேர்த்தல்
+            with sub_col1:
+                st.subheader("➕ புதிய பணியாளர் சேர்த்தல்")
+                with st.form("add_user_form", clear_on_submit=True):
+                    u_name = st.text_input("பணியாளர் முழுப் பெயர்")
+                    u_username = st.text_input("உள்நுழைவு பெயர் (Username)")
+                    u_pass = st.text_input("கடவுச்சொல் (Password)", type="password")
+                    u_role = st.selectbox("பணி நிலை (Role)", ["Branch Head / Cashier", "Staff", "Auditor", "Admin"], key="add_role")
+                    
+                    b_selection = st.selectbox(
+                        "கிளையைத் தேர்ந்தெடுக்கவும்",
+                        options=list(branch_dict.keys()) if branch_dict else ["கிளைகள் இல்லை"],
+                        key="add_branch"
+                    )
+
+                    btn_add_u = st.form_submit_button("பயனாளரை உருவாக்கு (Create User)")
+                    if btn_add_u:
+                        if u_name.strip() and u_username.strip() and u_pass.strip():
+                            b_id = branch_dict.get(b_selection) if u_role not in ["Admin", "Auditor"] else None
+                            try:
+                                supabase.table("users").insert({
+                                    "name": u_name.strip(),
+                                    "username": u_username.strip(),
+                                    "password_hash": u_pass.strip(),
+                                    "role": u_role,
+                                    "branch_id": b_id,
+                                    "is_active": True
+                                }).execute()
+                                st.success(f"'{u_username}' என்ற பயனர் வெற்றிகரமாக உருவாக்கப்பட்டார்!")
+                                st.rerun()
+                            except Exception as err:
+                                st.error(f"பிழை: {err}")
+                        else:
+                            st.warning("அனைத்து விவரங்களையும் உள்ளிடவும்.")
+
+            # 2. பணியாளர் திருத்தம் (Edit User & Active/Inactive Toggle)
+            with sub_col2:
+                st.subheader("✏️ பணியாளர் விவரங்களை திருத்துதல் (Edit)")
+                if users_res.data:
+                    user_choices = {f"{u['name']} (@{u['username']})": u for u in users_res.data}
+                    selected_user_key = st.selectbox("திருத்த வேண்டிய பணியாளரைத் தேர்ந்தெடுக்கவும்", list(user_choices.keys()))
+                    curr_user = user_choices[selected_user_key]
+
+                    with st.form("edit_user_form"):
+                        edit_name = st.text_input("பெயர்", value=curr_user["name"])
+                        edit_pass = st.text_input("புதிய கடவுச்சொல் (மாற்ற விரும்பினால் மட்டும் உள்ளிடவும்)", placeholder="பழைய கடவுச்சொல்லையே தொடர காலியாக விடவும்", type="password")
+                        
+                        roles_list = ["Branch Head / Cashier", "Staff", "Auditor", "Admin"]
+                        role_index = roles_list.index(curr_user["role"]) if curr_user["role"] in roles_list else 0
+                        edit_role = st.selectbox("பணி நிலை (Role)", roles_list, index=role_index, key="edit_role")
+
+                        # நடப்பு கிளையை தேர்ந்தெடுத்தல்
+                        current_b_name = branch_id_to_name.get(curr_user.get("branch_id"), list(branch_dict.keys())[0] if branch_dict else "")
+                        b_list_keys = list(branch_dict.keys())
+                        b_idx = b_list_keys.index(current_b_name) if current_b_name in b_list_keys else 0
+                        edit_branch = st.selectbox("கிளை", options=b_list_keys, index=b_idx, key="edit_branch")
+
+                        # Active / Inactive Radio Button
+                        edit_status = st.radio(
+                            "பயனர் நிலை (Status)",
+                            ["Active (செயலில் உள்ளார்)", "Inactive (முடக்கு)"],
+                            index=0 if curr_user.get("is_active", True) else 1
+                        )
+
+                        btn_update_u = st.form_submit_button("மாற்றங்களைச் சேமி (Update User)", type="primary")
+                        if btn_update_u:
+                            try:
+                                update_payload = {
+                                    "name": edit_name.strip(),
+                                    "role": edit_role,
+                                    "branch_id": branch_dict.get(edit_branch) if edit_role not in ["Admin", "Auditor"] else None,
+                                    "is_active": True if "Active" in edit_status else False
+                                }
+                                # பாஸ்வேர்டு உள்ளிட்டால் மட்டும் மாற்றப்படும்
+                                if edit_pass.strip():
+                                    update_payload["password_hash"] = edit_pass.strip()
+
+                                supabase.table("users").update(update_payload).eq("id", curr_user["id"]).execute()
+                                st.success("பணியாளர் விவரங்கள் வெற்றிகரமாகப் புதுப்பிக்கப்பட்டன!")
+                                st.rerun()
+                            except Exception as err:
+                                st.error(f"புதுப்பிப்பதில் பிழை: {err}")
 
     # ----------------------------------------------------
     # B. தணிக்கையர் திரை (AUDITOR DESK)
