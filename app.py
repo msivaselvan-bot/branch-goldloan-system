@@ -79,7 +79,6 @@ if not st.session_state.logged_in:
 
         submitted = st.form_submit_button("உள்நுழைக (Login)")
         if submitted:
-            # Supabase-ல் பயனாளரைச் சரிபார்த்தல்
             user_query = supabase.table("users").select("*").eq("username", username).eq("password_hash", password).eq("role", role).execute()
             
             if user_query.data:
@@ -118,12 +117,12 @@ else:
         st.header("⚙️ நிர்வாக மேலாண்மை (Admin Control Panel)")
         tab1, tab2 = st.tabs(["புதிய கிளை சேர்த்தல்", "புதிய பயனாளர் (User) சேர்த்தல்"])
 
-       with tab1:
+        with tab1:
             st.subheader("ஏற்கனவே உள்ள கிளைகள்:")
             existing_branches = supabase.table("branches").select("id, branch_name, branch_code").execute()
             if existing_branches.data:
                 st.dataframe(pd.DataFrame(existing_branches.data), use_container_width=True)
-            
+
             st.markdown("---")
             with st.form("add_branch_form"):
                 b_name = st.text_input("புதிய கிளையின் பெயர்")
@@ -132,7 +131,7 @@ else:
                     if b_name and b_code:
                         try:
                             supabase.table("branches").insert({
-                                "branch_name": b_name.strip(), 
+                                "branch_name": b_name.strip(),
                                 "branch_code": b_code.strip().upper()
                             }).execute()
                             st.success(f"{b_name} வெற்றிகரமாகச் சேர்க்கப்பட்டது!")
@@ -143,6 +142,12 @@ else:
                         st.error("அனைத்து விவரங்களையும் உள்ளிடவும்.")
 
         with tab2:
+            st.subheader("ஏற்கனவே உள்ள பயனாளர்கள்:")
+            existing_users = supabase.table("users").select("id, name, username, role, branch_id").execute()
+            if existing_users.data:
+                st.dataframe(pd.DataFrame(existing_users.data), use_container_width=True)
+
+            st.markdown("---")
             with st.form("add_user_form"):
                 u_name = st.text_input("பணியாளர் முழுப் பெயர்")
                 u_username = st.text_input("உள்நுழைவு பெயர் (Username)")
@@ -157,14 +162,18 @@ else:
                 if st.form_submit_button("பயனாளரை உருவாக்கு"):
                     if u_name and u_username and u_pass:
                         branch_id_val = None if u_role in ["Admin", "Auditor"] else (u_branch[1] if branch_options else None)
-                        supabase.table("users").insert({
-                            "name": u_name,
-                            "username": u_username,
-                            "password_hash": u_pass,
-                            "role": u_role,
-                            "branch_id": branch_id_val
-                        }).execute()
-                        st.success(f"{u_username} என்ற புதிய பயனர் வெற்றிகரமாக உருவாக்கப்பட்டார்!")
+                        try:
+                            supabase.table("users").insert({
+                                "name": u_name.strip(),
+                                "username": u_username.strip(),
+                                "password_hash": u_pass.strip(),
+                                "role": u_role,
+                                "branch_id": branch_id_val
+                            }).execute()
+                            st.success(f"{u_username} என்ற புதிய பயனர் வெற்றிகரமாக உருவாக்கப்பட்டார்!")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"பயனாளரைச் சேர்ப்பதில் பிழை: {e}")
                     else:
                         st.error("அனைத்து விவரங்களையும் உள்ளிடவும்.")
 
