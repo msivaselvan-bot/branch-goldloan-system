@@ -596,19 +596,13 @@ else:
                     st.session_state.transactions_cart = []
                     st.rerun()
 
-        # படி 3: ரொக்க நோட்டுகள் & OTP திரை (OTP அனுப்பிய பின் லாக் செய்யப்படும் பாதுகாப்பு அமைப்பு)
+        # படி 3: ரொக்க நோட்டுகள் & OTP திரை (Single Screen 4-Column Grid)
         elif st.session_state.current_visit["step"] == "CASH_OTP":
             visit = st.session_state.current_visit
             net_target = visit["net_amount"]
 
-            # OTP அனுப்பப்பட்டதா என்பதை அறியும் கொடி (Flag)
-            otp_already_sent = "generated_otp" in st.session_state and st.session_state.generated_otp is not None
-
             hdr_text = f"💸 வழங்க வேண்டிய தொகை: ₹{net_target:,.2f}" if net_target > 0 else f"💰 பெற வேண்டிய தொகை: ₹{abs(net_target):,.2f}"
             st.info(f"**{hdr_text}** (வாடிக்கையாளர்: {visit['customer_name']})")
-
-            if otp_already_sent:
-                st.warning("🔒 **OTP வாடிக்கையாளருக்கு அனுப்பப்பட்டுவிட்டது! பணக் கணக்கீடு லாக் செய்யப்பட்டுள்ளது.** (மாற்ற விரும்பினால் கீழே உள்ள 'OTP ரத்து' பட்டனை அழுத்தவும்)")
 
             col_main1, col_main2 = st.columns([3, 1.4])
 
@@ -617,26 +611,26 @@ else:
 
                 with tab_in:
                     c1, c2, c3, c4 = st.columns(4)
-                    i500 = c1.number_input("₹500", min_value=0, step=1, key="i500", disabled=otp_already_sent)
-                    i200 = c2.number_input("₹200", min_value=0, step=1, key="i200", disabled=otp_already_sent)
-                    i100 = c3.number_input("₹100", min_value=0, step=1, key="i100", disabled=otp_already_sent)
-                    i50 = c4.number_input("₹50", min_value=0, step=1, key="i50", disabled=otp_already_sent)
-                    i20 = c1.number_input("₹20", min_value=0, step=1, key="i20", disabled=otp_already_sent)
-                    i10 = c2.number_input("₹10", min_value=0, step=1, key="i10", disabled=otp_already_sent)
-                    i5 = c3.number_input("₹5", min_value=0, step=1, key="i5", disabled=otp_already_sent)
-                    icoin = c4.number_input("Coins", min_value=0, step=1, key="icoin", disabled=otp_already_sent)
+                    i500 = c1.number_input("₹500", min_value=0, step=1, key="i500")
+                    i200 = c2.number_input("₹200", min_value=0, step=1, key="i200")
+                    i100 = c3.number_input("₹100", min_value=0, step=1, key="i100")
+                    i50 = c4.number_input("₹50", min_value=0, step=1, key="i50")
+                    i20 = c1.number_input("₹20", min_value=0, step=1, key="i20")
+                    i10 = c2.number_input("₹10", min_value=0, step=1, key="i10")
+                    i5 = c3.number_input("₹5", min_value=0, step=1, key="i5")
+                    icoin = c4.number_input("Coins", min_value=0, step=1, key="icoin")
                     tot_in = (i500*500) + (i200*200) + (i100*100) + (i50*50) + (i20*20) + (i10*10) + (i5*5) + icoin
 
                 with tab_out:
                     o1, o2, o3, o4 = st.columns(4)
-                    o500 = o1.number_input("₹500 ", min_value=0, step=1, key="o500", disabled=otp_already_sent)
-                    o200 = o2.number_input("₹200 ", min_value=0, step=1, key="o200", disabled=otp_already_sent)
-                    o100 = o3.number_input("₹100 ", min_value=0, step=1, key="o100", disabled=otp_already_sent)
-                    o50 = o4.number_input("₹50 ", min_value=0, step=1, key="o50", disabled=otp_already_sent)
-                    o20 = o1.number_input("₹20 ", min_value=0, step=1, key="o20", disabled=otp_already_sent)
-                    o10 = o2.number_input("₹10 ", min_value=0, step=1, key="o10", disabled=otp_already_sent)
-                    o5 = o3.number_input("₹5 ", min_value=0, step=1, key="o5", disabled=otp_already_sent)
-                    ocoin = o4.number_input("Coins ", min_value=0, step=1, key="ocoin", disabled=otp_already_sent)
+                    o500 = o1.number_input("₹500 ", min_value=0, step=1, key="o500")
+                    o200 = o2.number_input("₹200 ", min_value=0, step=1, key="o200")
+                    o100 = o3.number_input("₹100 ", min_value=0, step=1, key="o100")
+                    o50 = o4.number_input("₹50 ", min_value=0, step=1, key="o50")
+                    o20 = o1.number_input("₹20 ", min_value=0, step=1, key="o20")
+                    o10 = o2.number_input("₹10 ", min_value=0, step=1, key="o10")
+                    o5 = o3.number_input("₹5 ", min_value=0, step=1, key="o5")
+                    ocoin = o4.number_input("Coins ", min_value=0, step=1, key="ocoin")
                     tot_out = (o500*500) + (o200*200) + (o100*100) + (o50*50) + (o20*20) + (o10*10) + (o5*5) + ocoin
 
                 calc_net = (tot_in - tot_out) if net_target < 0 else (tot_out - tot_in)
@@ -647,15 +641,11 @@ else:
 
             with col_main2:
                 st.write(f"📞 மொபைல்: **{visit['mobile']}**")
-                
-                # OTP பட்டன் மேலாண்மை
                 if not matched:
-                    st.button("📲 OTP அனுப்புக", disabled=True, key="btn_otp_nomatch")
+                    st.button("📲 OTP அனுப்புக", disabled=True)
                     st.caption("⚠️ டேலி சரியாக அமைந்ததும் பட்டன் இயங்கும்.")
-                elif otp_already_sent:
-                    st.success("✅ OTP அனுப்பப்பட்டுவிட்டது!")
                 else:
-                    if st.button("📲 OTP அனுப்புக", type="primary", key="btn_otp_send"):
+                    if st.button("📲 OTP அனுப்புக", type="primary"):
                         otp_c = str(random.randint(1000, 9999))
                         st.session_state.generated_otp = otp_c
                         ok, msg = send_fast2sms_otp(visit["mobile"], otp_c)
@@ -663,15 +653,12 @@ else:
                             st.success("OTP அனுப்பப்பட்டது!")
                         else:
                             st.info(f"சோதனை OTP: **{otp_c}**")
-                        st.rerun()
 
-                ent_otp = st.text_input("OTP உள்ளிடவும்:", max_chars=4, key="ent_otp_input")
+                ent_otp = st.text_input("OTP உள்ளிடவும்:", max_chars=4)
 
                 if st.button("அடுத்து ➔", type="primary", use_container_width=True):
                     if not matched:
                         st.error("டேலி பொருந்தவில்லை!")
-                    elif not otp_already_sent:
-                        st.error("முதலில் வாடிக்கையாளருக்கு OTP அனுப்பவும்!")
                     elif ent_otp and ent_otp == st.session_state.get("generated_otp"):
                         visit["denomination"] = {
                             "in": {"500": i500, "200": i200, "100": i100, "50": i50, "20": i20, "10": i10, "5": i5, "coins": icoin, "total": tot_in},
@@ -684,17 +671,9 @@ else:
                         st.error("தவறான OTP!")
 
                 st.write("")
-                # OTP அனுப்பாத வரை மட்டுமே பின்செல்ல அனுமதிக்கப்படும்
-                if not otp_already_sent:
-                    if st.button("⬅️ நடவடிக்கைகளை மாற்ற பின்செல்க", use_container_width=True):
-                        st.session_state.current_visit["step"] = "TRANSACTIONS"
-                        st.rerun()
-                else:
-                    # OTP அனுப்பிய பிறகு தொகையை மாற்ற விரும்பினால் பழைய OTP-யை நீக்கிவிட்டுத்தான் செல்ல வேண்டும்
-                    if st.button("🔄 OTP ரத்து செய்து கணக்கீட்டை மாற்று", type="secondary", use_container_width=True):
-                        st.session_state.generated_otp = None
-                        st.session_state.current_visit["step"] = "TRANSACTIONS"
-                        st.rerun()
+                if st.button("⬅️ நடவடிக்கைகளை மாற்ற பின்செல்க", use_container_width=True):
+                    st.session_state.current_visit["step"] = "TRANSACTIONS"
+                    st.rerun()
 
         # படி 4: ஆவணப் பதிவேற்றம்
         elif st.session_state.current_visit["step"] == "DOC_UPLOAD":
