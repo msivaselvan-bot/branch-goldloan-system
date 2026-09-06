@@ -192,24 +192,31 @@ else:
                 start_visit = st.form_submit_button("வருகையைத் தொடங்கு (Start Visit)")
                 if start_visit:
                     if cust_name and cust_mobile:
-                        # கஸ்டமரை Supabase-ல் பதிவு செய்தல் அல்லது தேடுதல்
-                        cust_res = supabase.table("customers").insert({
-                            "name": cust_name,
-                            "mobile": cust_mobile,
-                            "aadhaar": cust_aadhaar
-                        }).execute()
-                        cust_id = cust_res.data[0]["id"]
+                        try:
+                            # 1. கஸ்டமரை Supabase-ல் பதிவு செய்தல்
+                            cust_res = supabase.table("customers").insert({
+                                "name": cust_name,
+                                "mobile": cust_mobile,
+                                "aadhaar": cust_aadhaar
+                            }).execute()
 
-                        v_num = f"VISIT-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
-                        st.session_state.current_visit = {
-                            "visit_no": v_num,
-                            "customer_id": cust_id,
-                            "customer_name": cust_name,
-                            "mobile": cust_mobile,
-                            "aadhaar": cust_aadhaar,
-                            "step": "TRANSACTIONS"
-                        }
-                        st.rerun()
+                            if cust_res.data:
+                                cust_id = cust_res.data[0]["id"]
+                            else:
+                                cust_id = None
+
+                            v_num = f"VISIT-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+                            st.session_state.current_visit = {
+                                "visit_no": v_num,
+                                "customer_id": cust_id,
+                                "customer_name": cust_name,
+                                "mobile": cust_mobile,
+                                "aadhaar": cust_aadhaar,
+                                "step": "TRANSACTIONS"
+                            }
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"வாடிக்கையாளர் பதிவில் பிழை: {e}")
                     else:
                         st.error("பெயர் மற்றும் மொபைல் எண் அவசியம்.")
 
