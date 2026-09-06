@@ -118,10 +118,16 @@ else:
         st.header("⚙️ நிர்வாக மேலாண்மை (Admin Control Panel)")
         tab1, tab2 = st.tabs(["புதிய கிளை சேர்த்தல்", "புதிய பயனாளர் (User) சேர்த்தல்"])
 
-        with tab1:
+       with tab1:
+            st.subheader("ஏற்கனவே உள்ள கிளைகள்:")
+            existing_branches = supabase.table("branches").select("id, branch_name, branch_code").execute()
+            if existing_branches.data:
+                st.dataframe(pd.DataFrame(existing_branches.data), use_container_width=True)
+            
+            st.markdown("---")
             with st.form("add_branch_form"):
-                b_name = st.text_input("கிளையின் பெயர்")
-                b_code = st.text_input("கிளை குறியீடு (Branch Code, எ.கா: BR03)")
+                b_name = st.text_input("புதிய கிளையின் பெயர்")
+                b_code = st.text_input("கிளை குறியீடு (Branch Code, எ.கா: TGL01, MKD01)")
                 if st.form_submit_button("கிளையைச் சேர்"):
                     if b_name and b_code:
                         try:
