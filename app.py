@@ -1026,33 +1026,40 @@ else:
                         st.success("✅ நோட்டுகளின் கணக்கீடு (Denomination Tally) கச்சிதமாகப் பொருந்துகிறது!")
                     else:
                         diff = abs(target_needed - calculated_handover)
-                        st.error(f"❌ நோட்டு கணக்கீடு பொருந்தவில்லை! வித்தியாசம்: ₹{diff:,.2f}")
-
-            with col_den2:
+                        st.error(f"❌ நோட்டு கணக்கீடு பொருந்தவில்லை! வித்தியாசம்: ₹{diff:,.2f}"
+                                 with col_den2:
                 st.markdown("#### 📲 OTP சரிபார்ப்பு (Fast2SMS DLT)")
                 st.write(f"வாடிக்கையாளர்: **{visit['customer_name']}**")
                 st.write(f"மொபைல் எண்: **{visit['mobile']}**")
 
-                if st.button("📲 OTP அனுப்புக (Send SMS OTP)", type="primary"):
-                    otp_code = str(random.randint(1000, 9999))
-                    st.session_state.generated_otp = otp_code
+                # டேலி பொருந்தாத போது எச்சரிக்கை & OTP பட்டன் முடக்கம்
+                if not is_tally_matched:
+                    st.warning("⚠️ நோட்டுகளின் கணக்கீடு (Tally) சரியாகப் பொருந்தினால் மட்டுமே வாடிக்கையாளருக்கு OTP அனுப்ப முடியும்!")
+                    st.button("📲 OTP அனுப்புக (Send SMS OTP)", disabled=True, key="otp_btn_disabled")
+                else:
+                    if st.button("📲 OTP அனுப்புக (Send SMS OTP)", type="primary", key="otp_btn_active"):
+                        otp_code = str(random.randint(1000, 9999))
+                        st.session_state.generated_otp = otp_code
 
-                    with st.spinner("MTHSEG DLT மூலம் SMS அனுப்பப்படுகிறது..."):
-                        sms_success, msg_detail = send_fast2sms_otp(visit["mobile"], otp_code)
+                        with st.spinner("MTHSEG DLT மூலம் SMS அனுப்பப்படுகிறது..."):
+                            sms_success, msg_detail = send_fast2sms_otp(visit["mobile"], otp_code)
 
-                    if sms_success:
-                        st.success(f"✅ OTP வாடிக்கையாளரின் {visit['mobile']} எண்ணிற்கு SMS மூலம் அனுப்பப்பட்டது!")
-                    else:
-                        st.error(f"❌ SMS பிழை: {msg_detail}")
-                        st.info(f"💡 தற்காலிக சோதனை OTP: **{otp_code}**")
+                        if sms_success:
+                            st.success(f"✅ OTP வாடிக்கையாளரின் {visit['mobile']} எண்ணிற்கு SMS மூலம் அனுப்பப்பட்டது!")
+                        else:
+                            st.error(f"❌ SMS பிழை: {msg_detail}")
+                            st.info(f"💡 தற்காலிக சோதனை OTP: **{otp_code}**")
 
                 entered_otp = st.text_input("வாடிக்கையாளர் மொபைலுக்கு வந்த OTP உள்ளிடவும்", max_chars=4)
 
+                # சரிபார்க்கும் பட்டன்
                 if st.button("சரிபார்த்து ஆவணப் பதிவேற்றத்திற்குச் செல் ➔"):
-                    expected_otp = st.session_state.get("generated_otp")
-                    if entered_otp and entered_otp == expected_otp:
-                        if is_tally_matched:
-                            # 500 முதல் 1 வரை முழுமையான விவரங்கள் டேட்டாபேஸில் சேமிக்கப்படும்
+                    if not is_tally_matched:
+                        st.error("❌ நோட்டுகளின் கூட்டுத்தொகை பொருந்தவில்லை! பணத்தை சரிசெய்துவிட்டு OTP பெறவும்.")
+                    else:
+                        expected_otp = st.session_state.get("generated_otp")
+                        if entered_otp and entered_otp == expected_otp:
+                            # 500 முதல் 1 வரை முழுமையான விவரங்கள் சேமிக்கப்படும்
                             visit["denomination"] = {
                                 "in": {
                                     "500": in_500, "200": in_200, "100": in_100, "50": in_50,
@@ -1070,9 +1077,7 @@ else:
                             st.success("டேலி மற்றும் OTP வெற்றிகரமாகச் சரிபார்க்கப்பட்டது!")
                             st.rerun()
                         else:
-                            st.error("நோட்டுகளின் கூட்டுத்தொகை நிகர தொகையுடன் பொருந்தவில்லை! சில்லறை கணக்கீட்டைச் சரிபார்க்கவும்.")
-                    else:
-                        st.error("தவறான OTP! மொபைலுக்கு வந்த 4 இலக்க எண்ணைச் சரியாக உள்ளிடவும்.")
+                            st.error("தவறான OTP! மொபைலுக்கு வந்த 4 இலக்க எண்ணைச் சரியாக உள்ளிடவும்.")
 
         # படி 4: Supabase-ல் ஆவணங்கள் பதிவேற்றம் & தணிக்கைக்கு சமர்ப்பித்தல்
         elif st.session_state.current_visit["step"] == "DOC_UPLOAD":
