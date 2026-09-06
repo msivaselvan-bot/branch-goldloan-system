@@ -16,9 +16,27 @@ st.markdown("""
     /* 1. பிரவுசர் & Streamlit கட்டுப்பாடுகளை முழுமையாக மறைத்தல் */
     header[data-testid="stHeader"] {
         display: none !important;
+        visibility: hidden !important;
+        height: 0% !important;
     }
-    footer, div[data-testid="stStatusWidget"], .viewerBadge_container__r5tak, div[class*="viewerBadge_container"] {
+
+    /* 'Hosted with Streamlit' & Manage App பேட்ஜை முற்றிலும் முடக்குதல் */
+    footer,
+    [data-testid="manage-app-button"],
+    .viewerBadge_container__r5tak,
+    .viewerBadge_link__qRIco,
+    div[class*="viewerBadge_container"],
+    div[class*="viewerBadge_link"],
+    div[class*="manage-app"],
+    span[class*="viewerBadge"],
+    a[href*="streamlit.io"],
+    div[data-testid="stStatusWidget"] {
         display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+        height: 0 !important;
+        width: 0 !important;
     }
 
     /* 2. ஆப் பின்னணி - மென்மையான லாவெண்டர் மேட் பினிஷ் */
@@ -38,39 +56,7 @@ st.markdown("""
         margin: auto;
     }
 
-    /* 3. ஆப் ஸ்டைல் டாப் பார் (Top App Bar Card) */
-    div[data-testid="stHorizontalBlock"]:first-of-type {
-        background: #FFFFFF !important;
-        border-radius: 14px !important;
-        padding: 10px 16px !important;
-        border: 1px solid #E4D5F7 !important;
-        box-shadow: 0 4px 12px rgba(90, 42, 130, 0.06) !important;
-        align-items: center;
-        margin-bottom: 0.5rem;
-    }
-    /* 'Hosted with Streamlit' பேட்ஜ் மற்றும் அடிக்குறிப்பை முற்றிலும் மறைக்க */
-    footer {
-        visibility: hidden !important;
-        display: none !important;
-    }
-    
-    /* கீழ் வலது மூலையில் உள்ள Streamlit பேட்ஜ் கண்டெய்னர்கள் */
-    .viewerBadge_container__r5tak,
-    .viewerBadge_link__qRIco,
-    div[class*="viewerBadge_container"],
-    div[class*="viewerBadge_link"],
-    a[href*="streamlit.io"] {
-        display: none !important;
-        visibility: hidden !important;
-        pointer-events: none !important;
-    }
-
-    /* ஸ்டேட்டஸ் விட்ஜெட் மற்றும் வாட்டர்மார்க் தடுப்பு */
-    div[data-testid="stStatusWidget"] {
-        display: none !important;
-    }
-
-    /* 4. முகப்பு கார்டு (Deep Violet Native Card) */
+    /* 3. முகப்பு கார்டு (Deep Violet Native Card with Gold Glow) */
     .login-box {
         background: linear-gradient(145deg, #2D144E 0%, #1E0B36 100%) !important;
         border: 1.5px solid #D4AF37 !important;
@@ -95,7 +81,7 @@ st.markdown("""
         margin-bottom: 22px;
     }
 
-    /* 5. ஆப் ஸ்டைல் உள்ளீட்டுப் புலங்கள் (Inputs & Dropdowns) */
+    /* 4. ஆப் ஸ்டைல் உள்ளீட்டுப் புலங்கள் (Inputs & Dropdowns) */
     .stTextInput input, .stNumberInput input {
         background-color: #FFFFFF !important;
         border: 1.5px solid #D6C2F0 !important;
@@ -118,7 +104,7 @@ st.markdown("""
         font-weight: 600 !important;
     }
 
-    /* 6. தொடு-உணர்வு பட்டன்கள் (Touch Responsive Gold Buttons) */
+    /* 5. தொடு-உணர்வு பட்டன்கள் (Touch Responsive Gold Buttons) */
     button[kind="primary"], .stButton > button[type="primary"] {
         background: linear-gradient(135deg, #D4AF37 0%, #E8CA65 50%, #B8860B 100%) !important;
         color: #2B1800 !important;
@@ -148,16 +134,17 @@ st.markdown("""
         transform: scale(0.97) !important;
     }
 
-    /* 7. ஆப் கார்டுகள் & கண்டெய்னர்கள் (Rounded App Cards) */
+    /* 6. ஆப் கார்டுகள் & கண்டெய்னர்கள் (Rounded App Cards) */
     div[data-testid="stExpander"], div[data-testid="stVerticalBlock"] > div[style*="border:"] {
         background: #FFFFFF !important;
         border: 1.5px solid #E1D2F5 !important;
         border-radius: 14px !important;
         box-shadow: 0 3px 12px rgba(74, 32, 122, 0.05) !important;
+        color: #26153B !important;
         overflow: hidden;
     }
 
-    /* 8. மெட்ரிக் கார்டுகள் (Fintech Pill Metrics) */
+    /* 7. மெட்ரிக் கார்டுகள் (Fintech Pill Metrics) */
     div[data-testid="stMetric"] {
         background: #FFFFFF !important;
         border: 1px solid #E8DCF8 !important;
@@ -178,7 +165,7 @@ st.markdown("""
         font-weight: 600 !important;
     }
 
-    /* 9. ஆப் ஸ்டைல் டேப்கள் (App Nav Tabs) */
+    /* 8. ஆப் ஸ்டைல் டேப்கள் (App Nav Tabs) */
     button[data-baseweb="tab"] {
         background: transparent !important;
         color: #613E8D !important;
