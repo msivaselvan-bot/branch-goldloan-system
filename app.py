@@ -929,58 +929,129 @@ else:
                     if st.button("பட்டியலை அழி (Clear Cart)"):
                         st.session_state.transactions_cart = []
                         st.rerun()
-        # படி 3: Denomination & Fast2SMS OTP சரிபார்ப்பு
+                        # படி 3: பெற்ற/வழங்கிய இருவழி ரூபாய் நோட்டு கணக்கீடு & DLT OTP சரிபார்ப்பு
         elif st.session_state.current_visit["step"] == "CASH_OTP":
             visit = st.session_state.current_visit
             st.subheader("படி 3: ரூபாய் நோட்டு கணக்கீடு & OTP சரிபார்ப்பு")
-            st.info(
-                f"நிகர தொகை: **₹{abs(visit['net_amount']):,.2f}** "
-                + ("(வாடிக்கையாளருக்கு செலுத்த வேண்டியது)" if visit["net_amount"] > 0 else "(வாடிக்கையாளரிடம் பெற வேண்டியது)")
-            )
 
-            col_den1, col_den2 = st.columns(2)
+            net_target = visit['net_amount']  # >0 என்றால் வாடிக்கையாளருக்கு தர வேண்டும்; <0 என்றால் பெற வேண்டும்
+            
+            if net_target < 0:
+                st.info(f"💰 **வாடிக்கையாளரிடம் பெற வேண்டிய தொகை (Received from Customer): ₹{abs(net_target):,.2f}**")
+            elif net_target > 0:
+                st.info(f"💸 **வாடிக்கையாளருக்கு வழங்க வேண்டிய தொகை (Paid to Customer): ₹{net_target:,.2f}**")
+            else:
+                st.info("🤝 **நிகர தொகை: ₹0.00 (ரொக்கப் பரிமாற்றம் இல்லை)**")
+
+            col_den1, col_den2 = st.columns([1.3, 1])
+
             with col_den1:
-                st.write("**நோட்டு விவரங்கள் (Denomination Count)**")
-                n500 = st.number_input("₹500 நோட்டுகள்", min_value=0, step=1)
-                n200 = st.number_input("₹200 நோட்டுகள்", min_value=0, step=1)
-                n100 = st.number_input("₹100 நோட்டுகள்", min_value=0, step=1)
-                n50 = st.number_input("₹50 நோட்டுகள்", min_value=0, step=1)
-                tally_total = (n500 * 500) + (n200 * 200) + (n100 * 100) + (n50 * 50)
-                st.write(f"**எண்ணப்பட்ட தொகை:** ₹{tally_total:,.2f}")
+                st.markdown("#### 💵 ரொக்கப் பரிமாற்ற விவரங்கள் (Cash In & Out)")
+
+                # 1. வாடிக்கையாளர் நமக்குத் தந்த நோட்டுகள் (Cash Received from Customer)
+                with st.expander("📥 வாடிக்கையாளர் தந்த நோட்டுகள் (Cash IN)", expanded=True):
+                    st.caption("வாடிக்கையாளர் உங்களிடம் கொடுத்த ரூபாய் நோட்டுகளின் எண்ணிக்கை:")
+                    c_in_1, c_in_2, c_in_3, c_in_4 = st.columns(4)
+                    with c_in_1:
+                        in_500 = st.number_input("₹500 (IN)", min_value=0, step=1, key="in_500")
+                    with c_in_2:
+                        in_200 = st.number_input("₹200 (IN)", min_value=0, step=1, key="in_200")
+                    with c_in_3:
+                        in_100 = st.number_input("₹100 (IN)", min_value=0, step=1, key="in_100")
+                    with c_in_4:
+                        in_50 = st.number_input("₹50/Coins (IN)", min_value=0, step=1, key="in_50")
+
+                    total_cash_in = (in_500 * 500) + (in_200 * 200) + (in_100 * 100) + (in_50 * 50)
+                    st.write(f"**வாடிக்கையாளர் தந்த மொத்தத் தொகை:** `₹{total_cash_in:,.2f}`")
+
+                # 2. நாம் வாடிக்கையாளருக்குக் கொடுத்த நோட்டுகள்/சில்லறை (Cash Given to Customer)
+                with st.expander("📤 நாம் வாடிக்கையாளருக்குக் கொடுத்தது (Cash OUT)", expanded=True):
+                    st.caption("லோன் பட்டுவாடா அல்லது மீதிச் சில்லறையாக நீங்கள் கொடுத்த நோட்டுகள்:")
+                    c_out_1, c_out_2, c_out_3, c_out_4 = st.columns(4)
+                    with c_out_1:
+                        out_500 = st.number_input("₹500 (OUT)", min_value=0, step=1, key="out_500")
+                    with c_out_2:
+                        out_200 = st.number_input("₹200 (OUT)", min_value=0, step=1, key="out_200")
+                    with c_out_3:
+                        out_100 = st.number_input("₹100 (OUT)", min_value=0, step=1, key="out_100")
+                    with c_out_4:
+                        out_50 = st.number_input("₹50/Coins (OUT)", min_value=0, step=1, key="out_50")
+
+                    total_cash_out = (out_500 * 500) + (out_200 * 200) + (out_100 * 100) + (out_50 * 50)
+                    st.write(f"**நாம் கொடுத்த மொத்தத் தொகை:** `₹{total_cash_out:,.2f}`")
+
+                # 3. கல்லா டேலி நிலை (Net Cash Tally)
+                # வாடிக்கையாளர் தர வேண்டிய தொகை என்றால்: In - Out = பெற வேண்டிய தொகை
+                # நாம் தர வேண்டிய தொகை என்றால்: Out - In = செலுத்த வேண்டிய தொகை
+                if net_target < 0:
+                    calculated_handover = total_cash_in - total_cash_out
+                    target_needed = abs(net_target)
+                else:
+                    calculated_handover = total_cash_out - total_cash_in
+                    target_needed = net_target
+
+                is_tally_matched = (calculated_handover == target_needed)
+
+                st.markdown("---")
+                tally_box = st.container(border=True)
+                with tally_box:
+                    t_c1, t_c2 = st.columns(2)
+                    t_c1.metric("பரிவர்த்தனைக்குத் தேவையான நிகர ரொக்கம்", f"₹{target_needed:,.2f}")
+                    t_c2.metric("நோட்டுகளின் நிகரக் கணக்கீடு", f"₹{calculated_handover:,.2f}")
+
+                    if is_tally_matched:
+                        st.success("✅ நோட்டுகளின் கணக்கீடு (Denomination Tally) கச்சிதமாகப் பொருந்துகிறது!")
+                    else:
+                        diff = abs(target_needed - calculated_handover)
+                        st.error(f"❌ நோட்டு கணக்கீடு பொருந்தவில்லை! வித்தியாசம்: ₹{diff:,.2f}")
 
             with col_den2:
-                st.write("**Fast2SMS OTP சரிபார்ப்பு**")
-                st.write(f"வாடிக்கையாளர் மொபைல் எண்: **{visit['mobile']}**")
+                st.markdown("#### 📲 OTP சரிபார்ப்பு (Fast2SMS DLT)")
+                st.write(f"வாடிக்கையாளர்: **{visit['customer_name']}**")
+                st.write(f"மொபைல் எண்: **{visit['mobile']}**")
 
                 if st.button("📲 OTP அனுப்புக (Send SMS OTP)", type="primary"):
                     otp_code = str(random.randint(1000, 9999))
                     st.session_state.generated_otp = otp_code
 
-                    with st.spinner("Fast2SMS மூலம் SMS அனுப்பப்படுகிறது..."):
-                        sms_success = send_fast2sms_otp(visit["mobile"], otp_code)
+                    with st.spinner("MTHSEG DLT மூலம் SMS அனுப்பப்படுகிறது..."):
+                        sms_success, msg_detail = send_fast2sms_otp(visit["mobile"], otp_code)
 
                     if sms_success:
-                        st.success(f"✅ OTP வாடிக்கையாளரின் {visit['mobile']} எண்ணிற்கு SMS மூலம் வெற்றிகரமாக அனுப்பப்பட்டது!")
+                        st.success(f"✅ OTP வாடிக்கையாளரின் {visit['mobile']} எண்ணிற்கு SMS மூலம் அனுப்பப்பட்டது!")
                     else:
-                        st.warning(f"⚠️ SMS அனுப்ப முடியவில்லை (Fast2SMS இருப்பு சரிபார்க்கவும்). சோதனை OTP: {otp_code}")
+                        st.error(f"❌ SMS பிழை: {msg_detail}")
+                        st.info(f"💡 தற்காலிக சோதனை OTP: **{otp_code}**")
 
                 entered_otp = st.text_input("வாடிக்கையாளர் மொபைலுக்கு வந்த OTP உள்ளிடவும்", max_chars=4)
 
-                if st.button("OTP சரிபார் (Verify OTP)"):
+                if st.button("சரிபார்த்து ஆவணப் பதிவேற்றத்திற்குச் செல் ➔"):
                     expected_otp = st.session_state.get("generated_otp")
                     if entered_otp and entered_otp == expected_otp:
-                        if tally_total == abs(visit["net_amount"]):
+                        if is_tally_matched:
+                            # டேட்டாபேஸில் சேமிக்க முழுமையான Denomination விபரம்
                             visit["denomination"] = {
-                                "500": n500,
-                                "200": n200,
-                                "100": n100,
-                                "50": n50,
+                                "in": {
+                                    "500": in_500,
+                                    "200": in_200,
+                                    "100": in_100,
+                                    "50": in_50,
+                                    "total": total_cash_in
+                                },
+                                "out": {
+                                    "500": out_500,
+                                    "200": out_200,
+                                    "100": out_100,
+                                    "50": out_50,
+                                    "total": total_cash_out
+                                },
+                                "net_change": total_cash_in - total_cash_out
                             }
                             st.session_state.current_visit["step"] = "DOC_UPLOAD"
                             st.success("டேலி மற்றும் OTP வெற்றிகரமாகச் சரிபார்க்கப்பட்டது!")
                             st.rerun()
                         else:
-                            st.error(f"நோட்டு கூட்டுத்தொகை (₹{tally_total}) நிகர தொகையுடன் (₹{abs(visit['net_amount'])}) ஒத்துப்போகவில்லை!")
+                            st.error("நோட்டுகளின் கூட்டுத்தொகை நிகர தொகையுடன் பொருந்தவில்லை! சில்லறை கணக்கீட்டைச் சரிபார்க்கவும்.")
                     else:
                         st.error("தவறான OTP! மொபைலுக்கு வந்த 4 இலக்க எண்ணைச் சரியாக உள்ளிடவும்.")
 
