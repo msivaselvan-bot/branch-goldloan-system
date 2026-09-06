@@ -76,65 +76,58 @@ branch_id_to_name = (
 # ==========================================
 # 4. உள்நுழைவு திரை (Username & Password மட்டும்)
 # ==========================================
-if not st.session_state.logged_in:
-  st.title("🏦 கிளை செயல்பாட்டு மேலாண்மை சிஸ்டம்")
-  st.subheader("பணியாளர் உள்நுழைவு (User Login)")
 
-  with st.form("login_form"):
-    username = st.text_input("பயனர் பெயர் (Username)")
-    password = st.text_input("கடவுச்சொல் (Password)", type="password")
-    submitted = st.form_submit_button("உள்நுழைக (Login)")
-
-    if submitted:
-      if username.strip() and password.strip():
-        user_query = (
-            supabase.table("users")
-            .select(
-                "id, name, username, role, branch_id, is_active,"
-                " branches(branch_name)"
-            )
-            .eq("username", username.strip())
-            .eq("password_hash", password.strip())
-            .eq("is_active", True)
-            .execute()
-        )
-
-        if user_query.data:
-          user_info = user_query.data[0]
-          role = user_info["role"]
-          b_id = user_info.get("branch_id")
-
-          if role in ["Admin", "Auditor"]:
-            b_name = "Head Office / Admin"
-          else:
-            branch_rel = user_info.get("branches")
-            b_name = (
-                branch_rel.get("branch_name")
-                if branch_rel
-                else "ஒதுக்கப்படாத கிளை"
-            )
-
-          if role not in ["Admin", "Auditor"] and not b_id:
-            st.error(
-                "உங்களுக்கு இன்னும் கிளை ஒதுக்கப்படவில்லை! நிர்வாகியைத்"
-                " தொடர்பு கொள்ளவும்."
-            )
-          else:
-            st.session_state.logged_in = True
-            st.session_state.user_role = role
-            st.session_state.branch = b_name
-            st.session_state.branch_id = b_id
-            st.session_state.username = user_info["name"]
-            st.rerun()
-        else:
-          st.error(
-              "தவறான பயனர் பெயர் அல்லது கடவுச்சொல்! (அல்லது கணக்கு"
-              " முடக்கப்பட்டுள்ளது)"
-          )
-      else:
-        st.warning("பயனர் பெயர் மற்றும் கடவுச்சொல்லை உள்ளிடவும்.")
-
+# ==========================================# ==========================================
+# 4. உள்நுழைவு திரை (சிறிய வடிவமைப்பு - Compact Center)
 # ==========================================
+if not st.session_state.logged_in:
+    # திரையின் நடுவில் சிறிய அளவில் படிவத்தை அமைக்க [1.5, 1, 1.5] விகிதம்
+    col_left, col_center, col_right = st.columns([1.5, 1.2, 1.5])
+
+    with col_center:
+        st.markdown("<h3 style='text-align: center;'>🏦 கிளை சிஸ்டம்</h3>", unsafe_allow_html=True)
+        st.markdown("<p style='text-align: center; color: gray;'>பணியாளர் உள்நுழைவு</p>", unsafe_allow_html=True)
+
+        with st.form("login_form"):
+            username = st.text_input("பயனர் பெயர் (Username)", placeholder="Username")
+            password = st.text_input("கடவுச்சொல் (Password)", type="password", placeholder="Password")
+            submitted = st.form_submit_button("உள்நுழைக (Login)", use_container_width=True)
+
+            if submitted:
+                if username.strip() and password.strip():
+                    user_query = (
+                        supabase.table("users")
+                        .select("id, name, username, role, branch_id, is_active, branches(branch_name)")
+                        .eq("username", username.strip())
+                        .eq("password_hash", password.strip())
+                        .eq("is_active", True)
+                        .execute()
+                    )
+
+                    if user_query.data:
+                        user_info = user_query.data[0]
+                        role = user_info["role"]
+                        b_id = user_info.get("branch_id")
+
+                        if role in ["Admin", "Auditor"]:
+                            b_name = "Head Office / Admin"
+                        else:
+                            branch_rel = user_info.get("branches")
+                            b_name = branch_rel.get("branch_name") if branch_rel else "ஒதுக்கப்படாத கிளை"
+
+                        if role not in ["Admin", "Auditor"] and not b_id:
+                            st.error("உங்களுக்கு கிளை ஒதுக்கப்படவில்லை!")
+                        else:
+                            st.session_state.logged_in = True
+                            st.session_state.user_role = role
+                            st.session_state.branch = b_name
+                            st.session_state.branch_id = b_id
+                            st.session_state.username = user_info["name"]
+                            st.rerun()
+                    else:
+                        st.error("தவறான விவரங்கள் அல்லது முடக்கப்பட்ட கணக்கு!")
+                else:
+                    st.warning("விவரங்களை உள்ளிடவும்.")
 # 5. முதன்மை திரை
 # ==========================================
 else:
