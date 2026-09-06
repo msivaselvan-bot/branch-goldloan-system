@@ -60,6 +60,33 @@ def generate_short_visit_no() -> str:
         return "VST-1001"
     except Exception:
         return f"VST-{datetime.now().strftime('%M%S')}"
+        def send_fast2sms_otp(mobile_no: str, otp_code: str) -> bool:
+    """Fast2SMS API மூலம் வாடிக்கையாளருக்கு SMS அனுப்புகிறது"""
+    try:
+        # Secrets-ல் இருந்தால் எடுக்கும், இல்லையெனில் நேரடி API Key
+        api_key = st.secrets.get("sms", {}).get(
+            "fast2sms_api_key",
+            "eBGQYanRZNKVCpMSg3KB5kUxY2QhDnOjxesh3Hqr7FOG792XV9wut4TPhQia",
+        )
+
+        clean_mobile = "".join(filter(str.isdigit, str(mobile_no)))[-10:]
+
+        url = "https://www.fast2sms.com/dev/bulkV2"
+        payload = {
+            "route": "otp",
+            "variables_values": otp_code,
+            "numbers": clean_mobile,
+        }
+        headers = {
+            "authorization": api_key,
+            "Content-Type": "application/json",
+        }
+
+        response = requests.post(url, json=payload, headers=headers, timeout=8)
+        res_json = response.json()
+        return res_json.get("return", False)
+    except Exception:
+        return False
 
 # ==========================================
 # 3. தற்காலிக சேமிப்பக மாறிகள் (Session State)
