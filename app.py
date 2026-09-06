@@ -7,7 +7,36 @@ from supabase import Client, create_client
 
 # பக்க வடிவமைப்பு
 st.set_page_config(page_title="Branch Operations System", layout="wide")
+# Streamlit-ன் இயல்புநிலை தலைப்பு, மெனு, Share, Star, Edit மற்றும் Manage app பட்டன்களை மறைத்தல்
+st.markdown("""
+<style>
+    /* மேல் வலது மூலையில் உள்ள Header மற்றும் Buttons (Share, Star, Edit, MainMenu) மறைக்க */
+    header[data-testid="stHeader"] {
+        visibility: hidden;
+        height: 0%;
+    }
+    
+    /* கீழ் வலது மூலையில் உள்ள Manage app / Streamlit footer பேட்ஜ் மறைக்க */
+    footer {
+        visibility: hidden;
+    }
+    div[data-testid="stStatusWidget"] {
+        visibility: hidden;
+    }
+    .viewerBadge_container__r5tak, 
+    div[class*="viewerBadge_container"] {
+        display: none !important;
+    }
 
+    /* பக்கத்தின் மேல் உள்ள வெற்று இடத்தை நீக்கி சீரமைக்க */
+    .block-container {
+        padding-top: 1.5rem !important;
+        padding-bottom: 1.5rem !important;
+        padding-left: 2rem !important;
+        padding-right: 2rem !important;
+    }
+</style>
+""", unsafe_allow_html=True)
 # ==========================================
 # 1. Supabase இணைப்பு
 # ==========================================
