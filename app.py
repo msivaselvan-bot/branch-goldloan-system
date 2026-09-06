@@ -538,13 +538,14 @@ else:
 
                 if len(search_query.strip()) >= 2:
                     q = search_query.strip()
-                    matched_custs = (
-                        supabase.table("customers")
-                        .select("*")
-                        .or_(f"name.ilike.%{q}%,mobile.ilike.%{q}%,customer_code.ilike.%{q}%")
-                        .limit(10)
-                        .execute()
-                    )
+                  matched_custs = (
+    supabase.table("customers")
+    .select("*")
+    .eq("is_active", True)
+    .or_(f"name.ilike.%{q}%,mobile.ilike.%{q}%,customer_code.ilike.%{q}%")
+    .limit(10)
+    .execute()
+)
 
                     if matched_custs.data:
                         st.write(f"கண்டறியப்பட்ட வாடிக்கையாளர்கள் ({len(matched_custs.data)}):")
