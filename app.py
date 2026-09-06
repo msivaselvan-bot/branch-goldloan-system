@@ -141,15 +141,12 @@ else:
     # ----------------------------------------------------
     # A. நிர்வாக மேலாண்மை திரை (ADMIN PANEL)
     # ----------------------------------------------------
-    if st.session_state.user_role == "Admin":
-        st.header("⚙️ நிர்வாக மேலாண்மை (Admin Control Panel)")
-        tab1, tab2, tab3 = st.tabs(
-            [
-                "🏢 புதிய கிளை சேர்த்தல் / மேலாண்மை",
-                "👥 பணியாளர்கள் மேலாண்மை",
-                "📥 வாடிக்கையாளர் மொத்தப் பதிவேற்றம் (Bulk Import)",
-            ]
-        )
+  tab1, tab2, tab3, tab4 = st.tabs([
+    "🏢 புதிய கிளை சேர்த்தல் / மேலாண்மை",
+    "👥 பணியாளர்கள் மேலாண்மை",
+    "📥 வாடிக்கையாளர் மொத்தப் பதிவேற்றம் (Bulk Import)",
+    "🗂️ வாடிக்கையாளர் பட்டியல் & மேலாண்மை (Customer Directory)"
+])
 
         with tab1:
             st.subheader("➕ புதிய கிளை சேர்த்தல்")
@@ -366,6 +363,111 @@ else:
 
                 except Exception as e:
                     st.error(f"பதிவேற்றுவதில் பிழை: {e}")
+                    # ==========================================
+        # Tab 4: வாடிக்கையாளர் பட்டியல் & மேலாண்மை (Edit / Inactive)
+        # ==========================================
+        with tab4:
+            st.subheader("🗂️ வாடிக்கையாளர் பட்டியல் & திருத்தம் (Customer Directory & Control)")
+
+            # கிளை வாரியாக வடிகட்டும் வசதி
+            filter_col1, filter_col2 = st.columns([2, 3])
+            with filter_col1:
+                branch_filter_options = ["அனைத்து கிளைகளும் (All Branches)"] + list(branch_options.keys())
+                selected_b_filter = st.selectbox("கிளை வாரியாகப் பார்க்க:", branch_filter_options, key="admin_cust_b_filter")
+
+            with filter_col2:
+                admin_search_q = st.text_input("வாடிக்கையாளர் பெயர் / மொபைல் / Customer Code தேடுக:", placeholder="எ.கா: MYL-1 அல்லது ரமேஷ்", key="admin_cust_search")
+
+            # குறியீட்டின் மூலம் தரவு பெறுதல்
+            cust_query = supabase.table("customers").select("id, customer_code, name, mobile, mobile2, guardian_name, gender, address, nominee_relation, branch_id, is_active").order("id", desc=True)
+
+            if selected_b_filter != "அனைத்து கிளைகளும் (All Branches)":
+                b_filter_id = branch_options.get(selected_b_filter)
+                cust_query = cust_query.eq("branch_id", b_filter_id)
+
+            if admin_search_q.strip():
+                sq = admin_search_q.strip()
+                cust_query = cust_query.or_(f"name.ilike.%{sq}%,mobile.ilike.%{sq}%,customer_code.ilike.%{sq}%")
+            else:
+                cust_query = cust_query.limit(200)  # செயல்திறனுக்காக ஆரம்பத்தில் 200 வாடிக்கையாளர்கள்
+
+            res_view_custs = cust_query.execute()
+            data_view = res_view_custs.data if res_view_custs.data else []
+
+            st.write(f"📊 கண்டறியப்பட்ட வாடிக்கையாளர்கள்: **{len(data_view)}** (அதிகபட்சம் 200 பதிவுகள் ஒரே திரையில் காட்டப்படும்)")
+
+            if data_view:
+                table_list = []
+                for cv in data_view:
+                    table_list.append({
+                        "ID": cv["id"],
+                        "Customer Code": cv.get("customer_code", "-"),
+                        "பெயர்": cv["name"],
+                        "மொபைல்": cv.get("mobile", "-"),
+                        "கார்டியன் பெயர்": cv.get("guardian_name", "-"),
+                        "கிளை": branch_id_to_name.get(cv.get("branch_id"), "பொது"),
+                        "நிலை": "🟢 Active" if cv.get("is_active", True) else "🔴 Inactive",
+                        "முகவரி": cv.get("address", "-")
+                    })
+                st.dataframe(pd.DataFrame(table_list), use_container_width=True)
+
+                st.markdown("---")
+                st.subheader("✏️ வாடிக்கையாளர் விவரங்களைத் திருத்துதல் & நிலை மாற்றம் (Edit / Status)")
+
+                # எடிட் செய்ய ஒரு வாடிக்கையாளரைத் தேர்வு செய்தல்
+                cust_edit_choices = {f"{c.get('customer_code', '')} - {c['name']} ({c.get('mobile', '')})": c for c in data_view}
+                selected_edit_cust_label = st.selectbox("திருத்த வேண்டிய வாடிக்கையாளரைத் தேர்ந்தெடுக்கவும்:", list(cust_edit_choices.keys()), key="admin_edit_cust_dropdown")
+                target_cust = cust_edit_choices[selected_edit_cust_label]
+
+                with st.form("admin_edit_customer_form"):
+                    ec_col1, ec_col2, ec_col3 = st.columns(3)
+
+                    with ec_col1:
+                        edit_c_name = st.text_input("வாடிக்கையாளர் பெயர்", value=target_cust.get("name", ""))
+                        edit_c_guard = st.text_input("கார்டியன் பெயர்", value=target_cust.get("guardian_name", "") or "")
+                        gender_opts = ["Male", "Female", "Other", "ஆண்", "பெண்"]
+                        curr_g = target_cust.get("gender", "Male")
+                        g_idx = gender_opts.index(curr_g) if curr_g in gender_opts else 0
+                        edit_c_gender = st.selectbox("பாலினம்", gender_opts, index=g_idx)
+
+                    with ec_col2:
+                        edit_c_mob = st.text_input("முதன்மை மொபைல்", value=str(target_cust.get("mobile", "") or ""))
+                        edit_c_mob2 = st.text_input("கூடுதல் மொபைல் / Whatsapp", value=str(target_cust.get("mobile2", "") or ""))
+                        
+                        # கிளை மாற்றம்
+                        curr_c_bname = branch_id_to_name.get(target_cust.get("branch_id"), list(branch_options.keys())[0] if branch_options else "")
+                        b_keys = list(branch_options.keys())
+                        b_sel_idx = b_keys.index(curr_c_bname) if curr_c_bname in b_keys else 0
+                        edit_c_branch = st.selectbox("ஒதுக்கப்பட்ட கிளை", b_keys, index=b_sel_idx)
+
+                    with ec_col3:
+                        edit_c_addr = st.text_area("முகவரி", value=target_cust.get("address", "") or "", height=68)
+                        edit_c_status = st.radio(
+                            "வாடிக்கையாளர் நிலை (Status)",
+                            ["Active (செயலில் உள்ளார்)", "Inactive (முடக்கு)"],
+                            index=0 if target_cust.get("is_active", True) else 1,
+                            key="admin_cust_status_radio"
+                        )
+
+                    if st.form_submit_button("வாடிக்கையாளர் விவரங்களை சேமி (Update Customer)", type="primary"):
+                        try:
+                            cust_update_data = {
+                                "name": edit_c_name.strip(),
+                                "guardian_name": edit_c_guard.strip(),
+                                "gender": edit_c_gender,
+                                "mobile": edit_c_mob.strip(),
+                                "mobile2": edit_c_mob2.strip(),
+                                "address": edit_c_addr.strip(),
+                                "branch_id": branch_options.get(edit_c_branch),
+                                "is_active": True if "Active" in edit_c_status else False
+                            }
+                            supabase.table("customers").update(cust_update_data).eq("id", target_cust["id"]).execute()
+                            st.success("வாடிக்கையாளர் விவரங்கள் வெற்றிகரமாக மாற்றப்பட்டன!")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"சேமிப்பதில் பிழை: {e}")
+            else:
+                st.info("தேர்ந்தெடுக்கப்பட்ட பிரிவில் வாடிக்கையாளர்கள் இல்லை.")
 
     # ----------------------------------------------------
     # B. தணிக்கையர் திரை (AUDITOR DESK)
