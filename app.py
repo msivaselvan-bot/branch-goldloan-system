@@ -8,127 +8,168 @@ from supabase import Client, create_client
 # பக்க வடிவமைப்பு
 st.set_page_config(page_title="Branch Operations System", layout="wide")
 # ==============================================================================
-# வைலட் முகப்பு & கோல்டன் பிரீமியம் தீம் (Rich Violet Login & Luxury Gold Theme)
+# ஹை-லுக் ஆப் தீம் (Native App Feel - Lavender, Deep Violet & Luxury Gold)
 # ==============================================================================
 st.markdown("""
 <style>
-    /* 1. Header, Share, Star, Edit மற்றும் Footer-களை மறைத்தல் */
+    /* 1. பிரவுசர் & Streamlit கட்டுப்பாடுகளை முழுமையாக மறைத்தல் */
     header[data-testid="stHeader"] {
-        visibility: hidden;
-        height: 0%;
+        display: none !important;
     }
     footer, div[data-testid="stStatusWidget"], .viewerBadge_container__r5tak, div[class*="viewerBadge_container"] {
         display: none !important;
     }
 
-    /* 2. பொதுவான பின்னணி */
+    /* 2. ஆப் பின்னணி - மென்மையான லாவெண்டர் மேட் பினிஷ் */
     .stApp {
-        background: linear-gradient(135deg, #F5F0FA 0%, #ECE2F8 50%, #E5D6F5 100%) !important;
-        color: #2D1A47 !important;
-        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        background: #F4EFFB !important;
+        color: #26153B !important;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif !important;
+        -webkit-tap-highlight-color: transparent;
     }
 
     .block-container {
-        padding-top: 1.5rem !important;
-        padding-bottom: 2rem !important;
-        padding-left: 2rem !important;
-        padding-right: 2rem !important;
+        padding-top: 1rem !important;
+        padding-bottom: 2.5rem !important;
+        padding-left: 1.5rem !important;
+        padding-right: 1.5rem !important;
+        max-width: 1400px;
+        margin: auto;
     }
 
-    /* 3. வைலட் முகப்பு கார்டு (Deep Royal Violet Login Card with Gold Glow) */
+    /* 3. ஆப் ஸ்டைல் டாப் பார் (Top App Bar Card) */
+    div[data-testid="stHorizontalBlock"]:first-of-type {
+        background: #FFFFFF !important;
+        border-radius: 14px !important;
+        padding: 10px 16px !important;
+        border: 1px solid #E4D5F7 !important;
+        box-shadow: 0 4px 12px rgba(90, 42, 130, 0.06) !important;
+        align-items: center;
+        margin-bottom: 0.5rem;
+    }
+
+    /* 4. முகப்பு கார்டு (Deep Violet Native Card) */
     .login-box {
-        background: linear-gradient(145deg, #3B1E6D 0%, #2A1350 100%) !important;
-        border: 2px solid #D4AF37 !important;
-        border-radius: 16px !important;
-        padding: 30px 25px 25px 25px !important;
-        box-shadow: 0 10px 30px rgba(59, 30, 109, 0.45), 0 0 15px rgba(212, 175, 55, 0.3) !important;
+        background: linear-gradient(145deg, #2D144E 0%, #1E0B36 100%) !important;
+        border: 1.5px solid #D4AF37 !important;
+        border-radius: 20px !important;
+        padding: 32px 28px !important;
+        box-shadow: 0 14px 35px rgba(30, 11, 54, 0.35), 0 0 12px rgba(212, 175, 55, 0.25) !important;
         color: #FFFFFF !important;
     }
 
     .login-box h3 {
-        color: #F5D77F !important;
+        color: #F8E29B !important;
         font-weight: 800 !important;
         text-align: center;
+        margin-bottom: 4px;
         letter-spacing: 0.5px;
-        margin-bottom: 2px;
     }
 
     .login-box p {
-        color: #E2D4F7 !important;
+        color: #D3C1EC !important;
         text-align: center;
-        font-size: 0.95rem;
-        margin-bottom: 20px;
+        font-size: 0.9rem;
+        margin-bottom: 22px;
     }
 
-    /* 4. முகப்பு படிவத்தின் உள்ளீட்டுப் புலங்கள் */
-    .login-box .stTextInput input {
-        background-color: #F8F4FD !important;
-        color: #2A1350 !important;
-        font-weight: 600 !important;
-        border: 1.5px solid #D4AF37 !important;
-        border-radius: 8px !important;
-    }
-
-    .login-box .stTextInput label {
-        color: #F3EBFD !important;
-        font-weight: 600 !important;
-    }
-
-    /* 5. பொதுவான கார்டுகள் & கண்டெய்னர்கள் */
-    div[data-testid="stExpander"], div[data-testid="stVerticalBlock"] > div[style*="border:"] {
-        background: rgba(255, 255, 255, 0.85) !important;
-        border: 1.5px solid #D4AF37 !important;
-        border-radius: 12px !important;
-        box-shadow: 0 4px 15px rgba(212, 175, 55, 0.12) !important;
-    }
-
-    /* 6. முதன்மை கோல்டன் பட்டன்கள் (Gold Metallic Buttons) */
-    button[kind="primary"], .stButton > button[type="primary"] {
-        background: linear-gradient(135deg, #D4AF37 0%, #F3E5AB 50%, #AA771C 100%) !important;
-        color: #2A1800 !important;
-        font-weight: 700 !important;
-        border: 1px solid #996515 !important;
-        border-radius: 8px !important;
-        box-shadow: 0 3px 8px rgba(184, 134, 11, 0.3) !important;
-        transition: all 0.3s ease-in-out;
-    }
-
-    button[kind="primary"]:hover, .stButton > button[type="primary"]:hover {
-        background: linear-gradient(135deg, #E5C158 0%, #FFF2B2 50%, #B8860B 100%) !important;
-        border-color: #795200 !important;
-        transform: translateY(-1px);
-        box-shadow: 0 5px 14px rgba(212, 175, 55, 0.45) !important;
-    }
-
-    /* 7. இரண்டாம் நிலை பட்டன்கள் (Secondary Buttons) */
-    button[kind="secondary"], .stButton > button {
+    /* 5. ஆப் ஸ்டைல் உள்ளீட்டுப் புலங்கள் (Inputs & Dropdowns) */
+    .stTextInput input, .stNumberInput input {
         background-color: #FFFFFF !important;
-        color: #3B1E6D !important;
-        border: 1.5px solid #C49A45 !important;
+        border: 1.5px solid #D6C2F0 !important;
+        border-radius: 10px !important;
+        color: #24113A !important;
+        font-weight: 500 !important;
+        height: 42px !important;
+        box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.03) !important;
+    }
+
+    .stTextInput input:focus, .stNumberInput input:focus {
+        border-color: #A36B00 !important;
+        box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.2) !important;
+    }
+
+    .login-box .stTextInput input {
+        background-color: #F8F5FD !important;
+        border: 1.5px solid #D4AF37 !important;
+        color: #200B36 !important;
+        font-weight: 600 !important;
+    }
+
+    /* 6. தொடு-உணர்வு பட்டன்கள் (Touch Responsive Gold Buttons) */
+    button[kind="primary"], .stButton > button[type="primary"] {
+        background: linear-gradient(135deg, #D4AF37 0%, #E8CA65 50%, #B8860B 100%) !important;
+        color: #2B1800 !important;
+        font-weight: 700 !important;
+        border: none !important;
+        border-radius: 10px !important;
+        padding: 0.45rem 1rem !important;
+        box-shadow: 0 4px 12px rgba(184, 134, 11, 0.3) !important;
+        transition: transform 0.1s ease, box-shadow 0.1s ease !important;
+    }
+
+    button[kind="primary"]:active, .stButton > button[type="primary"]:active {
+        transform: scale(0.97) !important;
+        box-shadow: 0 2px 6px rgba(184, 134, 11, 0.2) !important;
+    }
+
+    button[kind="secondary"], .stButton > button {
+        background: #FFFFFF !important;
+        color: #4A207A !important;
+        border: 1.5px solid #C5A059 !important;
+        font-weight: 600 !important;
+        border-radius: 10px !important;
+        transition: transform 0.1s ease !important;
+    }
+
+    button[kind="secondary"]:active, .stButton > button:active {
+        transform: scale(0.97) !important;
+    }
+
+    /* 7. ஆப் கார்டுகள் & கண்டெய்னர்கள் (Rounded App Cards) */
+    div[data-testid="stExpander"], div[data-testid="stVerticalBlock"] > div[style*="border:"] {
+        background: #FFFFFF !important;
+        border: 1.5px solid #E1D2F5 !important;
+        border-radius: 14px !important;
+        box-shadow: 0 3px 12px rgba(74, 32, 122, 0.05) !important;
+        overflow: hidden;
+    }
+
+    /* 8. மெட்ரிக் கார்டுகள் (Fintech Pill Metrics) */
+    div[data-testid="stMetric"] {
+        background: #FFFFFF !important;
+        border: 1px solid #E8DCF8 !important;
+        border-left: 4px solid #D4AF37 !important;
+        padding: 8px 14px !important;
+        border-radius: 10px !important;
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.02) !important;
+    }
+
+    div[data-testid="stMetricValue"] {
+        color: #8C5D00 !important;
+        font-weight: 800 !important;
+        font-size: 1.3rem !important;
+    }
+
+    div[data-testid="stMetricLabel"] {
+        color: #4A207A !important;
+        font-weight: 600 !important;
+    }
+
+    /* 9. ஆப் ஸ்டைல் டேப்கள் (App Nav Tabs) */
+    button[data-baseweb="tab"] {
+        background: transparent !important;
+        color: #613E8D !important;
         font-weight: 600 !important;
         border-radius: 8px !important;
+        padding: 6px 14px !important;
     }
 
-    /* 8. மெட்ரிக் எண்கள் (Gold Highlighted Metrics) */
-    div[data-testid="stMetricValue"] {
-        color: #996515 !important;
-        font-weight: 800 !important;
-        font-size: 1.35rem !important;
-    }
-    div[data-testid="stMetricLabel"] {
-        color: #3B1E6D !important;
-        font-weight: 600 !important;
-    }
-
-    /* 9. Tabs வடிவமைப்பு */
-    button[data-baseweb="tab"] {
-        color: #5C3D8D !important;
-        font-weight: 600 !important;
-    }
     button[data-baseweb="tab"][aria-selected="true"] {
-        color: #996515 !important;
-        border-bottom: 2.5px solid #D4AF37 !important;
+        color: #7A4E00 !important;
+        background: rgba(212, 175, 55, 0.15) !important;
         font-weight: 700 !important;
+        border-bottom: 3px solid #D4AF37 !important;
     }
 </style>
 """, unsafe_allow_html=True)
