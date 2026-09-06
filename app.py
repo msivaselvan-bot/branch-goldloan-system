@@ -790,49 +790,80 @@ else:
                     st.session_state.current_visit["step"] = "CASH_OTP"
                     st.rerun()
 
-        # படி 3: Denomination & OTP
+        # படி 3: Denomination & Fast2SMS OTP சரிபார்ப்பு
         elif st.session_state.current_visit["step"] == "CASH_OTP":
-            visit = st.session_state.current_visit
-            st.subheader("படி 3: ரூபாய் நோட்டு கணக்கீடு & OTP சரிபார்ப்பு")
-            st.info(
-                f"நிகர தொகை: **₹{abs(visit['net_amount']):,.2f}** "
-                + ("(வாடிக்கையாளருக்கு செலுத்த வேண்டியது)" if visit["net_amount"] > 0 else "(வாடிக்கையாளரிடம் பெற வேண்டியது)")
+          visit = st.session_state.current_visit
+          st.subheader("படி 3: ரூபாய் நோட்டு கணக்கீடு & OTP சரிபார்ப்பு")
+          st.info(
+              f"நிகர தொகை: **₹{abs(visit['net_amount']):,.2f}** "
+              + (
+                  "(வாடிக்கையாளருக்கு செலுத்த வேண்டியது)"
+                  if visit["net_amount"] > 0
+                  else "(வாடிக்கையாளரிடம் பெற வேண்டியது)"
+              )
+          )
+
+          col_den1, col_den2 = st.columns(2)
+          with col_den1:
+            st.write("**நோட்டு விவரங்கள் (Denomination Count)**")
+            n500 = st.number_input("₹500 நோட்டுகள்", min_value=0, step=1)
+            n200 = st.number_input("₹200 நோட்டுகள்", min_value=0, step=1)
+            n100 = st.number_input("₹100 நோட்டுகள்", min_value=0, step=1)
+            n50 = st.number_input("₹50 நோட்டுகள்", min_value=0, step=1)
+            tally_total = (
+                (n500 * 500) + (n200 * 200) + (n100 * 100) + (n50 * 50)
+            )
+            st.write(f"**எண்ணப்பட்ட தொகை:** ₹{tally_total:,.2f}")
+
+          with col_den2:
+            st.write("**Fast2SMS OTP சரிபார்ப்பு**")
+            st.write(f"வாடிக்கையாளர் மொபைல் எண்: **{visit['mobile']}**")
+
+            if st.button("📲 OTP அனுப்புக (Send SMS OTP)", type="primary"):
+              otp_code = str(random.randint(1000, 9999))
+              st.session_state.generated_otp = otp_code
+
+              with st.spinner("Fast2SMS மூலம் SMS அனுப்பப்படுகிறது..."):
+                sms_success = send_fast2sms_otp(visit["mobile"], otp_code)
+
+              if sms_success:
+                st.success(
+                    f"✅ OTP வாடிக்கையாளரின் {visit['mobile']} எண்ணிற்கு SMS"
+                    " மூலம் வெற்றிகரமாக அனுப்பப்பட்டது!"
+                )
+              else:
+                st.warning(
+                    "⚠️ SMS அனுப்ப முடியவில்லை (Fast2SMS இருப்பு சரிபார்க்கவும்)."
+                    f" சோதனை OTP: {otp_code}"
+                )
+
+            entered_otp = st.text_input(
+                "வாடிக்கையாளர் மொபைலுக்கு வந்த OTP உள்ளிடவும்", max_chars=4
             )
 
-            col_den1, col_den2 = st.columns(2)
-            with col_den1:
-                st.write("**நோட்டு விவரங்கள் (Denomination Count)**")
-                n500 = st.number_input("₹500 நோட்டுகள்", min_value=0, step=1)
-                n200 = st.number_input("₹200 நோட்டுகள்", min_value=0, step=1)
-                n100 = st.number_input("₹100 நோட்டுகள்", min_value=0, step=1)
-                n50 = st.number_input("₹50 நோட்டுகள்", min_value=0, step=1)
-                tally_total = (n500 * 500) + (n200 * 200) + (n100 * 100) + (n50 * 50)
-                st.write(f"**எண்ணப்பட்ட தொகை:** ₹{tally_total:,.2f}")
-
-            with col_den2:
-                st.write("**OTP சரிபார்ப்பு**")
-                st.write(f"வாடிக்கையாளர் மொபைல் எண்: **{visit['mobile']}**")
-                if st.button("OTP அனுப்புக (Send OTP)"):
-                    st.session_state.generated_otp = "1234"
-                    st.success("OTP அனுப்பப்பட்டது! (டெமோ குறியீடு: 1234)")
-
-                entered_otp = st.text_input("OTP உள்ளிடவும்")
-                if st.button("OTP சரிபார் (Verify OTP)"):
-                    if entered_otp == "1234":
-                        if tally_total == abs(visit["net_amount"]):
-                            visit["denomination"] = {
-                                "500": n500,
-                                "200": n200,
-                                "100": n100,
-                                "50": n50,
-                            }
-                            st.session_state.current_visit["step"] = "DOC_UPLOAD"
-                            st.success("டேலி மற்றும் OTP வெற்றிகரமாகச் சரிபார்க்கப்பட்டது!")
-                            st.rerun()
-                        else:
-                            st.error(f"நோட்டு கூட்டுத்தொகை (₹{tally_total}) நிகர தொகையுடன் (₹{abs(visit['net_amount'])}) ஒத்துப்போகவில்லை!")
-                    else:
-                        st.error("தவறான OTP!")
+            if st.button("OTP சரிபார் (Verify OTP)"):
+              expected_otp = st.session_state.get("generated_otp")
+              if entered_otp and entered_otp == expected_otp:
+                if tally_total == abs(visit["net_amount"]):
+                  visit["denomination"] = {
+                      "500": n500,
+                      "200": n200,
+                      "100": n100,
+                      "50": n50,
+                  }
+                  st.session_state.current_visit["step"] = "DOC_UPLOAD"
+                  st.success("டேலி மற்றும் OTP வெற்றிகரமாகச் சரிபார்க்கப்பட்டது!")
+                  st.rerun()
+                else:
+                  st.error(
+                      f"நோட்டு கூட்டுத்தொகை (₹{tally_total}) நிகர தொகையுடன்"
+                      f" (₹{abs(visit['net_amount'])}) ஒத்துப்போகவில்லை!"
+                  )
+              else:
+                st.error(
+                    "தவறான OTP! மொபைலுக்கு வந்த 4 இலக்க எண்ணைச் சரியாக"
+                    " உள்ளிடவும்."
+                )
 
         # படி 4: Supabase-ல் ஆவணங்கள் பதிவேற்றம் & தணிக்கைக்கு சமர்ப்பித்தல்
         elif st.session_state.current_visit["step"] == "DOC_UPLOAD":
