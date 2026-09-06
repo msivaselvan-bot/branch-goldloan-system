@@ -303,19 +303,22 @@ branch_id_to_name = (
 )
 
 # ==========================================
-# 4. உள்நுழைவு திரை
+# 4. உள்நுழைவு திரை (Royal Violet Theme)
 # ==========================================
 if not st.session_state.logged_in:
-    col_left, col_center, col_right = st.columns([1.5, 1.2, 1.5])
+    col_left, col_center, col_right = st.columns([1.3, 1.4, 1.3])
 
     with col_center:
-        st.markdown("<h3 style='text-align: center;'>🏦 கிளை சிஸ்டம்</h3>", unsafe_allow_html=True)
-        st.markdown("<p style='text-align: center; color: gray;'>பணியாளர் உள்நுழைவு</p>", unsafe_allow_html=True)
+        st.markdown("""
+        <div class="login-box">
+            <h3>🏦 கிளை சிஸ்டம்</h3>
+            <p>பணியாளர் பாதுகாப்பான உள்நுழைவு</p>
+        """, unsafe_allow_html=True)
 
         with st.form("login_form"):
             username = st.text_input("பயனர் பெயர் (Username)", placeholder="Username")
             password = st.text_input("கடவுச்சொல் (Password)", type="password", placeholder="Password")
-            submitted = st.form_submit_button("உள்நுழைக (Login)", use_container_width=True)
+            submitted = st.form_submit_button("உள்நுழைக (Login)", use_container_width=True, type="primary")
 
             if submitted:
                 if username.strip() and password.strip():
@@ -352,6 +355,8 @@ if not st.session_state.logged_in:
                         st.error("தவறான பயனர் பெயர் அல்லது கடவுச்சொல்! (அல்லது கணக்கு முடக்கப்பட்டுள்ளது)")
                 else:
                     st.warning("விவரங்களை உள்ளிடவும்.")
+
+        st.markdown("</div>", unsafe_allow_html=True)
 
 # ==========================================
 # 5. முதன்மை திரை
