@@ -121,25 +121,28 @@ else:
             st.subheader("ஏற்கனவே உள்ள கிளைகள்:")
             existing_branches = supabase.table("branches").select("id, branch_name, branch_code").execute()
             if existing_branches.data:
-                st.dataframe(pd.DataFrame(existing_branches.data), use_container_width=True)
-
-            st.markdown("---")
-            with st.form("add_branch_form"):
-                b_name = st.text_input("புதிய கிளையின் பெயர்")
-                b_code = st.text_input("கிளை குறியீடு (Branch Code, எ.கா: TGL01, MKD01)")
-                if st.form_submit_button("கிளையைச் சேர்"):
-                    if b_name and b_code:
+                df_b = pd.DataFrame(existing_branches.data)
+                st.dataframe(df_b, use_container_width=True)
+                
+                # கிளையை நீக்கும் பகுதி
+                st.markdown("##### கிளையை நீக்குதல் (Delete Branch):")
+                del_col1, del_col2 = st.columns([3, 1])
+                with del_col1:
+                    branch_to_del = st.selectbox(
+                        "நீக்க வேண்டிய கிளையைத் தேர்ந்தெடுக்கவும்", 
+                        options=[(b["id"], f"{b['branch_name']} ({b['branch_code']})") for b in existing_branches.data],
+                        format_func=lambda x: x[1]
+                    )
+                with del_col2:
+                    st.write("") # இடைவெளிக்காக
+                    st.write("")
+                    if st.button("கிளையை நீக்கு", type="primary"):
                         try:
-                            supabase.table("branches").insert({
-                                "branch_name": b_name.strip(),
-                                "branch_code": b_code.strip().upper()
-                            }).execute()
-                            st.success(f"{b_name} வெற்றிகரமாகச் சேர்க்கப்பட்டது!")
+                            supabase.table("branches").delete().eq("id", branch_to_del[0]).execute()
+                            st.success("கிளை வெற்றிகரமாக நீக்கப்பட்டது!")
                             st.rerun()
                         except Exception as e:
-                            st.error(f"கிளையைச் சேர்ப்பதில் பிழை: {e}")
-                    else:
-                        st.error("அனைத்து விவரங்களையும் உள்ளிடவும்.")
+                            st.error(f"நீக்குவதில் பிழை: {e}")
 
         with tab2:
             st.subheader("ஏற்கனவே உள்ள பயனாளர்கள்:")
