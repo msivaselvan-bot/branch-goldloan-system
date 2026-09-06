@@ -506,7 +506,7 @@ else:
                     new_photo = st.file_uploader("வாடிக்கையாளர் புகைப்படம் (Photo)", type=["jpg", "jpeg", "png"])
 
                 with col_n3:
-                    new_address = st.text_area("முழு முகவரி (Address)", rows=3)
+                    new_address = st.text_area("முழு முகவரி (Address)", height=100)
                     new_nominee = st.text_input("நாமினி பெயர் (Nominee Name)")
                     new_relation = st.text_input("உறவுமுறை (Nominee Relation, எ.கா: மனைவி, மகன்)")
 
