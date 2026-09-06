@@ -22,7 +22,7 @@ except Exception as e:
     st.stop()
 
 # ==========================================
-# 2. கோப்புகளை Supabase Storage-ல் பதிவேற்றும் செயல்பாடு
+# 2. ஆவணப் பதிவேற்றம் & வருகை எண் உருவாக்கும் செயல்பாடுகள்
 # ==========================================
 def upload_files_to_supabase(files, visit_no):
     uploaded_links = []
@@ -39,8 +39,8 @@ def upload_files_to_supabase(files, visit_no):
         uploaded_links.append(public_url)
 
     return uploaded_links
-    def generate_short_visit_no() -> str:
-    """டேட்டாபேஸிலிருந்து கடைசி வருகை எண்ணை எடுத்து அடுத்த 4 இலக்க VST எண்ணை உருவாக்குகிறது (எ.கா: VST-1001)"""
+
+def generate_short_visit_no() -> str:
     try:
         res = (
             supabase.table("customer_visits")
@@ -55,11 +55,8 @@ def upload_files_to_supabase(files, visit_no):
                 num_part = last_no.split("-")[1]
                 next_val = int(num_part) + 1
                 return f"VST-{next_val:04d}"
-        
-        # ஆரம்ப எண் 1001
         return "VST-1001"
     except Exception:
-        # ஏதேனும் பிழை ஏற்பட்டால் தற்காலிக நேர அடிப்படையிலான 4 இலக்கம்
         return f"VST-{datetime.now().strftime('%M%S')}"
 
 # ==========================================
@@ -78,7 +75,6 @@ if "current_visit" not in st.session_state:
 if "transactions_cart" not in st.session_state:
     st.session_state.transactions_cart = []
 
-# கிளைகளின் பட்டியல்
 branches_res = supabase.table("branches").select("*").order("id").execute()
 branch_options = (
     {b["branch_name"]: b["id"] for b in branches_res.data}
@@ -143,7 +139,7 @@ if not st.session_state.logged_in:
                     st.warning("விவரங்களை உள்ளிடவும்.")
 
 # ==========================================
-# 5. உள்நுழைந்த பின் முதன்மை திரை
+# 5. முதன்மை திரை
 # ==========================================
 else:
     top_col1, top_col2, top_col3 = st.columns([3, 2, 1])
@@ -545,7 +541,7 @@ else:
                 horizontal=True,
             )
 
-          # 1. பழைய வாடிக்கையாளர் தேடல் (கிளைக் கட்டுப்பாடு & டிராப்டவுன் தேர்வு)
+            # 1. பழைய வாடிக்கையாளர் தேடல்
             if "Existing" in visit_type:
                 st.markdown("##### 🔍 வாடிக்கையாளர் தேடல்")
                 search_query = st.text_input(
@@ -557,14 +553,12 @@ else:
                 if len(search_query.strip()) >= 2:
                     q = search_query.strip()
                     
-                    # சொந்த கிளையின் Active வாடிக்கையாளர்களை மட்டுமே எடுத்தல்
                     cust_filter_query = (
                         supabase.table("customers")
                         .select("*")
                         .eq("is_active", True)
                     )
                     
-                    # Admin அல்லது Auditor அல்லாத கிளை ஊழியர்களுக்கு சொந்த கிளை மட்டுமே வடிகட்டப்படும்
                     if st.session_state.user_role not in ["Admin", "Auditor"]:
                         cust_filter_query = cust_filter_query.eq("branch_id", st.session_state.branch_id)
                         
@@ -576,7 +570,6 @@ else:
                     )
 
                     if matched_custs.data:
-                        # டிராப்டவுன் மெனுவிற்கான தேர்வுகள் பட்டியல்
                         cust_dropdown_dict = {
                             f"{c['name']} | {c.get('customer_code', '')} | 📞 {c.get('mobile', '')}": c 
                             for c in matched_custs.data
@@ -592,7 +585,6 @@ else:
                         
                         selected_cust = cust_dropdown_dict[selected_label]
 
-                        # தேர்ந்தெடுக்கப்பட்ட வாடிக்கையாளரின் முழு விவர அட்டை (Customer Card)
                         with st.container(border=True):
                             c_col1, c_col2, c_col3 = st.columns([1, 2.5, 1])
                             with c_col1:
@@ -612,16 +604,16 @@ else:
                                 st.write("")
                                 st.write("")
                                 if st.button("வருகையைத் தொடங்கு ➔", key=f"start_visit_{selected_cust['id']}", type="primary", use_container_width=True):
-    v_num = generate_short_visit_no()
-    st.session_state.current_visit = {
-        "visit_no": v_num,
-        "customer_id": selected_cust["id"],
-        "customer_name": selected_cust["name"],
-        "customer_code": selected_cust.get("customer_code", ""),
-        "mobile": selected_cust.get("mobile", ""),
-        "step": "TRANSACTIONS",
-    }
-    st.rerun()
+                                    v_num = generate_short_visit_no()
+                                    st.session_state.current_visit = {
+                                        "visit_no": v_num,
+                                        "customer_id": selected_cust["id"],
+                                        "customer_name": selected_cust["name"],
+                                        "customer_code": selected_cust.get("customer_code", ""),
+                                        "mobile": selected_cust.get("mobile", ""),
+                                        "step": "TRANSACTIONS",
+                                    }
+                                    st.rerun()
                     else:
                         st.warning("உங்கள் கிளையில் பொருந்தும் வாடிக்கையாளர் விவரங்கள் எதுவும் இல்லை. புதிய வாடிக்கையாளராகப் பதிவு செய்யவும்.")
 
@@ -682,18 +674,18 @@ else:
                                 cust_insert_res = supabase.table("customers").insert(insert_data).execute()
 
                                 if cust_insert_res.data:
-    created_cust = cust_insert_res.data[0]
-    v_num = generate_short_visit_no()
-    st.session_state.current_visit = {
-        "visit_no": v_num,
-        "customer_id": created_cust["id"],
-        "customer_name": created_cust["name"],
-        "customer_code": created_cust["customer_code"],
-        "mobile": created_cust["mobile"],
-        "step": "TRANSACTIONS",
-    }
-    st.success(f"வாடிக்கையாளர் எண் {timestamp_code} உடன் பதிவு செய்யப்பட்டார்!")
-    st.rerun()
+                                    created_cust = cust_insert_res.data[0]
+                                    v_num = generate_short_visit_no()
+                                    st.session_state.current_visit = {
+                                        "visit_no": v_num,
+                                        "customer_id": created_cust["id"],
+                                        "customer_name": created_cust["name"],
+                                        "customer_code": created_cust["customer_code"],
+                                        "mobile": created_cust["mobile"],
+                                        "step": "TRANSACTIONS",
+                                    }
+                                    st.success(f"வாடிக்கையாளர் எண் {timestamp_code} உடன் பதிவு செய்யப்பட்டார்!")
+                                    st.rerun()
                             except Exception as e:
                                 st.error(f"பதிவு செய்வதில் பிழை: {e}")
                         else:
