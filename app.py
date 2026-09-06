@@ -8,8 +8,50 @@ from supabase import Client, create_client
 # பக்க வடிவமைப்பு
 st.set_page_config(page_title="Branch Operations System", layout="wide")
 
+import streamlit.components.v1 as components
+
 # ==============================================================================
-# ஹை-லுக் ஆப் தீம் (Native App Feel - Lavender, Deep Violet & Luxury Gold)
+# 0. JavaScript Injection: மிதக்கும் Streamlit Cloud பேட்ஜ்களை DOM-லிருந்து நீக்குதல்
+# ==============================================================================
+components.html("""
+<script>
+    function purgeStreamlitBadges() {
+        // Parent window (Streamlit Cloud shell) மற்றும் தற்போதைய iframe இரண்டிலும் தேடுதல்
+        const rootDoc = window.parent ? window.parent.document : document;
+        
+        // கீழ் வலது பேட்ஜ்கள், சிவப்பு பட்டன்கள் மற்றும் வாட்டர்மார்க்குகள்
+        const targetSelectors = [
+            '[data-testid="manage-app-button"]',
+            '.viewerBadge_container__r5tak',
+            '.viewerBadge_link__qRIco',
+            'div[class*="viewerBadge"]',
+            'div[class*="manage-app"]',
+            'div[class*="floating-actions"]',
+            'div[class*="StatusWidget"]',
+            '#manage-app-button',
+            'footer',
+            'header'
+        ];
+        
+        targetSelectors.forEach(selector => {
+            const nodes = rootDoc.querySelectorAll(selector);
+            nodes.forEach(el => {
+                el.style.display = 'none';
+                el.style.visibility = 'hidden';
+                el.style.opacity = '0';
+                el.remove();
+            });
+        });
+    }
+
+    // பக்கம் ஏற்றப்படும் போதும், புதிய மாற்றங்கள் நிகழும் போதும் கண்காணித்து நீக்குதல்
+    purgeStreamlitBadges();
+    setInterval(purgeStreamlitBadges, 250);
+</script>
+""", height=0, width=0)
+
+# ==============================================================================
+# 1. ஹை-லுக் ஆப் தீம் (Native App Feel - Lavender, Deep Violet & Luxury Gold)
 # ==============================================================================
 st.markdown("""
 <style>
@@ -30,13 +72,18 @@ st.markdown("""
     div[class*="manage-app"],
     span[class*="viewerBadge"],
     a[href*="streamlit.io"],
-    div[data-testid="stStatusWidget"] {
+    div[data-testid="stStatusWidget"],
+    div[class*="floating"],
+    div[class*="badge"],
+    button[data-testid*="manage"],
+    div[data-testid="stToolbar"] {
         display: none !important;
         visibility: hidden !important;
         opacity: 0 !important;
         pointer-events: none !important;
         height: 0 !important;
         width: 0 !important;
+        transform: scale(0) !important;
     }
 
     /* 2. ஆப் பின்னணி - மென்மையான லாவெண்டர் மேட் பினிஷ் */
