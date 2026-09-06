@@ -48,6 +48,27 @@ st.markdown("""
         align-items: center;
         margin-bottom: 0.5rem;
     }
+    /* 'Hosted with Streamlit' பேட்ஜ் மற்றும் அடிக்குறிப்பை முற்றிலும் மறைக்க */
+    footer {
+        visibility: hidden !important;
+        display: none !important;
+    }
+    
+    /* கீழ் வலது மூலையில் உள்ள Streamlit பேட்ஜ் கண்டெய்னர்கள் */
+    .viewerBadge_container__r5tak,
+    .viewerBadge_link__qRIco,
+    div[class*="viewerBadge_container"],
+    div[class*="viewerBadge_link"],
+    a[href*="streamlit.io"] {
+        display: none !important;
+        visibility: hidden !important;
+        pointer-events: none !important;
+    }
+
+    /* ஸ்டேட்டஸ் விட்ஜெட் மற்றும் வாட்டர்மார்க் தடுப்பு */
+    div[data-testid="stStatusWidget"] {
+        display: none !important;
+    }
 
     /* 4. முகப்பு கார்டு (Deep Violet Native Card) */
     .login-box {
