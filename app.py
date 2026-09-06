@@ -1,59 +1,19 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime
-import io
 from supabase import create_client, Client
-from google.oauth2 import service_account
-from googleapiclient.discovery import build
-from googleapiclient.http import MediaIoBaseUpload
 
 # பக்க வடிவமைப்பு
 st.set_page_config(page_title="Branch Operations System", layout="wide")
 
 # ==========================================
-# கிளவுட் சேவைகள் இணைப்பு (Supabase & Drive)
-# ==========================================
-
 # 1. Supabase இணைப்பு
+# ==========================================
 @st.cache_resource
 def get_supabase_client() -> Client:
     url = st.secrets["supabase"]["url"]
     key = st.secrets["supabase"]["key"]
     return create_client(url, key)
-
-# 2. Google Drive API இணைப்பு
-@st.cache_resource
-def get_drive_service():
-    info = dict(st.secrets["gcp_service_account"])
-    creds = service_account.Credentials.from_service_account_info(
-        info, scopes=["https://www.googleapis.com/auth/drive"]
-    )
-    return build("drive", "v3", credentials=creds)
-
-# 3. ஆவணங்களை கூகுள் டிரைவில் அப்லோட் செய்யும் செயல்பாடு
-def upload_files_to_supabase(files, visit_no):
-    uploaded_links = []
-    bucket_name = "branch-documents"
-
-    for f in files:
-        # தனித்துவமான ஃபைல் பாதை (எ.கா: VISIT-2026/aadhar.jpg)
-        file_path = f"{visit_no}/{f.name}"
-        file_bytes = f.getvalue()
-
-        # Supabase Storage-ல் அப்லோட் செய்தல்
-        res = supabase.storage.from_(bucket_name).upload(
-            path=file_path,
-            file=file_bytes,
-            file_options={"content-type": f.type, "upsert": "true"},
-        )
-
-        # பார்வைக்கான நேரடி லிங்க் பெறுதல்
-        public_url = supabase.storage.from_(bucket_name).get_public_url(
-            file_path
-        )
-        uploaded_links.append(public_url)
-
-    return uploaded_links
 
 try:
     supabase = get_supabase_client()
@@ -62,12 +22,32 @@ except Exception as e:
     st.stop()
 
 # ==========================================
-# தற்காலிக சேமிப்பக மாறிகள் (Session State)
+# 2. கோப்புகளை Supabase Storage-ல் பதிவேற்றும் செயல்பாடு
+# ==========================================
+def upload_files_to_supabase(files, visit_no):
+    uploaded_links = []
+    bucket_name = "branch-documents"
+
+    for f in files:
+        file_path = f"{visit_no}/{f.name}"
+        supabase.storage.from_(bucket_name).upload(
+            path=file_path,
+            file=f.getvalue(),
+            file_options={"content-type": f.type, "upsert": "true"}
+        )
+        public_url = supabase.storage.from_(bucket_name).get_public_url(file_path)
+        uploaded_links.append(public_url)
+
+    return uploaded_links
+
+# ==========================================
+# 3. தற்காலிக சேமிப்பக மாறிகள் (Session State)
 # ==========================================
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
     st.session_state.user_role = None
     st.session_state.branch = None
+    st.session_state.branch_id = None
     st.session_state.username = None
 
 if "current_visit" not in st.session_state:
@@ -76,11 +56,12 @@ if "current_visit" not in st.session_state:
 if "transactions_cart" not in st.session_state:
     st.session_state.transactions_cart = []
 
-BRANCHES = [f"கிளை {i} - Branch {i}" for i in range(1, 11)]
-STAFF_LIST = ["Walk-in (நேரடி வருகை)", "ரமேஷ் (Staff 1)", "சுரேஷ் (Staff 2)", "கவிதா (Staff 3)", "பிரியா (Staff 4)"]
+# டேட்டாபேஸிலிருந்து கிளைகளைப் பெறுதல்
+branches_res = supabase.table("branches").select("*").execute()
+branch_options = {b["branch_name"]: b["id"] for b in branches_res.data} if branches_res.data else {}
 
 # ==========================================
-# 1. உள்நுழைவு திரை (LOGIN SCREEN)
+# 4. உள்நுழைவு திரை (LOGIN SCREEN)
 # ==========================================
 if not st.session_state.logged_in:
     st.title("🏦 கிளை செயல்பாட்டு மேலாண்மை சிஸ்டம்")
@@ -89,7 +70,8 @@ if not st.session_state.logged_in:
     with st.form("login_form"):
         col1, col2 = st.columns(2)
         with col1:
-            branch = st.selectbox("கிளையைத் தேர்ந்தெடுக்கவும் (Branch)", BRANCHES)
+            branch_choices = list(branch_options.keys()) + ["Head Office / Admin"]
+            selected_branch = st.selectbox("கிளையைத் தேர்ந்தெடுக்கவும் (Branch)", branch_choices)
             username = st.text_input("பயனர் பெயர் (Username)")
         with col2:
             role = st.selectbox("பணி நிலை (Role)", ["Branch Head / Cashier", "Auditor", "Admin"])
@@ -97,17 +79,22 @@ if not st.session_state.logged_in:
 
         submitted = st.form_submit_button("உள்நுழைக (Login)")
         if submitted:
-            if username and password:
+            # Supabase-ல் பயனாளரைச் சரிபார்த்தல்
+            user_query = supabase.table("users").select("*").eq("username", username).eq("password_hash", password).eq("role", role).execute()
+            
+            if user_query.data:
+                user_info = user_query.data[0]
                 st.session_state.logged_in = True
-                st.session_state.user_role = role
-                st.session_state.branch = branch
-                st.session_state.username = username
+                st.session_state.user_role = user_info["role"]
+                st.session_state.branch = selected_branch
+                st.session_state.branch_id = user_info.get("branch_id")
+                st.session_state.username = user_info["name"]
                 st.rerun()
             else:
-                st.error("சரியான பயனர் பெயர் மற்றும் கடவுச்சொல்லை உள்ளிடவும்.")
+                st.error("தவறான பயனர் பெயர் அல்லது கடவுச்சொல்!")
 
 # ==========================================
-# 2. முதன்மை திரை
+# 5. உள்நுழைந்த பின் முதன்மை திரை
 # ==========================================
 else:
     top_col1, top_col2, top_col3 = st.columns([3, 2, 1])
@@ -125,9 +112,54 @@ else:
     st.markdown("---")
 
     # ----------------------------------------------------
-    # தணிக்கையர் திரை (AUDITOR DESK)
+    # A. நிர்வாக மேலாண்மை திரை (ADMIN PANEL)
     # ----------------------------------------------------
-    if st.session_state.user_role == "Auditor":
+    if st.session_state.user_role == "Admin":
+        st.header("⚙️ நிர்வாக மேலாண்மை (Admin Control Panel)")
+        tab1, tab2 = st.tabs(["புதிய கிளை சேர்த்தல்", "புதிய பயனாளர் (User) சேர்த்தல்"])
+
+        with tab1:
+            with st.form("add_branch_form"):
+                b_name = st.text_input("கிளையின் பெயர்")
+                b_code = st.text_input("கிளை குறியீடு (Branch Code, எ.கா: BR03)")
+                if st.form_submit_button("கிளையைச் சேர்"):
+                    if b_name and b_code:
+                        supabase.table("branches").insert({"branch_name": b_name, "branch_code": b_code}).execute()
+                        st.success(f"{b_name} வெற்றிகரமாகச் சேர்க்கப்பட்டது!")
+                        st.rerun()
+                    else:
+                        st.error("அனைத்து விவரங்களையும் உள்ளிடவும்.")
+
+        with tab2:
+            with st.form("add_user_form"):
+                u_name = st.text_input("பணியாளர் முழுப் பெயர்")
+                u_username = st.text_input("உள்நுழைவு பெயர் (Username)")
+                u_pass = st.text_input("கடவுச்சொல் (Password)", type="password")
+                u_role = st.selectbox("பணி நிலை (Role)", ["Branch Head / Cashier", "Staff", "Auditor", "Admin"])
+                u_branch = st.selectbox(
+                    "கிளை",
+                    options=[(k, v) for k, v in branch_options.items()],
+                    format_func=lambda x: x[0] if branch_options else "கிளைகள் இல்லை"
+                )
+
+                if st.form_submit_button("பயனாளரை உருவாக்கு"):
+                    if u_name and u_username and u_pass:
+                        branch_id_val = None if u_role in ["Admin", "Auditor"] else (u_branch[1] if branch_options else None)
+                        supabase.table("users").insert({
+                            "name": u_name,
+                            "username": u_username,
+                            "password_hash": u_pass,
+                            "role": u_role,
+                            "branch_id": branch_id_val
+                        }).execute()
+                        st.success(f"{u_username} என்ற புதிய பயனர் வெற்றிகரமாக உருவாக்கப்பட்டார்!")
+                    else:
+                        st.error("அனைத்து விவரங்களையும் உள்ளிடவும்.")
+
+    # ----------------------------------------------------
+    # B. தணிக்கையர் திரை (AUDITOR DESK)
+    # ----------------------------------------------------
+    elif st.session_state.user_role == "Auditor":
         st.header("🔍 தணிக்கையர் பணிப்பாய்வு (Auditor Verification)")
         
         response = supabase.table("customer_visits").select("*, transactions(*), audit_records(*)").eq("status", "Submitted_to_Auditor").execute()
@@ -144,7 +176,7 @@ else:
                     if item.get("transactions"):
                         st.dataframe(pd.DataFrame(item["transactions"]))
 
-                    st.write("### 📁 கூகுள் டிரைவ் ஆவணங்கள்:")
+                    st.write("### 📁 இணைக்கப்பட்ட ஆவணங்கள்:")
                     audit_recs = item.get("audit_records", [])
                     if audit_recs and audit_recs[0].get("document_urls"):
                         for doc_url in audit_recs[0]["document_urls"]:
@@ -170,10 +202,14 @@ else:
                             st.rerun()
 
     # ----------------------------------------------------
-    # கிளை செயல்பாடுகள் திரை (BRANCH FLOW)
+    # C. கிளை செயல்பாடுகள் திரை (BRANCH FLOW)
     # ----------------------------------------------------
     else:
         st.header("📋 வாடிக்கையாளர் வருகை மற்றும் பரிவர்த்தனைகள்")
+
+        # சம்பந்தப்பட்ட கிளையின் பணியாளர்கள் பட்டியல் பெறுதல்
+        staff_res = supabase.table("users").select("name").eq("branch_id", st.session_state.branch_id).execute() if st.session_state.branch_id else None
+        current_staff_list = ["Walk-in (நேரடி வருகை)"] + [s["name"] for s in staff_res.data] if staff_res and staff_res.data else ["Walk-in (நேரடி வருகை)"]
 
         # படி 1: வருகைப் பதிவு
         if st.session_state.current_visit is None:
@@ -190,31 +226,23 @@ else:
                 start_visit = st.form_submit_button("வருகையைத் தொடங்கு (Start Visit)")
                 if start_visit:
                     if cust_name and cust_mobile:
-                        try:
-                            # 1. கஸ்டமரை Supabase-ல் பதிவு செய்தல்
-                            cust_res = supabase.table("customers").insert({
-                                "name": cust_name,
-                                "mobile": cust_mobile,
-                                "aadhaar": cust_aadhaar
-                            }).execute()
+                        cust_res = supabase.table("customers").insert({
+                            "name": cust_name,
+                            "mobile": cust_mobile,
+                            "aadhaar": cust_aadhaar
+                        }).execute()
+                        cust_id = cust_res.data[0]["id"] if cust_res.data else None
 
-                            if cust_res.data:
-                                cust_id = cust_res.data[0]["id"]
-                            else:
-                                cust_id = None
-
-                            v_num = f"VISIT-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
-                            st.session_state.current_visit = {
-                                "visit_no": v_num,
-                                "customer_id": cust_id,
-                                "customer_name": cust_name,
-                                "mobile": cust_mobile,
-                                "aadhaar": cust_aadhaar,
-                                "step": "TRANSACTIONS"
-                            }
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"வாடிக்கையாளர் பதிவில் பிழை: {e}")
+                        v_num = f"VISIT-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+                        st.session_state.current_visit = {
+                            "visit_no": v_num,
+                            "customer_id": cust_id,
+                            "customer_name": cust_name,
+                            "mobile": cust_mobile,
+                            "aadhaar": cust_aadhaar,
+                            "step": "TRANSACTIONS"
+                        }
+                        st.rerun()
                     else:
                         st.error("பெயர் மற்றும் மொபைல் எண் அவசியம்.")
 
@@ -235,7 +263,7 @@ else:
                         "GS (நகை விற்பனை)", "GP (நகை வாங்குதல்)", "Take Over"
                     ])
                 with t_col2:
-                    staff = st.selectbox("கையாண்ட பணியாளர் (Staff Attribution)", STAFF_LIST)
+                    staff = st.selectbox("கையாண்ட பணியாளர் (Staff Attribution)", current_staff_list)
                 with t_col3:
                     amount_paid = st.number_input("செலுத்தியது (Paid Amount ₹)", min_value=0.0, step=100.0)
                 with t_col4:
@@ -316,7 +344,7 @@ else:
                     else:
                         st.error("தவறான OTP!")
 
-        # படி 4: Google Drive-ல் ஆவணங்கள் பதிவேற்றம் & Supabase-ல் பதிவு செய்தல்
+        # படி 4: Supabase-ல் ஆவணங்கள் பதிவேற்றம் & தணிக்கைக்கு சமர்ப்பித்தல்
         elif st.session_state.current_visit["step"] == "DOC_UPLOAD":
             visit = st.session_state.current_visit
             st.subheader("படி 4: ஆவணங்கள் பதிவேற்றம் & தணிக்கைக்கு சமர்ப்பித்தல்")
@@ -325,15 +353,16 @@ else:
 
             if st.button("பரிவர்த்தனையை நிறைவு செய்து தணிக்கையருக்கு அனுப்புக"):
                 if uploaded_files:
-                    with st.spinner("கூகுள் டிரைவில் ஆவணங்கள் பதிவேற்றப்பட்டு வருகின்றன..."):
+                    with st.spinner("ஆவணங்கள் பதிவேற்றப்பட்டு வருகின்றன..."):
                         try:
-                            # 1. Google Drive-ல் கோப்புகளை அப்லோட் செய்து லிங்க்குகளைப் பெறுதல்
+                            # 1. Supabase Storage-ல் கோப்புகளை அப்லோட் செய்தல்
                             doc_links = upload_files_to_supabase(uploaded_files, visit["visit_no"])
 
                             # 2. Supabase-ல் Customer Visit பதிவு
                             visit_data = {
                                 "visit_no": visit["visit_no"],
                                 "customer_id": visit["customer_id"],
+                                "branch_id": st.session_state.branch_id,
                                 "total_paid": visit["total_paid"],
                                 "total_received": visit["total_received"],
                                 "net_cash_amount": visit["net_amount"],
@@ -349,16 +378,14 @@ else:
                                 txn["visit_id"] = created_visit_id
                                 supabase.table("transactions").insert(txn).execute()
 
-                            # 4. தணிக்கையர் பதிவில் டிரைவ் லிங்க்குகளைச் சேர்த்தல்
+                            # 4. தணிக்கையர் பதிவில் லிங்க்குகளைச் சேர்த்தல்
                             supabase.table("audit_records").insert({
                                 "visit_id": created_visit_id,
                                 "document_urls": doc_links,
                                 "audit_status": "Pending"
                             }).execute()
 
-                            st.success("✅ ஆவணங்கள் கூகுள் டிரைவில் அப்லோட் செய்யப்பட்டு, தணிக்கையருக்கு (Auditor) வெற்றிகரமாக அனுப்பப்பட்டது!")
-                            
-                            # படிவத்தை ரீசெட் செய்தல்
+                            st.success("✅ ஆவணங்கள் பதிவேற்றப்பட்டு தணிக்கையருக்கு (Auditor) வெற்றிகரமாக அனுப்பப்பட்டது!")
                             st.session_state.current_visit = None
                             st.session_state.transactions_cart = []
                             st.button("அடுத்த வாடிக்கையாளர் வருகையைத் தொடங்கு")
