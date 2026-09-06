@@ -125,7 +125,7 @@ def get_current_branch_cash_drawer(branch_id: int):
         if box_res.data and box_res.data[0].get("opening_denomination"):
             op_data = box_res.data[0]["opening_denomination"]
             for k in stock:
-                stock[k] = int(op_data.get(k, 0))
+                stock[k] = int(op_data.get(k, 0) or 0)
 
         visits_res = (
             supabase.table("customer_visits")
@@ -140,8 +140,11 @@ def get_current_branch_cash_drawer(branch_id: int):
                     in_notes = d_info.get("in", {})
                     out_notes = d_info.get("out", {})
                     for k in stock:
-                        stock[k] += int(in_notes.get(k, 0))
-                        stock[k] -= int(out_notes.get(k, 0))
+                        stock[k] += int(in_notes.get(k, 0) or 0)
+                        stock[k] -= int(out_notes.get(k, 0) or 0)
+
+        for k in stock:
+            stock[k] = max(0, stock[k])
 
         return stock
     except Exception:
@@ -394,12 +397,8 @@ else:
                                 st.error(f"புதுப்பிப்பதில் பிழை: {err}")
 
         with tab3:
-            st.subheader("📥 பழைய வாடிக்கையாளர் அறிக்கைப் பதிவேற்றுதல் (Customer Report Import)")
-            uploaded_cust_file = st.file_uploader(
-                "Customer Report Excel கோப்பைத் தேர்வு செய்யவும்",
-                type=["xls", "xlsx", "csv"],
-                key="admin_customer_report_uploader",
-            )
+            st.subheader("📥 பழைய வாடிக்கையாளர் அறிக்கையைப் பதிவேற்றுதல் (Customer Report Import)")
+            uploaded_cust_file = st.file_uploader("Customer Report Excel கோப்பைத் தேர்வு செய்யவும்", type=["xls", "xlsx", "csv"], key="admin_customer_report_uploader")
 
             if uploaded_cust_file:
                 try:
@@ -435,7 +434,7 @@ else:
                                 "customer_code": c_code,
                                 "name": str(row.get("Full Name", "")).strip(),
                                 "guardian_name": str(row.get("Guardian", "")).strip() if pd.notna(row.get("Guardian")) else "",
-                                "gender": str(row.get("Gender", "")).strip() if pd.notna(row.get("Gender")) else "Male",
+                                "gender": str(row.get("Gender", "Male")).strip(),
                                 "mobile": str(row.get("Mobile No", "")).replace(".0", "").strip(),
                                 "mobile2": mob2,
                                 "address": str(row.get("Comm Address", "")).strip() if pd.notna(row.get("Comm Address")) else "",
@@ -450,7 +449,6 @@ else:
 
                         st.success(f"✅ **{len(records_to_insert)} வாடிக்கையாளர்கள்** வெற்றிகரமாகப் பதிவேற்றப்பட்டனர்!")
                         st.rerun()
-
                 except Exception as e:
                     st.error(f"பதிவேற்றுவதில் பிழை: {e}")
 
@@ -462,7 +460,7 @@ else:
                 selected_b_filter = st.selectbox("கிளை வாரியாகப் பார்க்க:", branch_filter_options, key="admin_cust_b_filter")
 
             with filter_col2:
-                admin_search_q = st.text_input("வாடிக்கையாளர் பெயர் / மொபைல் / Customer Code தேடுக:", key="admin_cust_search")
+                admin_search_q = st.text_input("வாடிக்கையாளர் பெயர் / மொபைல் / Code தேடுக:", key="admin_cust_search")
 
             cust_query = supabase.table("customers").select("*").order("id", desc=True)
             if selected_b_filter != "அனைத்து கிளைகளும் (All Branches)":
@@ -855,7 +853,6 @@ else:
                                         "gender": new_gender,
                                         "mobile": new_mob1.strip(),
                                         "mobile2": new_mob2.strip(),
-                                        "aadhaar": new_aadhaar.strip(),
                                         "address": new_address.strip(),
                                         "nominee_name": new_nominee.strip(),
                                         "nominee_relation": new_relation.strip(),
@@ -1107,34 +1104,40 @@ else:
                         st.write(f"**வாடிக்கையாளர் தந்த மொத்தத் தொகை:** `₹{total_cash_in:,.2f}`")
 
                     with st.expander("📤 நாம் கொடுத்த நோட்டுகள் / சில்லறை (Cash OUT)", expanded=True):
-                        max_500 = current_drawer["500"] + in_500
-                        max_200 = current_drawer["200"] + in_200
-                        max_100 = current_drawer["100"] + in_100
-                        max_50 = current_drawer["50"] + in_50
-                        max_20 = current_drawer["20"] + in_20
-                        max_10 = current_drawer["10"] + in_10
-                        max_5 = current_drawer["5"] + in_5
-                        max_coins = current_drawer["coins"] + in_coins
+                        max_500 = max(0, current_drawer["500"] + in_500)
+                        max_200 = max(0, current_drawer["200"] + in_200)
+                        max_100 = max(0, current_drawer["100"] + in_100)
+                        max_50 = max(0, current_drawer["50"] + in_50)
+                        max_20 = max(0, current_drawer["20"] + in_20)
+                        max_10 = max(0, current_drawer["10"] + in_10)
+                        max_5 = max(0, current_drawer["5"] + in_5)
+                        max_coins = max(0, current_drawer["coins"] + in_coins)
+
+                        for k, m_val in [("out_500", max_500), ("out_200", max_200), ("out_100", max_100), 
+                                         ("out_50", max_50), ("out_20", max_20), ("out_10", max_10), 
+                                         ("out_5", max_5), ("out_coins", max_coins)]:
+                            if k in st.session_state and st.session_state[k] > m_val:
+                                st.session_state[k] = m_val
 
                         o1_1, o1_2, o1_3, o1_4 = st.columns(4)
                         with o1_1:
-                            out_500 = st.number_input(f"₹500 (இருப்பு: {max_500})", min_value=0, max_value=max_500, step=1, key="out_500", disabled=otp_already_sent)
+                            out_500 = st.number_input(f"₹500 (இருப்பு: {max_500})", min_value=0, max_value=max(0, max_500), step=1, key="out_500", disabled=otp_already_sent)
                         with o1_2:
-                            out_200 = st.number_input(f"₹200 (இருப்பு: {max_200})", min_value=0, max_value=max_200, step=1, key="out_200", disabled=otp_already_sent)
+                            out_200 = st.number_input(f"₹200 (இருப்பு: {max_200})", min_value=0, max_value=max(0, max_200), step=1, key="out_200", disabled=otp_already_sent)
                         with o1_3:
-                            out_100 = st.number_input(f"₹100 (இருப்பு: {max_100})", min_value=0, max_value=max_100, step=1, key="out_100", disabled=otp_already_sent)
+                            out_100 = st.number_input(f"₹100 (இருப்பு: {max_100})", min_value=0, max_value=max(0, max_100), step=1, key="out_100", disabled=otp_already_sent)
                         with o1_4:
-                            out_50 = st.number_input(f"₹50 (இருப்பு: {max_50})", min_value=0, max_value=max_50, step=1, key="out_50", disabled=otp_already_sent)
+                            out_50 = st.number_input(f"₹50 (இருப்பு: {max_50})", min_value=0, max_value=max(0, max_50), step=1, key="out_50", disabled=otp_already_sent)
 
                         o2_1, o2_2, o2_3, o2_4 = st.columns(4)
                         with o2_1:
-                            out_20 = st.number_input(f"₹20 (இருப்பு: {max_20})", min_value=0, max_value=max_20, step=1, key="out_20", disabled=otp_already_sent)
+                            out_20 = st.number_input(f"₹20 (இருப்பு: {max_20})", min_value=0, max_value=max(0, max_20), step=1, key="out_20", disabled=otp_already_sent)
                         with o2_2:
-                            out_10 = st.number_input(f"₹10 (இருப்பு: {max_10})", min_value=0, max_value=max_10, step=1, key="out_10", disabled=otp_already_sent)
+                            out_10 = st.number_input(f"₹10 (இருப்பு: {max_10})", min_value=0, max_value=max(0, max_10), step=1, key="out_10", disabled=otp_already_sent)
                         with o2_3:
-                            out_5 = st.number_input(f"₹5 (இருப்பு: {max_5})", min_value=0, max_value=max_5, step=1, key="out_5", disabled=otp_already_sent)
+                            out_5 = st.number_input(f"₹5 (இருப்பு: {max_5})", min_value=0, max_value=max(0, max_5), step=1, key="out_5", disabled=otp_already_sent)
                         with o2_4:
-                            out_coins = st.number_input(f"நாணயங்கள் (இருப்பு: {max_coins})", min_value=0, max_value=max_coins, step=1, key="out_coins", disabled=otp_already_sent)
+                            out_coins = st.number_input(f"நாணயங்கள் (இருப்பு: {max_coins})", min_value=0, max_value=max(0, max_coins), step=1, key="out_coins", disabled=otp_already_sent)
 
                         total_cash_out = (
                             (out_500 * 500) + (out_200 * 200) + (out_100 * 100) + (out_50 * 50) +
