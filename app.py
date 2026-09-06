@@ -124,9 +124,15 @@ else:
                 b_code = st.text_input("கிளை குறியீடு (Branch Code, எ.கா: BR03)")
                 if st.form_submit_button("கிளையைச் சேர்"):
                     if b_name and b_code:
-                        supabase.table("branches").insert({"branch_name": b_name, "branch_code": b_code}).execute()
-                        st.success(f"{b_name} வெற்றிகரமாகச் சேர்க்கப்பட்டது!")
-                        st.rerun()
+                        try:
+                            supabase.table("branches").insert({
+                                "branch_name": b_name.strip(), 
+                                "branch_code": b_code.strip().upper()
+                            }).execute()
+                            st.success(f"{b_name} வெற்றிகரமாகச் சேர்க்கப்பட்டது!")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"கிளையைச் சேர்ப்பதில் பிழை: {e}")
                     else:
                         st.error("அனைத்து விவரங்களையும் உள்ளிடவும்.")
 
