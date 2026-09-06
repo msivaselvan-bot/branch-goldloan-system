@@ -61,30 +61,41 @@ def generate_short_visit_no() -> str:
     except Exception:
         return f"VST-{datetime.now().strftime('%M%S')}"
 
-def send_fast2sms_otp(mobile_no: str, otp_code: str) -> bool:
+def send_fast2sms_otp(mobile_no: str, otp_code: str):
+    """அங்கீகரிக்கப்பட்ட Fast2SMS DLT டெம்ப்ளேட் (MTHSEG) மூலம் வாடிக்கையாளருக்கு SMS அனுப்புகிறது"""
     try:
         api_key = "eBGQYanRZNKVCpMSg3KB5kUxY2QhDnOjxesh3Hqr7FOG792XV9wut4TPhQia"
         if "sms" in st.secrets and "fast2sms_api_key" in st.secrets["sms"]:
             api_key = st.secrets["sms"]["fast2sms_api_key"]
 
+        # மொபைல் எண்ணை 10 இலக்கமாக மாற்றுதல்
         clean_mobile = "".join(filter(str.isdigit, str(mobile_no)))[-10:]
 
         url = "https://www.fast2sms.com/dev/bulkV2"
-        payload = {
-            "route": "otp",
-            "variables_values": otp_code,
-            "numbers": clean_mobile,
-        }
-        headers = {
+        
+        # உங்கள் DLT அளவுருக்கள் (DLT Query Parameters)
+        params = {
             "authorization": api_key,
-            "Content-Type": "application/json",
+            "route": "dlt",
+            "sender_id": "MTHSEG",
+            "message": "219823",
+            "variables_values": str(otp_code),
+            "numbers": clean_mobile,
+            "flash": "0"
         }
 
-        response = requests.post(url, json=payload, headers=headers, timeout=8)
+        response = requests.get(url, params=params, timeout=10)
         res_json = response.json()
-        return res_json.get("return", False)
-    except Exception:
-        return False
+
+        # SMS வெற்றிகரமாகச் சென்றதா என்பதைச் சரிபார்த்தல்
+        if res_json.get("return") is True:
+            return True, "SMS வெற்றிகரமாக அனுப்பப்பட்டது!"
+        
+        err_msg = res_json.get("message") or str(res_json)
+        return False, str(err_msg)
+
+    except Exception as e:
+        return False, f"இணைப்புப் பிழை: {e}"
 
 # ==========================================
 # 3. தற்காலிக சேமிப்பக மாறிகள் (Session State)
