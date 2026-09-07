@@ -1161,7 +1161,8 @@ else:
                 bd4.metric("₹50 தாள்கள்", f"{curr_b_drawer['50']}")
                 bd4.metric("நாணயங்கள் (₹)", f"{curr_b_drawer['coins']:,.2f}")
 
-            with st.form("branch_to_ho_fund_form"):
+            # 1. clear_on_submit=True சேர்க்கப்பட்டுள்ளது
+            with st.form("branch_to_ho_fund_form", clear_on_submit=True):
                 st.markdown("##### 📤 கிளையிலிருந்து தலைமையகத்திற்கு பணம் அனுப்புதல் (Branch ➔ Head Office)")
                 b_ft_c1, b_ft_c2 = st.columns(2)
                 with b_ft_c1:
@@ -1196,7 +1197,9 @@ else:
                 else:
                     b_final_amt = st.number_input("வங்கி மூலம் அனுப்பிய தொகை (₹):", min_value=0.0, step=1000.0, key="b_ft_bank_amt")
 
-                if st.form_submit_button("பணத்தை தலைமையகத்திற்கு அனுப்பு (Submit to HO)", type="primary"):
+                submit_btn = st.form_submit_button("பணத்தை தலைமையகத்திற்கு அனுப்பு (Submit to HO)", type="primary")
+
+                if submit_btn:
                     if b_final_amt > 0:
                         pure_mode = "Cash" if "Cash" in b_ft_mode else "Bank Transfer"
                         b_payload = {
@@ -1215,6 +1218,15 @@ else:
                         }
                         try:
                             supabase.table("branch_fund_transfers").insert(b_payload).execute()
+                            
+                            # 2. சமர்ப்பித்த பின் உள்ளீட்டுப் புலங்களை பூஜ்ஜியமாக்க session state-ஐ மீட்டமைத்தல்
+                            reset_keys = ["b_out_500", "b_out_200", "b_out_100", "b_out_50", 
+                                          "b_out_20", "b_out_10", "b_out_5", "b_out_coins", 
+                                          "b_ft_ref", "b_ft_bank_amt"]
+                            for k in reset_keys:
+                                if k in st.session_state:
+                                    del st.session_state[k]
+
                             st.success(f"✅ ₹{b_final_amt:,.2f} தலைமையகத்திற்கு அனுப்பப்பட்டதாகப் பதிவு செய்யப்பட்டது!")
                             st.rerun()
                         except Exception as e:
