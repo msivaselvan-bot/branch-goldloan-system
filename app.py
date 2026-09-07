@@ -276,7 +276,6 @@ def get_current_branch_cash_drawer(branch_id: int):
     """தொடக்க இருப்பு, வாடிக்கையாளர் பரிவர்த்தனைகள் மற்றும் HO ⇄ கிளை பணப் பரிமாற்றம் ஆகியவற்றைக் கணக்கிடுகிறது"""
     empty_stock = {"500": 0, "200": 0, "100": 0, "50": 0, "20": 0, "10": 0, "5": 0, "coins": 0}
     try:
-        # 1. துவக்க இருப்பு
         box_res = (
             supabase.table("branch_cash_box")
             .select("opening_denomination")
@@ -291,7 +290,6 @@ def get_current_branch_cash_drawer(branch_id: int):
             for k in stock:
                 stock[k] = int(op_data.get(k, 0) or 0)
 
-        # 2. வாடிக்கையாளர் வருகைப் பரிவர்த்தனைகள்
         visits_res = (
             supabase.table("customer_visits")
             .select("denomination_details")
@@ -308,7 +306,6 @@ def get_current_branch_cash_drawer(branch_id: int):
                         stock[k] += int(in_notes.get(k, 0) or 0)
                         stock[k] -= int(out_notes.get(k, 0) or 0)
 
-        # 3. HO ⇄ கிளை நேரடி ரொக்கப் பரிமாற்றங்கள்
         fund_res = (
             supabase.table("branch_fund_transfers")
             .select("transfer_type, denomination_details")
@@ -1147,7 +1144,7 @@ else:
         with branch_tab6:
             render_staff_attribution_report(selected_branch_id=st.session_state.branch_id)
 
-            with branch_tab5:
+        with branch_tab5:
             st.subheader("🏦 தலைமையக பணப் பரிமாற்றம் (HO Fund Transfer Desk)")
             st.caption("கிளையிலிருந்து தலைமையகத்திற்கு ரொக்கம் அனுப்புதல் அல்லது வங்கி மூலம் பரிமாற்றம் செய்தல்.")
 
@@ -1195,7 +1192,7 @@ else:
 
                 if "Cash" in b_ft_mode:
                     b_final_amt = float(calc_b_cash_total)
-                    st.info(f"💵 **கணக்கிடப்பட்ட மொத்த ரொக்கம் (Total Cash Handover): ₹{b_final_amt:,.2f}**")
+                    st.info(f"💵 **கணக்கிடப்பட்ட மொத்த ரொக்கம்: ₹{b_final_amt:,.2f}**")
                 else:
                     b_final_amt = st.number_input("வங்கி மூலம் அனுப்பிய தொகை (₹):", min_value=0.0, step=1000.0, key="b_ft_bank_amt")
 
@@ -1649,9 +1646,7 @@ else:
                 )
                 st.info(f"**{hdr_text}** (வாடிக்கையாளர்: {visit['customer_name']})")
 
-                # ----------------------------------------------------
-                # பகுதி 3.1: பலவகை பணப்பரிவர்த்தனைத் தேர்வு (Split / Hybrid Mode)
-                # ----------------------------------------------------
+                # பகுதி 3.1: பலவகை பணப்பரிவர்த்தனைத் தேர்வு
                 with st.container(border=True):
                     st.markdown("#### 💳 பணம் செலுத்தும் / பெறும் வழிகள் (Payment Modes & Split)")
                     pm_c1, pm_c2, pm_c3 = st.columns(3)
@@ -1698,9 +1693,7 @@ else:
                                 key="bank_ref_input"
                             )
 
-                # ----------------------------------------------------
-                # பகுதி 3.2: ரூபாய் நோட்டுகள் கணக்கீடு (Cash Denominations)
-                # ----------------------------------------------------
+                # பகுதி 3.2: ரூபாய் நோட்டுகள் கணக்கீடு
                 with st.expander("💼 தற்போதைய கல்லா கையிருப்பு நோட்டுகள் (Live Drawer Stock)", expanded=False):
                     ds1, ds2, ds3, ds4 = st.columns(4)
                     ds1.metric("₹500", f"{current_drawer['500']} தாள்கள்")
@@ -1725,7 +1718,6 @@ else:
 
                     if cash_portion > 0:
                         if net_target < 0:
-                            # Cash IN
                             with st.expander("📥 வாடிக்கையாளர் தந்த நோட்டுகள் (Cash IN)", expanded=True):
                                 r1_1, r1_2, r1_3, r1_4 = st.columns(4)
                                 in_500 = r1_1.number_input("₹500", min_value=0, step=1, key="in_500", disabled=otp_already_sent)
@@ -1740,7 +1732,6 @@ else:
                                 in_coins = r2_4.number_input("சில்லறை ₹", min_value=0, step=1, key="in_coins", disabled=otp_already_sent)
 
                         else:
-                            # Cash OUT
                             with st.expander("📤 நாம் வாடிக்கையாளருக்கு கொடுத்த நோட்டுகள் (Cash OUT)", expanded=True):
                                 max_500 = max(0, current_drawer["500"])
                                 max_200 = max(0, current_drawer["200"])
@@ -1785,9 +1776,7 @@ else:
                         else:
                             st.success("✅ ரொக்கம் மற்றும் வங்கிப் பிரிவுகள் சரியாகப் பொருந்துகின்றன!")
 
-                # ----------------------------------------------------
                 # பகுதி 3.3: OTP சரிபார்ப்பு & நிறைவு செய்தல்
-                # ----------------------------------------------------
                 with col_den2:
                     st.markdown("#### 📲 OTP சரிபார்ப்பு (Fast2SMS DLT)")
                     st.write(f"வாடிக்கையாளர்: **{visit['customer_name']}**")
