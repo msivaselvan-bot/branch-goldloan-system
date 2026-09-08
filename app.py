@@ -932,10 +932,29 @@ else:
                             "basis_type": clean_basis,
                             "unit_value": float(ir_unit),
                             "points_per_unit": float(ir_pts),
-                            "is_active": True
+                            "is_active": True,
                         }
-                        # On-conflict update
-                        supabase.table("staff_incentive_rules").upsert(payload, on_conflict="transaction_type").execute()
+
+                        # upsert-க்கு பதிலாக முதலில் உள்ளதா எனச் சரிபார்க்கிறோம்
+                        check_existing = (
+                            supabase.table("staff_incentive_rules")
+                            .select("id")
+                            .eq("transaction_type", ir_txn_type)
+                            .execute()
+                        )
+
+                        if check_existing.data:
+                            # ஏற்கனவே இருந்தால் update செய்கிறோம்
+                            rule_id = check_existing.data[0]["id"]
+                            supabase.table("staff_incentive_rules").update(
+                                payload
+                            ).eq("id", rule_id).execute()
+                        else:
+                            # புதிய விதியாக இருந்தால் insert செய்கிறோம்
+                            supabase.table("staff_incentive_rules").insert(
+                                payload
+                            ).execute()
+
                         st.success(f"✅ '{ir_txn_type}' விதியானது சேமிக்கப்பட்டது!")
                         st.rerun()
                     except Exception as e:
