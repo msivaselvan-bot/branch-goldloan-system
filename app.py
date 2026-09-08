@@ -13,7 +13,6 @@ st.set_page_config(page_title="Branch Operations System", layout="wide")
 # ==============================================================================
 st.markdown("""
 <style>
-    /* 1. Streamlit Header, Footer மற்றும் Floating Badges-களை முழுமையாக மறைத்தல் */
     header[data-testid="stHeader"] {
         display: none !important;
         visibility: hidden !important;
@@ -43,7 +42,6 @@ st.markdown("""
         transform: scale(0) !important;
     }
 
-    /* 2. ஆப் பின்னணி - மென்மையான லாவெண்டர் மேட் பினிஷ் */
     .stApp {
         background: #F4EFFB !important;
         color: #26153B !important;
@@ -60,7 +58,6 @@ st.markdown("""
         margin: auto;
     }
 
-    /* 3. முகப்பு கார்டு */
     .login-box {
         background: linear-gradient(145deg, #2D144E 0%, #1E0B36 100%) !important;
         border: 1.5px solid #D4AF37 !important;
@@ -85,7 +82,6 @@ st.markdown("""
         margin-bottom: 22px;
     }
 
-    /* 4. ஆப் ஸ்டைல் உள்ளீட்டுப் புலங்கள் */
     .stTextInput input, .stNumberInput input {
         background-color: #FFFFFF !important;
         border: 1.5px solid #D6C2F0 !important;
@@ -108,7 +104,6 @@ st.markdown("""
         font-weight: 600 !important;
     }
 
-    /* 5. தொடு-உணர்வு பட்டன்கள் */
     button[kind="primary"], .stButton > button[type="primary"] {
         background: linear-gradient(135deg, #D4AF37 0%, #E8CA65 50%, #B8860B 100%) !important;
         color: #2B1800 !important;
@@ -134,7 +129,6 @@ st.markdown("""
         transition: transform 0.1s ease !important;
     }
 
-    /* 6. கார்டுகள் & கண்டெய்னர்கள் */
     div[data-testid="stExpander"], div[data-testid="stVerticalBlock"] > div[style*="border:"] {
         background: #FFFFFF !important;
         border: 1.5px solid #E1D2F5 !important;
@@ -144,7 +138,6 @@ st.markdown("""
         overflow: hidden;
     }
 
-    /* 7. மெட்ரிக் கார்டுகள் */
     div[data-testid="stMetric"] {
         background: #FFFFFF !important;
         border: 1px solid #E8DCF8 !important;
@@ -165,7 +158,6 @@ st.markdown("""
         font-weight: 600 !important;
     }
 
-    /* 8. ஆப் ஸ்டைல் டேப்கள் */
     button[data-baseweb="tab"] {
         background: transparent !important;
         color: #613E8D !important;
@@ -341,13 +333,9 @@ def get_current_branch_cash_drawer(branch_id: int):
     except Exception:
         return empty_stock
 
-# ==========================================
-# காரணப் பணியாளர் அறிக்கை (மேம்படுத்தப்பட்ட வடிவம்)
-# ==========================================
 def render_staff_attribution_report(selected_branch_id=None):
     st.markdown("### 📊 காரணப் பணியாளர் வாரியான நடவடிக்கைகள் அறிக்கை")
 
-    # 1. தேதி மற்றும் பணியாளர் வடிகட்டல்கள்
     f_col1, f_col2, f_col3 = st.columns([1.5, 1.5, 2])
     start_date = f_col1.date_input("தொடக்கத் தேதி (From):", value=date.today().replace(day=1), key=f"rep_s_{selected_branch_id}")
     end_date = f_col2.date_input("முடிவுத் தேதி (To):", value=date.today(), key=f"rep_e_{selected_branch_id}")
@@ -359,7 +347,6 @@ def render_staff_attribution_report(selected_branch_id=None):
     start_dt_str = f"{start_date}T00:00:00"
     end_dt_str = f"{end_date}T23:59:59"
 
-    # Supabase வினவல்
     query = (
         supabase.table("customer_visits")
         .select("id, visit_no, branch_id, created_at, payment_mode, cash_amount, bank_amount, branches(branch_name), transactions(*)")
@@ -397,26 +384,22 @@ def render_staff_attribution_report(selected_branch_id=None):
         st.info("தேர்ந்தெடுக்கப்பட்ட தேதி வரம்பில் பரிவர்த்தனைகள் எதுவும் இல்லை.")
         return
 
-    # பணியாளர் வடிகட்டி
     staff_filter_options = ["அனைத்து பணியாளர்களும் (All Staff & Walk-in)"] + sorted(list(all_staff_set))
     with f_col3:
         selected_staff_filter = st.selectbox("காரணப் பணியாளரைத் தேர்ந்தெடுக்கவும்:", staff_filter_options, key=f"staff_flt_{selected_branch_id}")
 
     df_rep = pd.DataFrame(flat_data)
 
-    # தேர்ந்தெடுக்கப்பட்ட பணியாளருக்கு மட்டும் வடிகட்டுதல்
     if selected_staff_filter != "அனைத்து பணியாளர்களும் (All Staff & Walk-in)":
         df_filtered = df_rep[df_rep["காரணப் பணியாளர்"] == selected_staff_filter].copy()
     else:
         df_filtered = df_rep.copy()
 
-    # 2. பிசினஸ் சுருக்க மெட்ரிக் கார்டுகள்
     tot_txns = len(df_filtered)
     tot_paid = df_filtered["பட்டுவாடா (Paid ₹)"].sum()
     tot_rec = df_filtered["வரவு (Received ₹)"].sum()
     net_business_flow = tot_paid - tot_rec
 
-    # Walk-in vs Staff Business தனித் தொகை கணக்கீடு (ஒட்டுமொத்த பார்வையிலும்)
     walkin_df = df_rep[df_rep["காரணப் பணியாளர்"].str.contains("Walk-in", na=False)]
     walkin_vol = walkin_df["பட்டுவாடா (Paid ₹)"].sum() + walkin_df["வரவு (Received ₹)"].sum()
 
@@ -434,7 +417,6 @@ def render_staff_attribution_report(selected_branch_id=None):
 
     st.markdown("---")
 
-    # 3. பணியாளர் மற்றும் நடவடிக்கை வாரியான தொகுப்பு
     st.markdown(f"##### 👥 பிசினஸ் தொகுப்பு விவரங்கள் ({selected_staff_filter})")
     staff_summary = df_filtered.groupby(["காரணப் பணியாளர்", "நடவடிக்கை வகை"]).agg(
         எண்ணிக்கை=("நடவடிக்கை வகை", "count"),
@@ -643,15 +625,133 @@ else:
                 df_cust = df_raw.dropna(subset=["Full Name", "Mobile No"]).copy()
                 st.success(f"{len(df_cust)} வாடிக்கையாளர்கள் பதிவு செய்யப்படுகிறார்கள்...")
 
+        # -----------------------------------------------------------------
+        # tab4: வாடிக்கையாளர் மேலாண்மை (முழுமையான திருத்தப் படிவத்துடன்)
+        # -----------------------------------------------------------------
         with tab4:
-            st.subheader("🗂️ வாடிக்கையாளர் பட்டியல் & KYC திருத்தம்")
-            cust_list = supabase.table("customers").select("*").order("id", desc=True).limit(100).execute().data or []
-            if cust_list:
+            st.subheader("🗂️ வாடிக்கையாளர் பட்டியல் & திருத்தம் (Customer Directory & Edit)")
+
+            filter_c1, filter_c2 = st.columns([2, 3])
+            with filter_c1:
+                b_filters = ["அனைத்து கிளைகளும் (All Branches)"] + list(branch_options.keys())
+                sel_b_flt = st.selectbox("கிளை வாரியாகப் பார்க்க:", b_filters, key="adm_cust_b_filter")
+            with filter_c2:
+                admin_search_q = st.text_input("வாடிக்கையாளர் பெயர் / மொபைல் / Code தேடுக:", placeholder="எ.கா: ராம் அல்லது 98765...", key="adm_cust_search")
+
+            cq = supabase.table("customers").select("*, branches(branch_name)").order("id", desc=True)
+            if sel_b_flt != "அனைத்து கிளைகளும் (All Branches)":
+                cq = cq.eq("branch_id", branch_options.get(sel_b_flt))
+
+            if admin_search_q.strip():
+                sq = admin_search_q.strip()
+                cq = cq.or_(f"name.ilike.%{sq}%,mobile.ilike.%{sq}%,customer_code.ilike.%{sq}%")
+            else:
+                cq = cq.limit(100)
+
+            cust_list_data = cq.execute().data or []
+            st.write(f"📊 கண்டறியப்பட்ட வாடிக்கையாளர்கள்: **{len(cust_list_data)}**")
+
+            if cust_list_data:
                 st.dataframe(pd.DataFrame([{
-                    "ID": c["id"], "Code": c["customer_code"], "பெயர்": c["name"], "மொபைல்": c["mobile"],
+                    "ID": c["id"],
+                    "Code": c.get("customer_code", "-"),
+                    "பெயர்": c["name"],
+                    "கார்டியன்": c.get("guardian_name", "-"),
+                    "மொபைல்": c.get("mobile", "-"),
+                    "கிளை": c.get("branches", {}).get("branch_name", "பொது"),
                     "KYC நிலை": c.get("kyc_status", "Approved"),
-                    "செயல் நிலை": "🟢 Active" if c.get("is_active", True) else "🔴 Inactive"
-                } for c in cust_list]), use_container_width=True)
+                    "நிலை": "🟢 Active" if c.get("is_active", True) else "🔴 Inactive",
+                    "முகவரி": c.get("address", "-")
+                } for c in cust_list_data]), use_container_width=True)
+
+                st.markdown("---")
+                st.subheader("✏️ வாடிக்கையாளர் விவரங்கள் மற்றும் KYC ஆவணங்கள் திருத்துதல்")
+
+                cust_dict_edit = {f"{c.get('customer_code', '')} - {c['name']} ({c.get('mobile', '')})": c for c in cust_list_data}
+                sel_cust_key = st.selectbox("திருத்த வேண்டிய வாடிக்கையாளரைத் தேர்வு செய்க:", list(cust_dict_edit.keys()), key="adm_sel_cust_edit")
+                curr_c = cust_dict_edit[sel_cust_key]
+
+                with st.form("admin_edit_customer_full_form"):
+                    e_col1, e_col2, e_col3 = st.columns(3)
+
+                    with e_col1:
+                        ed_name = st.text_input("வாடிக்கையாளர் பெயர்", value=curr_c.get("name", ""))
+                        ed_guard = st.text_input("கார்டியன் பெயர்", value=curr_c.get("guardian_name", "") or "")
+                        gender_list = ["Male", "Female", "Other", "ஆண்", "பெண்"]
+                        g_curr = curr_c.get("gender", "Male")
+                        g_idx = gender_list.index(g_curr) if g_curr in gender_list else 0
+                        ed_gender = st.selectbox("பாலினம்", gender_list, index=g_idx)
+                        ed_dob = st.text_input("பிறந்த தேதி (YYYY-MM-DD)", value=str(curr_c.get("dob", "") or ""))
+
+                    with e_col2:
+                        ed_mob = st.text_input("முதன்மை மொபைல்", value=str(curr_c.get("mobile", "") or ""))
+                        ed_mob2 = st.text_input("கூடுதல் மொபைல்", value=str(curr_c.get("mobile2", "") or ""))
+                        ed_bname = branch_id_to_name.get(curr_c.get("branch_id"), list(branch_options.keys())[0] if branch_options else "")
+                        b_opts_list = list(branch_options.keys())
+                        b_idx = b_opts_list.index(ed_bname) if ed_bname in b_opts_list else 0
+                        ed_branch = st.selectbox("ஒதுக்கப்பட்ட கிளை", b_opts_list, index=b_idx)
+                        ed_nominee = st.text_input("நாமினி பெயர்", value=curr_c.get("nominee_name", "") or "")
+                        ed_rel = st.text_input("நாமினி உறவுமுறை", value=curr_c.get("nominee_relation", "") or "")
+
+                    with e_col3:
+                        ed_addr = st.text_area("முழு முகவரி", value=curr_c.get("address", "") or "", height=80)
+                        
+                        kyc_options = ["Approved", "Pending_KYC_Approval", "Rejected"]
+                        curr_kyc_st = curr_c.get("kyc_status", "Approved") or "Approved"
+                        k_idx = kyc_options.index(curr_kyc_st) if curr_kyc_st in kyc_options else 0
+                        ed_kyc_st = st.selectbox("KYC ஒப்புதல் நிலை (KYC Status)", kyc_options, index=k_idx)
+
+                        ed_status = st.radio(
+                            "வாடிக்கையாளர் நிலை (Active / Inactive)",
+                            ["Active (செயலில் உள்ளார்)", "Inactive (முடக்கு)"],
+                            index=0 if curr_c.get("is_active", True) else 1
+                        )
+
+                    st.markdown("##### 📁 தற்போது இணைக்கப்பட்டுள்ள ஆவணங்கள்:")
+                    doc_c1, doc_c2, doc_c3 = st.columns(3)
+                    with doc_c1:
+                        if curr_c.get("photo_url"):
+                            st.markdown(f"🔗 [தற்போதைய படம்]({curr_c['photo_url']})")
+                        ed_new_photo = st.file_uploader("புதிய படம் மாற்ற (Optional):", type=["jpg", "jpeg", "png"], key=f"adm_n_p_{curr_c['id']}")
+                    with doc_c2:
+                        if curr_c.get("id_proof_url"):
+                            st.markdown(f"🔗 [தற்போதைய அடையாள அட்டை]({curr_c['id_proof_url']})")
+                        ed_new_id = st.file_uploader("புதிய அடையாள ஆவணம் (Optional):", type=["jpg", "jpeg", "png", "pdf"], key=f"adm_n_id_{curr_c['id']}")
+                    with doc_c3:
+                        if curr_c.get("address_proof_url"):
+                            st.markdown(f"🔗 [தற்போதைய முகவரி ஆவணம்]({curr_c['address_proof_url']})")
+                        ed_new_addr = st.file_uploader("புதிய முகவரி ஆவணம் (Optional):", type=["jpg", "jpeg", "png", "pdf"], key=f"adm_n_ad_{curr_c['id']}")
+
+                    if st.form_submit_button("வாடிக்கையாளர் மாற்றங்களைச் சேமி (Update Customer)", type="primary"):
+                        try:
+                            up_payload = {
+                                "name": ed_name.strip(),
+                                "guardian_name": ed_guard.strip(),
+                                "gender": ed_gender,
+                                "dob": ed_dob.strip() if ed_dob.strip() else None,
+                                "mobile": ed_mob.strip(),
+                                "mobile2": ed_mob2.strip(),
+                                "branch_id": branch_options.get(ed_branch),
+                                "nominee_name": ed_nominee.strip(),
+                                "nominee_relation": ed_rel.strip(),
+                                "address": ed_addr.strip(),
+                                "kyc_status": ed_kyc_st,
+                                "is_active": True if "Active" in ed_status else False
+                            }
+                            if ed_new_photo:
+                                up_payload["photo_url"] = upload_single_file(ed_new_photo, "customer_photos")
+                            if ed_new_id:
+                                up_payload["id_proof_url"] = upload_single_file(ed_new_id, "customer_id_proofs")
+                            if ed_new_addr:
+                                up_payload["address_proof_url"] = upload_single_file(ed_new_addr, "customer_address_proofs")
+
+                            supabase.table("customers").update(up_payload).eq("id", curr_c["id"]).execute()
+                            st.success("வாடிக்கையாளர் விவரங்கள் வெற்றிகரமாகப் புதுப்பிக்கப்பட்டன!")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"சேமிப்பதில் பிழை: {e}")
+            else:
+                st.info("வாடிக்கையாளர் விவரங்கள் எதுவும் இல்லை.")
 
         with tab5:
             st.subheader("📊 வருகை & பரிவர்த்தனை மேலாண்மை")
@@ -914,22 +1014,50 @@ else:
                             st.success("அனுப்பப்பட்டது!")
                             st.rerun()
 
+        # -----------------------------------------------------------------
+        # branch_tab2: கிளை ஆவணங்கள் பதிவேற்றம் (மீண்டும் முழுமையாக இணைக்கப்பட்டது)
+        # -----------------------------------------------------------------
         with branch_tab2:
-            st.subheader("📁 கிளை ஆவணங்கள் பதிவேற்றம் (Upload Docs)")
-            branch_pending = supabase.table("customer_visits").select("*, customers(name, mobile)").eq("branch_id", st.session_state.branch_id).eq("status", "Pending_Branch_Docs").execute().data or []
+            st.subheader("📁 கிளை ஆவணங்கள் பதிவேற்றம் (Upload Docs Desk)")
+            st.caption("OTP முடிந்து, ஆப்பரேஷன்ஸ் அழைப்பு உறுதி செய்யப்பட்ட வருகைகளுக்கு இங்கே ஆவணங்களை இணைத்து தணிக்கைக்கு (Auditor) அனுப்பலாம்.")
+
+            branch_pending = (
+                supabase.table("customer_visits")
+                .select("*, customers(name, mobile), transactions(*)")
+                .eq("branch_id", st.session_state.branch_id)
+                .in_("status", ["Pending_Branch_Docs", "Pending_Calling_Verification"])
+                .order("id", desc=True)
+                .execute()
+                .data or []
+            )
+
             if not branch_pending:
-                st.info("தற்போது ஆவணங்கள் ஏற்ற வேண்டிய வருகைகள் இல்லை.")
+                st.info("தற்போது ஆவணங்கள் ஏற்ற வேண்டிய வருகைகள் எதுவும் இல்லை.")
             else:
                 for b_item in branch_pending:
-                    with st.expander(f"📄 {b_item['visit_no']} | {b_item.get('customers', {}).get('name')}"):
-                        up_docs = st.file_uploader("ஆவணங்களைத் தேர்வு செய்க", accept_multiple_files=True, key=f"up_{b_item['id']}")
-                        if st.button("சமர்ப்பிக்கவும்", key=f"sub_{b_item['id']}", type="primary"):
+                    c_info = b_item.get("customers", {})
+                    st_badge = "🟢 ஆப்பரேஷன் சரிபார்க்கப்பட்டது" if b_item["status"] == "Pending_Branch_Docs" else "🟡 அழைப்பு சரிபார்ப்பில் உள்ளது"
+                    with st.expander(f"📄 வருகை: {b_item['visit_no']} | வாடிக்கையாளர்: {c_info.get('name')} | தொகை: ₹{b_item['net_cash_amount']:,.2f} | முறை: {b_item.get('payment_mode', 'Cash')} | {st_badge}"):
+                        st.write(f"📞 **மொபைல்:** {c_info.get('mobile')} | **தேதி:** {b_item['created_at']}")
+                        if b_item.get("transactions"):
+                            st.dataframe(pd.DataFrame(b_item["transactions"])[["transaction_type", "paid_amount", "received_amount", "remarks"]], use_container_width=True)
+
+                        up_docs = st.file_uploader(f"ஆவணங்களை இணைக்கவும் - {b_item['visit_no']}", accept_multiple_files=True, key=f"doc_up_{b_item['id']}")
+
+                        if st.button(f"ஆவணங்களைச் சமர்ப்பித்து தணிக்கைக்கு அனுப்புக ({b_item['visit_no']})", key=f"btn_sub_{b_item['id']}", type="primary"):
                             if up_docs:
-                                links = upload_files_to_supabase(up_docs, b_item["visit_no"])
-                                supabase.table("customer_visits").update({"status": "Submitted_to_Auditor"}).eq("id", b_item["id"]).execute()
-                                supabase.table("audit_records").insert({"visit_id": b_item["id"], "document_urls": links, "audit_status": "Pending"}).execute()
-                                st.success("ஆவணங்கள் தணிக்கைக்கு அனுப்பப்பட்டுவிட்டன!")
-                                st.rerun()
+                                with st.spinner("ஆவணங்கள் பதிவேற்றப்படுகின்றன..."):
+                                    links = upload_files_to_supabase(up_docs, b_item["visit_no"])
+                                    supabase.table("customer_visits").update({"status": "Submitted_to_Auditor"}).eq("id", b_item["id"]).execute()
+                                    supabase.table("audit_records").insert({
+                                        "visit_id": b_item["id"],
+                                        "document_urls": links,
+                                        "audit_status": "Pending"
+                                    }).execute()
+                                    st.success("✅ ஆவணங்கள் வெற்றிகரமாகத் தணிக்கைக்கு (Auditor) அனுப்பப்பட்டுவிட்டன!")
+                                    st.rerun()
+                            else:
+                                st.error("குறைந்தது ஒரு ஆவணமாவது தேர்ந்தெடுக்கப்பட வேண்டும்.")
 
         with branch_tab1:
             staff_res = supabase.table("users").select("name").eq("branch_id", st.session_state.branch_id).eq("is_active", True).execute()
@@ -1133,7 +1261,7 @@ else:
                     elif txn_category == "GS (Gold Sale)":
                         received_amt = st.number_input("பெற்ற தொகை (₹) *", min_value=0.0, step=500.0)
 
-                    if st.form_submit_button("➕ பட்டியலில் சேர் (Add to Cart)", type="primary"):
+                    if st.form_submit_button("➕列表中 சேர் (Add to Cart)", type="primary"):
                         if paid_amt > 0 or received_amt > 0:
                             all_remarks = " | ".join(detail_summary)
                             if custom_remarks.strip():
