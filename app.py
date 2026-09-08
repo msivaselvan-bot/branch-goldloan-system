@@ -621,19 +621,20 @@ else:
                             st.rerun()
 
         # -----------------------------------------------------------------
-        # tab3: ஸ்கீம்கள் மேலாண்மை (Pledge / Gold Loan, FD, RD) - NEW
+        # tab3: ஸ்கீம்கள் மேலாண்மை (Pledge, FD, RD) - சரிசெய்யப்பட்ட வடிவம்
         # -----------------------------------------------------------------
         with tab3:
             st.subheader("📋 ஸ்கீம்கள் மேலாண்மை (Pledge, FD & RD Scheme Master)")
             s_tab1, s_tab2, s_tab3 = st.tabs(["🪙 நகைக்கடன் திட்டங்கள் (Pledge)", "📑 FD திட்டங்கள்", "📈 RD திட்டங்கள்"])
 
-            # 1. நகைக்கடன் திட்டம் (Pledge Scheme Form)
+            # 1. நகைக்கடன் திட்டம் (Pledge Scheme Form with RPG & Direct Slabs)
             with s_tab1:
                 st.markdown("##### 🪙 புதிய நகைக் கடன் திட்டம் உருவாக்குதல் (Create Gold Loan Scheme)")
                 with st.form("admin_gold_scheme_form", clear_on_submit=True):
                     gs_col1, gs_col2, gs_col3 = st.columns(3)
                     with gs_col1:
                         gs_name = st.text_input("Scheme Name *", placeholder="எ.கா: சூப்பர் சேவர் 12%")
+                        gs_rpg = st.number_input("Rate Per Gram (RPG ₹) *", min_value=100.0, value=5500.0, step=50.0, help="ஒரு கிராம் தங்கத்திற்கான அனுமதிக்கப்படும் அதிகபட்ச கடன் தொகை")
                         gs_min = st.number_input("Min Loan Value (₹)", min_value=0.0, value=1000.0, step=500.0)
                         gs_max = st.number_input("Max Loan Value (₹)", min_value=0.0, value=1000000.0, step=5000.0)
                     with gs_col2:
@@ -644,22 +645,38 @@ else:
                     with gs_col3:
                         gs_auction_chg = st.number_input("Auction Charges (%)", min_value=0.0, value=2.0, step=0.5)
                         gs_penal_chg = st.number_input("Penal Charges (% on total interest after tenor)", min_value=0.0, value=2.0, step=0.5)
-                        st.caption("ℹ️ குறிப்பு: காலம் முடிந்ததும் (Tenor Over) மொத்த வட்டியின் மீது இந்த அபராத வட்டி கணக்கிடப்படும்.")
 
-                    st.markdown("###### 📊 Interest Slabs (வட்டி ஸ்லாப்கள் - JSON வடிவில்):")
-                    gs_slabs_json = st.text_area(
-                        "Interest Slabs JSON Format:",
-                        value='[\n  {"from_days": 1, "to_days": 90, "roi": 12.0},\n  {"from_days": 91, "to_days": 180, "roi": 15.0},\n  {"from_days": 181, "to_days": 365, "roi": 18.0}\n]',
-                        height=100
-                    )
+                    st.markdown("###### 📊 Interest Slabs (வட்டி ஸ்லாப்கள் - நேரடி உள்ளீடு):")
+                    st.caption("JSON குறியீடு இல்லாமல் நேரடியாக நாட்கள் மற்றும் வட்டி விகிதத்தை உள்ளிடவும்:")
+                    sl_c1, sl_c2, sl_c3 = st.columns(3)
+                    with sl_c1:
+                        st.markdown("**ஸ்லாப் 1 (Slab 1):**")
+                        s1_from = st.number_input("தொடக்க நாள்", value=1, step=1, key="s1_f")
+                        s1_to = st.number_input("முடிவு நாள்", value=90, step=1, key="s1_t")
+                        s1_roi = st.number_input("வட்டி விகிதம் (%)", value=12.0, step=0.5, key="s1_r")
+                    with sl_c2:
+                        st.markdown("**ஸ்லாப் 2 (Slab 2):**")
+                        s2_from = st.number_input("தொடக்க நாள்", value=91, step=1, key="s2_f")
+                        s2_to = st.number_input("முடிவு நாள்", value=180, step=1, key="s2_t")
+                        s2_roi = st.number_input("வட்டி விகிதம் (%)", value=15.0, step=0.5, key="s2_r")
+                    with sl_c3:
+                        st.markdown("**ஸ்லாப் 3 (Slab 3):**")
+                        s3_from = st.number_input("தொடக்க நாள்", value=181, step=1, key="s3_f")
+                        s3_to = st.number_input("முடிவு நாள்", value=365, step=1, key="s3_t")
+                        s3_roi = st.number_input("வட்டி விகிதம் (%)", value=18.0, step=0.5, key="s3_r")
 
                     if st.form_submit_button("நகைக்கடன் ஸ்கீமைச் சேமி (Save Gold Scheme)", type="primary"):
                         if gs_name.strip():
                             try:
-                                parsed_slabs = json.loads(gs_slabs_json)
+                                formatted_slabs = [
+                                    {"from_days": int(s1_from), "to_days": int(s1_to), "roi": float(s1_roi)},
+                                    {"from_days": int(s2_from), "to_days": int(s2_to), "roi": float(s2_roi)},
+                                    {"from_days": int(s3_from), "to_days": int(s3_to), "roi": float(s3_roi)}
+                                ]
                                 supabase.table("gold_loan_schemes").insert({
                                     "scheme_name": gs_name.strip(),
-                                    "interest_slabs": parsed_slabs,
+                                    "rate_per_gram": float(gs_rpg),
+                                    "interest_slabs": formatted_slabs,
                                     "min_loan_amount": float(gs_min),
                                     "max_loan_amount": float(gs_max),
                                     "scheme_tenor_months": int(gs_tenor),
@@ -670,7 +687,7 @@ else:
                                     "penal_charges_percent": float(gs_penal_chg),
                                     "is_active": True
                                 }).execute()
-                                st.success(f"✅ '{gs_name}' திட்டம் வெற்றிகரமாகச் சேமிக்கப்பட்டது!")
+                                st.success(f"✅ '{gs_name}' திட்டம் (RPG: ₹{gs_rpg:,.2f}) வெற்றிகரமாகச் சேமிக்கப்பட்டது!")
                                 st.rerun()
                             except Exception as e:
                                 st.error(f"பிழை: {e}")
@@ -680,7 +697,7 @@ else:
                 st.markdown("###### 📋 தற்போதுள்ள நகைக் கடன் திட்டங்கள்")
                 g_schemes = supabase.table("gold_loan_schemes").select("*").order("id", desc=True).execute().data or []
                 if g_schemes:
-                    st.dataframe(pd.DataFrame(g_schemes)[["scheme_name", "scheme_tenor_months", "min_loan_amount", "max_loan_amount", "charges_timing", "charges_value", "penal_charges_percent"]], use_container_width=True)
+                    st.dataframe(pd.DataFrame(g_schemes)[["scheme_name", "rate_per_gram", "scheme_tenor_months", "min_loan_amount", "max_loan_amount", "charges_timing", "charges_value", "penal_charges_percent"]], use_container_width=True)
 
             # 2. FD திட்டம் (Fixed Deposit Scheme Form)
             with s_tab2:
@@ -698,17 +715,26 @@ else:
                     with fd_c3:
                         fd_payout = st.selectbox("Interest Payout", ["Monthly", "Quarterly", "Half-Yearly", "Yearly", "At Maturity"])
 
-                    st.markdown("###### 📊 Pre-closure Interest Slabs (முதிர்வுக்கு முன் எடுப்பதற்கான வட்டி விகிதங்கள்):")
-                    fd_slabs_json = st.text_area(
-                        "Pre-closure Slabs JSON Format:",
-                        value='[\n  {"from_month": 1, "to_month": 3, "roi": 0.0},\n  {"from_month": 4, "to_month": 6, "roi": 5.0},\n  {"from_month": 7, "to_month": 11, "roi": 7.0}\n]',
-                        height=90
-                    )
+                    st.markdown("###### 📊 Pre-closure Interest Slabs (முதிர்வுக்கு முன் எடுப்பதற்கான வட்டி):")
+                    p_c1, p_c2, p_c3 = st.columns(3)
+                    with p_c1:
+                        p1_m = st.number_input("0 முதல் எத்தனை மாதம் வரை?", value=3, step=1, key="p1_m")
+                        p1_r = st.number_input("வட்டி விகிதம் (%)", value=0.0, step=0.5, key="p1_r")
+                    with p_c2:
+                        p2_m = st.number_input("அடுத்த எத்தனை மாதம் வரை?", value=6, step=1, key="p2_m")
+                        p2_r = st.number_input("வட்டி விகிதம் (%)", value=5.0, step=0.5, key="p2_r")
+                    with p_c3:
+                        p3_m = st.number_input("முதிர்வு வரை (மாதம்)", value=12, step=1, key="p3_m")
+                        p3_r = st.number_input("வட்டி விகிதம் (%)", value=7.0, step=0.5, key="p3_r")
 
                     if st.form_submit_button("FD ஸ்கீமைச் சேமி (Save FD Scheme)", type="primary"):
                         if fd_name.strip():
                             try:
-                                parsed_fd_slabs = json.loads(fd_slabs_json)
+                                fd_slabs_list = [
+                                    {"from_month": 1, "to_month": int(p1_m), "roi": float(p1_r)},
+                                    {"from_month": int(p1_m) + 1, "to_month": int(p2_m), "roi": float(p2_r)},
+                                    {"from_month": int(p2_m) + 1, "to_month": int(p3_m), "roi": float(p3_r)}
+                                ]
                                 supabase.table("fd_schemes").insert({
                                     "scheme_name": fd_name.strip(),
                                     "tenure_months": int(fd_tenure),
@@ -717,7 +743,7 @@ else:
                                     "annual_interest_percent": float(fd_interest),
                                     "interest_type": fd_int_type,
                                     "interest_payout": fd_payout,
-                                    "preclosure_interest_slabs": parsed_fd_slabs,
+                                    "preclosure_interest_slabs": fd_slabs_list,
                                     "is_active": True
                                 }).execute()
                                 st.success(f"✅ '{fd_name}' FD திட்டம் வெற்றிகரமாகச் சேமிக்கப்பட்டது!")
@@ -1068,7 +1094,7 @@ else:
                                 st.success("அங்கீகரிக்கப்பட்டார்!")
                                 st.rerun()
                         with kyc_btn2:
-                            if st.button("❌ மறுப்பு (Reject)", key=f"rej_kyc_{pcust['id']}"):
+                            if st.button("❌ நிராகரி (Reject)", key=f"rej_kyc_{pcust['id']}"):
                                 supabase.table("customers").update({"kyc_status": "Rejected", "is_active": False, "kyc_remarks": kyc_reason}).eq("id", pcust["id"]).execute()
                                 st.warning("நிராகரிக்கப்பட்டார்.")
                                 st.rerun()
@@ -1162,7 +1188,7 @@ else:
     # ----------------------------------------------------
     elif st.session_state.user_role == "Auditor":
         st.header("🔍 தணிக்கையர் பணிப்பாய்வு (Auditor Verification)")
-        pending_visits = supabase.table("customer_visits").select("*, customers(name, mobile), transactions(*), audit_records(*)").eq("status", "Submitted_to_Auditor").execute().data or []
+        pending_visits = supabase.table("customer_visits").select("*, customers(name, mobile), transactions(*)").eq("status", "Submitted_to_Auditor").execute().data or []
         if not pending_visits:
             st.info("தணிக்கை செய்ய எந்த ஆவணங்களும் வரவில்லை.")
         else:
@@ -1194,6 +1220,8 @@ else:
 
         with branch_tab5:
             st.subheader("🏦 தலைமையக பணப் பரிமாற்றம் (Head Office ⇄ Branch Fund Transfer Desk)")
+            st.caption("தலைமையகத்திலிருந்து ரொக்கம் பெறுதல் அல்லது தலைமையகத்திற்கு ரொக்கம் அனுப்புதல். (இரு பரிமாற்றங்களும் ஆப்பரேஷன்ஸ் ஒப்புதலுக்குப் பிறகே கல்லாவில் சேரும் / கழியும்).")
+
             curr_b_drawer = get_current_branch_cash_drawer(st.session_state.branch_id)
 
             with st.expander("💼 தற்போதைய நேரடி கல்லா கையிருப்பு (Live Approved Stock)", expanded=False):
@@ -1282,7 +1310,7 @@ else:
                         except Exception as e:
                             st.error(f"பிழை: {e}")
                     else:
-                        st.error("தொகையை உள்ளிடவும்.")
+                        st.error("நோட்டுகள் அல்லது பரிமாற்றத் தொகையை உள்ளிடவும்.")
 
             st.markdown("---")
             st.subheader("📋 உங்கள் கிளையின் சமீபத்திய பணப் பரிமாற்றங்கள் & ஒப்புதல் நிலை")
@@ -1526,6 +1554,8 @@ else:
                             new_relation = st.text_input("உறவுமுறை")
                             new_addr_doc = st.file_uploader("3. முகவரி சான்று ஆவணம் *", type=["jpg", "jpeg", "png", "pdf"])
 
+                        st.caption("ℹ️ குறிப்பு: புதிய வாடிக்கையாளர் பதிவு செய்தவுடன் ஆப்பரேஷன்ஸ் ஒப்புதலுக்குச் செல்லும் (Pending KYC). அவர்கள் ஒப்புதல் அளித்த பிறகே கடன் பரிவர்த்தனை செய்ய முடியும்.")
+
                         if st.form_submit_button("வாடிக்கையாளரைப் பதிவு செய்து ஒப்புதலுக்கு அனுப்புக (Submit KYC)", type="primary"):
                             if new_name.strip() and new_mob1.strip() and new_address.strip():
                                 try:
@@ -1567,11 +1597,12 @@ else:
                 st.subheader("படி 2: வணிக நடவடிக்கைகள் சேர்த்தல்")
 
                 # டேட்டாபேஸிலிருந்து திட்டங்களை (Schemes) வாசித்தல்
-                active_g_schemes = supabase.table("gold_loan_schemes").select("scheme_name, scheme_tenor_months, interest_slabs").eq("is_active", True).execute().data or []
-                active_fd_schemes = supabase.table("fd_schemes").select("scheme_name, tenure_months, annual_interest_percent").eq("is_active", True).execute().data or []
-                active_rd_schemes = supabase.table("rd_schemes").select("scheme_name, tenure_months, annual_interest_percent").eq("is_active", True).execute().data or []
+                active_g_schemes = supabase.table("gold_loan_schemes").select("*").eq("is_active", True).execute().data or []
+                active_fd_schemes = supabase.table("fd_schemes").select("*").eq("is_active", True).execute().data or []
+                active_rd_schemes = supabase.table("rd_schemes").select("*").eq("is_active", True).execute().data or []
 
-                gold_scheme_options = [s["scheme_name"] for s in active_g_schemes] if active_g_schemes else ["General 12%", "Standard 18%"]
+                g_scheme_map = {s["scheme_name"]: s for s in active_g_schemes}
+                gold_scheme_options = list(g_scheme_map.keys()) if g_scheme_map else ["General 12%"]
                 fd_scheme_options = [s["scheme_name"] for s in active_fd_schemes] if active_fd_schemes else ["Standard FD (9.5%)"]
                 rd_scheme_options = [s["scheme_name"] for s in active_rd_schemes] if active_rd_schemes else ["Standard RD (10%)"]
 
@@ -1598,19 +1629,29 @@ else:
                     st.markdown("---")
                     paid_amt, received_amt, detail_summary = 0.0, 0.0, []
 
-                    # 1. புதிய நகைக் கடன் (Pledge with Dynamic Schemes)
+                    # 1. புதிய நகைக் கடன் (Pledge with Dynamic RPG Calculation)
                     if txn_category == "Pledge (புதிய நகைக் கடன்)":
                         p_col1, p_col2, p_col3 = st.columns(3)
                         with p_col1:
                             new_gl_no = st.text_input("புதிய கடன் எண் (GL No) *")
                             scheme_name = st.selectbox("அட்மின் நகைக் கடன் திட்டம் (Scheme) *", gold_scheme_options)
+                            sel_scheme_obj = g_scheme_map.get(scheme_name, {})
+                            cur_rpg = float(sel_scheme_obj.get("rate_per_gram", 0) or 0)
+                            if cur_rpg > 0:
+                                st.info(f"💎 **இந்த ஸ்கீமின் RPG:** `₹{cur_rpg:,.2f} / gram`")
+
                         with p_col2:
-                            gross_wt = st.number_input("மொத்த எடை (gms) *", min_value=0.0, step=0.1)
-                            net_wt = st.number_input("நிகர எடை (gms) *", min_value=0.0, step=0.1)
-                        with p_col3:
+                            gross_wt = st.number_input("மொத்த எடை (Gross Weight - gms) *", min_value=0.0, step=0.1)
+                            net_wt = st.number_input("நிகர எடை (Net Weight - gms) *", min_value=0.0, step=0.1)
                             item_count = st.number_input("நகை எண்ணிக்கை", min_value=1, step=1)
+
+                        with p_col3:
+                            max_eligible_calc = net_wt * cur_rpg if cur_rpg > 0 else 0.0
+                            if cur_rpg > 0 and net_wt > 0:
+                                st.success(f"⚖️ அதிகபட்ச அனுமதிக்கப்படும் கடன்: **₹{max_eligible_calc:,.2f}**")
                             paid_amt = st.number_input("கடன் தொகை (Paid ₹) *", min_value=0.0, step=500.0)
-                        detail_summary = [f"GL: {new_gl_no}", f"ஸ்கீம்: {scheme_name}", f"எடை: {net_wt}g"]
+
+                        detail_summary = [f"GL: {new_gl_no}", f"ஸ்கீம்: {scheme_name}", f"RPG: ₹{cur_rpg}", f"எடை: {net_wt}g"]
 
                     elif txn_category == "GL Release (அடமானம் மீட்டல்)":
                         r_col1, r_col2 = st.columns(2)
@@ -1640,7 +1681,6 @@ else:
                             paid_amt = st.number_input("செலுத்திய தொகை (₹) *", min_value=0.0, step=500.0)
                         detail_summary = [f"வங்கி: {bank_source}", f"கடன் எண்: {prev_loan_no}"]
 
-                    # 2. FD Open (Dynamic FD Schemes)
                     elif txn_category == "FD Open (புதிய வைப்பு நிதி)":
                         f_col1, f_col2 = st.columns(2)
                         with f_col1:
@@ -1650,7 +1690,6 @@ else:
                             received_amt = st.number_input("வைப்புத் தொகை (Deposit ₹) *", min_value=0.0, step=1000.0)
                         detail_summary = [f"FD No: {fd_acc_no}", f"FD Scheme: {fd_sel_scheme}"]
 
-                    # 3. RD Open (Dynamic RD Schemes)
                     elif txn_category == "RD Open (புதிய RD சேமிப்பு)":
                         rd_col1, rd_col2 = st.columns(2)
                         with rd_col1:
@@ -1777,7 +1816,7 @@ else:
                     ds2.metric("₹10", f"{current_drawer['10']} தாள்கள்")
                     ds3.metric("₹100", f"{current_drawer['100']} தாள்கள்")
                     ds3.metric("₹5", f"{current_drawer['5']} தாள்கள்")
-                    ds4.metric("₹50", f"{current_drawer['50']} தாள்கள்")
+                    ds4.metric("₹50", f"{current_drawer['50']}")
                     ds4.metric("நாணயங்கள்", f"₹{current_drawer['coins']:,.2f}")
 
                 if otp_already_sent:
@@ -1859,11 +1898,12 @@ else:
                         elif bank_portion > 0 and not bank_ref_no.strip():
                             st.warning("⚠️ வங்கி பரிவர்த்தனைக்கான UTR / Ref எண்ணை உள்ளிடவும்!")
                         else:
-                            st.success("✅ நோட்டுகள் மற்றும் கொடுத்த பேலன்ஸ் சில்லறை சரியாகப் பொருந்தியது!")
+                            st.success("✅ நோட்டுகள் மற்றும் பேலன்ஸ் சில்லறை சரியாகப் பொருந்தியது!")
 
                 with col_den2:
                     st.markdown("#### 📲 OTP சரிபார்ப்பு")
-                    st.write(f"வாடிக்கையாளர்: **{visit['customer_name']}** | 📞 `{visit['mobile']}`")
+                    st.write(f"வாடிக்கையாளர்: **{visit['customer_name']}**")
+                    st.write(f"மொபைல் எண்: `{visit['mobile']}`")
 
                     if not is_ready:
                         st.warning("⚠️ ரொக்க நோட்டுகளும் பேலன்ஸ் சில்லறையும் சரியாக அமைந்ததும் OTP இயங்கும்.")
@@ -1882,7 +1922,7 @@ else:
                                 st.info(f"💡 சோதனை OTP: **{otp_code}**")
                             st.rerun()
 
-                    entered_otp = st.text_input("OTP உள்ளிடவும்", max_chars=4, key="entered_otp_val")
+                    entered_otp = st.text_input("வாடிக்கையாளர் OTP உள்ளிடவும்", max_chars=4, key="entered_otp_val")
 
                     if st.button("✅ வருகையை நிறைவு செய்க", type="primary", use_container_width=True):
                         if not is_ready:
