@@ -920,9 +920,11 @@ else:
                                 st.warning("நிராகரிக்கப்பட்டார்.")
                                 st.rerun()
 
-        # B.3 வாடிக்கையாளர் விவரத் திருத்தக் கோரிக்கைகள்
+       # B.3 வாடிக்கையாளர் விவரத் திருத்தக் கோரிக்கைகள் (Clean Comparison UI)
         with ops_tab3:
-            st.subheader("📝 வாடிக்கையாளர் விவரத் திருத்தக் கோரிக்கைகள்")
+            st.subheader("📝 வாடிக்கையாளர் விவரத் திருத்தக் கோரிக்கைகள் (Profile Update Requests)")
+            st.caption("கிளை ஊழியர்கள் அனுப்பிய வாடிக்கையாளர் மொபைல் எண், முகவரி, புகைப்பட மாற்றக் கோரிக்கைகளை ஒப்பிட்டுப் பார்த்து ஒப்புதல் அளிக்கலாம்.")
+
             pending_update_reqs = (
                 supabase.table("customer_update_requests")
                 .select("*, customers(*), branches(branch_name)")
@@ -933,32 +935,109 @@ else:
             )
 
             if not pending_update_reqs:
-                st.info("✅ எந்த வாடிக்கையாளர் திருத்தக் கோரிக்கைகளும் நிலுவையில் இல்லை.")
+                st.info("✅ எந்த வாடிக்கையாளர் திருத்தக் கோரிக்கைகளும் தற்போது நிலுவையில் இல்லை.")
             else:
+                st.write(f"📊 ஒப்புதலுக்குக் காத்திருக்கும் கோரிக்கைகள்: **{len(pending_update_reqs)}**")
                 for u_req in pending_update_reqs:
-                    target_c = u_req.get("customers", {})
+                    target_c = u_req.get("customers", {}) or {}
                     b_name = u_req.get("branches", {}).get("branch_name", "Branch")
-                    new_d = u_req.get("updated_data", {})
-                    with st.expander(f"📌 {target_c.get('customer_code', '')} - {target_c.get('name')} | கிளை: {b_name}"):
-                        st.info(f"காரணம்: {u_req.get('change_reason', '-')}")
-                        u_col1, u_col2 = st.columns(2)
-                        with u_col1:
-                            st.write("🔴 **பழைய விவரங்கள்:**", target_c)
-                        with u_col2:
-                            st.write("🟢 **புதிய விவரங்கள்:**", new_d)
-                        ops_rev_note = st.text_input("ஆப்பரேஷன்ஸ் குறிப்பு:", key=f"ops_rev_{u_req['id']}")
+                    new_d = u_req.get("updated_data", {}) or {}
+
+                    with st.expander(f"📌 {target_c.get('customer_code', '')} - {target_c.get('name')} | கிளை: {b_name} | கோரியவர்: {u_req.get('requested_by')}"):
+                        st.info(f"💡 **விவர மாற்றத்திற்கான காரணம்:** {u_req.get('change_reason', '-')}")
+                        st.caption(f"📅 கோரப்பட்ட தேதி: {str(u_req.get('requested_at', ''))[:16]}")
+
+                        # பழைய மற்றும் புதிய விவரங்களை நேர்த்தியாக ஒப்பிடும் 2 நெடுவரிசைகள்
+                        comp_col1, comp_col2 = st.columns(2)
+
+                        with comp_col1:
+                            st.markdown("#### 🔴 தற்போதைய பழைய விவரங்கள்")
+                            with st.container(border=True):
+                                st.write(f"👤 **பெயர்:** {target_c.get('name', '-')}")
+                                st.write(f"👨‍👦 **கார்டியன்:** {target_c.get('guardian_name', '-')}")
+                                st.write(f"📞 **முதன்மை எண்:** `{target_c.get('mobile', '-')}`")
+                                st.write(f"📱 **கூடுதல் எண்:** `{target_c.get('mobile2', '-')}`")
+                                st.write(f"🏠 **முகவரி:** {target_c.get('address', '-')}")
+                                if target_c.get("photo_url"):
+                                    st.image(target_c["photo_url"], width=130, caption="தற்போதைய புகைப்படம்")
+                                else:
+                                    st.caption("📷 புகைப்படம் இல்லை")
+
+                        with comp_col2:
+                            st.markdown("#### 🟢 கிளை கோரிய புதிய விவரங்கள்")
+                            with st.container(border=True):
+                                # மாற்றப்பட்ட ஃபீல்டுகளை மட்டும் கண்டறிந்து எளிதாக அடையாளம் காணும் வடிவம்
+                                new_name = new_d.get('name', target_c.get('name'))
+                                new_guard = new_d.get('guardian_name', target_c.get('guardian_name'))
+                                new_mob = new_d.get('mobile', target_c.get('mobile'))
+                                new_mob2 = new_d.get('mobile2', target_c.get('mobile2'))
+                                new_addr = new_d.get('address', target_c.get('address'))
+
+                                st.write(f"👤 **பெயர்:** {new_name} " + ("*(மாற்றப்பட்டது)*" if new_name != target_c.get('name') else ""))
+                                st.write(f"👨‍👦 **கார்டியன்:** {new_guard} " + ("*(மாற்றப்பட்டது)*" if new_guard != target_c.get('guardian_name') else ""))
+                                st.write(f"📞 **முதன்மை எண்:** `{new_mob}` " + ("*(மாற்றப்பட்டது)*" if str(new_mob) != str(target_c.get('mobile')) else ""))
+                                st.write(f"📱 **கூடுதல் எண்:** `{new_mob2}` " + ("*(மாற்றப்பட்டது)*" if str(new_mob2) != str(target_c.get('mobile2')) else ""))
+                                st.write(f"🏠 **முகவரி:** {new_addr} " + ("*(மாற்றப்பட்டது)*" if new_addr != target_c.get('address') else ""))
+                                
+                                if new_d.get("photo_url") and new_d.get("photo_url") != target_c.get("photo_url"):
+                                    st.image(new_d["photo_url"], width=130, caption="புதிய புகைப்படம்")
+                                else:
+                                    st.caption("📷 புகைப்படத்தில் மாற்றம் இல்லை")
+
+                        # ஆதார ஆவணங்கள் பார்வை
+                        st.markdown("##### 📁 சரிபார்ப்பு ஆவணங்கள் (Proof Documents):")
+                        doc_p1, doc_p2, doc_p3 = st.columns(3)
+                        with doc_p1:
+                            if u_req.get("proof_document_url"):
+                                st.markdown(f"📄 [கிளை சமர்ப்பித்த ஆதாரக் கடிதம் / பில் பார்க்க]({u_req['proof_document_url']})")
+                            else:
+                                st.caption("துணை ஆதாரம் ஏதுமில்லை")
+                        with doc_p2:
+                            if new_d.get("id_proof_url") and new_d.get("id_proof_url") != target_c.get("id_proof_url"):
+                                st.markdown(f"🪪 [புதிய அடையாள ஆவணம் பார்க்க]({new_d['id_proof_url']})")
+                            elif target_c.get("id_proof_url"):
+                                st.markdown(f"🪪 [பழைய அடையாள ஆவணம் பார்க்க]({target_c['id_proof_url']})")
+                        with doc_p3:
+                            if new_d.get("address_proof_url") and new_d.get("address_proof_url") != target_c.get("address_proof_url"):
+                                st.markdown(f"🏠 [புதிய முகவரி ஆவணம் பார்க்க]({new_d['address_proof_url']})")
+                            elif target_c.get("address_proof_url"):
+                                st.markdown(f"🏠 [பழைய முகவரி ஆவணம் பார்க்க]({target_c['address_proof_url']})")
+
+                        ops_rev_note = st.text_input("ஆப்பரேஷன்ஸ் ஒப்புதல் / மறுப்புக் குறிப்பு:", key=f"ops_rev_{u_req['id']}")
                         btn_c1, btn_c2 = st.columns(2)
+
                         with btn_c1:
-                            if st.button("✅ அங்கீகரி & மாற்று", key=f"app_req_{u_req['id']}", type="primary"):
-                                supabase.table("customers").update(new_d).eq("id", target_c["id"]).execute()
-                                supabase.table("customer_update_requests").update({"status": "Approved", "reviewed_by": st.session_state.username, "review_remarks": ops_rev_note}).eq("id", u_req["id"]).execute()
-                                st.success("மாற்றப்பட்டது!")
-                                st.rerun()
+                            if st.button("✅ மாற்றங்களை ஏற்று அங்கீகரி (Approve & Update)", key=f"app_req_{u_req['id']}", type="primary"):
+                                try:
+                                    # வாடிக்கையாளர் அட்டவணையில் புதிய விவரங்களை உடனே மாற்றுதல்
+                                    supabase.table("customers").update(new_d).eq("id", target_c["id"]).execute()
+
+                                    # கோரிக்கையை முடிவுக்குக் கொண்டுவருதல்
+                                    supabase.table("customer_update_requests").update({
+                                        "status": "Approved",
+                                        "reviewed_by": st.session_state.username,
+                                        "reviewed_at": datetime.now().isoformat(),
+                                        "review_remarks": ops_rev_note.strip()
+                                    }).eq("id", u_req["id"]).execute()
+
+                                    st.success(f"வாடிக்கையாளர் {target_c.get('name')} விவரங்கள் வெற்றிகரமாகப் புதுப்பிக்கப்பட்டன!")
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"பிழை: {e}")
+
                         with btn_c2:
-                            if st.button("❌ நிராகரி", key=f"rej_req_{u_req['id']}"):
-                                supabase.table("customer_update_requests").update({"status": "Rejected", "reviewed_by": st.session_state.username, "review_remarks": ops_rev_note}).eq("id", u_req["id"]).execute()
-                                st.warning("நிராகரிக்கப்பட்டது.")
-                                st.rerun()
+                            if st.button("❌ கோரிக்கையை நிராகரி (Reject Request)", key=f"rej_req_{u_req['id']}"):
+                                if ops_rev_note.strip():
+                                    supabase.table("customer_update_requests").update({
+                                        "status": "Rejected",
+                                        "reviewed_by": st.session_state.username,
+                                        "reviewed_at": datetime.now().isoformat(),
+                                        "review_remarks": ops_rev_note.strip()
+                                    }).eq("id", u_req["id"]).execute()
+                                    st.warning("கோரிக்கை நிராகரிக்கப்பட்டது.")
+                                    st.rerun()
+                                else:
+                                    st.error("நிராகரிப்பதற்கான காரணத்தை உள்ளிடவும்.")
 
         # B.4 பரிவர்த்தனை அழைப்பு சரிபார்ப்பு
         with ops_tab4:
