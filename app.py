@@ -60,7 +60,7 @@ st.markdown("""
         margin: auto;
     }
 
-    /* 3. முகப்பு கார்டு (Deep Violet Native Card with Gold Glow) */
+    /* 3. முகப்பு கார்டு */
     .login-box {
         background: linear-gradient(145deg, #2D144E 0%, #1E0B36 100%) !important;
         border: 1.5px solid #D4AF37 !important;
@@ -247,7 +247,6 @@ def generate_short_visit_no() -> str:
         return f"VST-{datetime.now().strftime('%M%S')}"
 
 def send_fast2sms_otp(mobile_no: str, otp_code: str):
-    """Fast2SMS DLT (MTHSEG - 219823) மூலம் SMS அனுப்புகிறது"""
     try:
         api_key = "eBGQYanRZNKVCpMSg3KB5kUxY2QhDnOjxesh3Hqr7FOG792XV9wut4TPhQia"
         if "sms" in st.secrets and "fast2sms_api_key" in st.secrets["sms"]:
@@ -285,7 +284,6 @@ def send_fast2sms_otp(mobile_no: str, otp_code: str):
         return False, f"இணைப்புப் பிழை: {e}"
 
 def get_current_branch_cash_drawer(branch_id: int):
-    """தொடக்க இருப்பு, வாடிக்கையாளர் பரிவர்த்தனைகள் மற்றும் HO ⇄ கிளை பணப் பரிமாற்றம் ஆகியவற்றைக் கணக்கிடுகிறது"""
     empty_stock = {"500": 0, "200": 0, "100": 0, "50": 0, "20": 0, "10": 0, "5": 0, "coins": 0}
     try:
         box_res = (
@@ -343,11 +341,16 @@ def get_current_branch_cash_drawer(branch_id: int):
     except Exception:
         return empty_stock
 
+# ==========================================
+# காரணப் பணியாளர் அறிக்கை (மேம்படுத்தப்பட்ட வடிவம்)
+# ==========================================
 def render_staff_attribution_report(selected_branch_id=None):
     st.markdown("### 📊 காரணப் பணியாளர் வாரியான நடவடிக்கைகள் அறிக்கை")
-    d_col1, d_col2 = st.columns(2)
-    start_date = d_col1.date_input("தொடக்கத் தேதி (From Date):", value=date.today().replace(day=1), key=f"rep_start_{selected_branch_id}")
-    end_date = d_col2.date_input("முடிவுத் தேதி (To Date):", value=date.today(), key=f"rep_end_{selected_branch_id}")
+
+    # 1. தேதி மற்றும் பணியாளர் வடிகட்டல்கள்
+    f_col1, f_col2, f_col3 = st.columns([1.5, 1.5, 2])
+    start_date = f_col1.date_input("தொடக்கத் தேதி (From):", value=date.today().replace(day=1), key=f"rep_s_{selected_branch_id}")
+    end_date = f_col2.date_input("முடிவுத் தேதி (To):", value=date.today(), key=f"rep_e_{selected_branch_id}")
 
     if start_date > end_date:
         st.error("தொடக்கத் தேதி முடிவுத் தேதியை விட அதிகமாக இருக்கக்கூடாது!")
@@ -356,6 +359,7 @@ def render_staff_attribution_report(selected_branch_id=None):
     start_dt_str = f"{start_date}T00:00:00"
     end_dt_str = f"{end_date}T23:59:59"
 
+    # Supabase வினவல்
     query = (
         supabase.table("customer_visits")
         .select("id, visit_no, branch_id, created_at, payment_mode, cash_amount, bank_amount, branches(branch_name), transactions(*)")
@@ -370,14 +374,18 @@ def render_staff_attribution_report(selected_branch_id=None):
     visits = res.data or []
 
     flat_data = []
+    all_staff_set = set(["Walk-in (நேரடி வருகை)"])
+
     for v in visits:
         b_name = v.get("branches", {}).get("branch_name", "Unknown") if v.get("branches") else "Unknown"
         for t in v.get("transactions", []):
+            s_name = t.get("staff_name") or "Walk-in (நேரடி வருகை)"
+            all_staff_set.add(s_name)
             flat_data.append({
                 "தேதி": str(v.get("created_at", ""))[:10],
                 "வருகை எண்": v.get("visit_no", "-"),
                 "கிளை": b_name,
-                "காரணப் பணியாளர்": t.get("staff_name", "Walk-in"),
+                "காரணப் பணியாளர்": s_name,
                 "நடவடிக்கை வகை": t.get("transaction_type", "-"),
                 "பட்டுவாடா (Paid ₹)": float(t.get("paid_amount", 0.0)),
                 "வரவு (Received ₹)": float(t.get("received_amount", 0.0)),
@@ -389,18 +397,46 @@ def render_staff_attribution_report(selected_branch_id=None):
         st.info("தேர்ந்தெடுக்கப்பட்ட தேதி வரம்பில் பரிவர்த்தனைகள் எதுவும் இல்லை.")
         return
 
-    df_rep = pd.DataFrame(flat_data)
-    tot_txns = len(df_rep)
-    tot_paid = df_rep["பட்டுவாடா (Paid ₹)"].sum()
-    tot_rec = df_rep["வரவு (Received ₹)"].sum()
+    # பணியாளர் வடிகட்டி
+    staff_filter_options = ["அனைத்து பணியாளர்களும் (All Staff & Walk-in)"] + sorted(list(all_staff_set))
+    with f_col3:
+        selected_staff_filter = st.selectbox("காரணப் பணியாளரைத் தேர்ந்தெடுக்கவும்:", staff_filter_options, key=f"staff_flt_{selected_branch_id}")
 
-    m1, m2, m3 = st.columns(3)
+    df_rep = pd.DataFrame(flat_data)
+
+    # தேர்ந்தெடுக்கப்பட்ட பணியாளருக்கு மட்டும் வடிகட்டுதல்
+    if selected_staff_filter != "அனைத்து பணியாளர்களும் (All Staff & Walk-in)":
+        df_filtered = df_rep[df_rep["காரணப் பணியாளர்"] == selected_staff_filter].copy()
+    else:
+        df_filtered = df_rep.copy()
+
+    # 2. பிசினஸ் சுருக்க மெட்ரிக் கார்டுகள்
+    tot_txns = len(df_filtered)
+    tot_paid = df_filtered["பட்டுவாடா (Paid ₹)"].sum()
+    tot_rec = df_filtered["வரவு (Received ₹)"].sum()
+    net_business_flow = tot_paid - tot_rec
+
+    # Walk-in vs Staff Business தனித் தொகை கணக்கீடு (ஒட்டுமொத்த பார்வையிலும்)
+    walkin_df = df_rep[df_rep["காரணப் பணியாளர்"].str.contains("Walk-in", na=False)]
+    walkin_vol = walkin_df["பட்டுவாடா (Paid ₹)"].sum() + walkin_df["வரவு (Received ₹)"].sum()
+
+    staff_biz_df = df_rep[~df_rep["காரணப் பணியாளர்"].str.contains("Walk-in", na=False)]
+    staff_biz_vol = staff_biz_df["பட்டுவாடா (Paid ₹)"].sum() + staff_biz_df["வரவு (Received ₹)"].sum()
+
+    m1, m2, m3, m4 = st.columns(4)
     m1.metric("மொத்த நடவடிக்கைகள்", f"{tot_txns:,}")
     m2.metric("மொத்த பட்டுவாடா", f"₹{tot_paid:,.2f}")
     m3.metric("மொத்த வரவு", f"₹{tot_rec:,.2f}")
+    m4.metric("நிகர ரொக்கப் புழக்கம்", f"₹{abs(net_business_flow):,.2f}")
+
+    if selected_staff_filter == "அனைத்து பணியாளர்களும் (All Staff & Walk-in)":
+        st.caption(f"💡 **பிசினஸ் பங்களிப்பு ஒப்பீடு:** பணியாளர்கள் வழி பிசினஸ்: **₹{staff_biz_vol:,.2f}** | நேரடி வருகை (Walk-in) பிசினஸ்: **₹{walkin_vol:,.2f}**")
 
     st.markdown("---")
-    staff_summary = df_rep.groupby(["காரணப் பணியாளர்", "நடவடிக்கை வகை"]).agg(
+
+    # 3. பணியாளர் மற்றும் நடவடிக்கை வாரியான தொகுப்பு
+    st.markdown(f"##### 👥 பிசினஸ் தொகுப்பு விவரங்கள் ({selected_staff_filter})")
+    staff_summary = df_filtered.groupby(["காரணப் பணியாளர்", "நடவடிக்கை வகை"]).agg(
         எண்ணிக்கை=("நடவடிக்கை வகை", "count"),
         வழங்கிய_தொகை=("பட்டுவாடா (Paid ₹)", "sum"),
         பெற்ற_தொகை=("வரவு (Received ₹)", "sum")
@@ -411,7 +447,7 @@ def render_staff_attribution_report(selected_branch_id=None):
     st.dataframe(staff_summary, use_container_width=True)
 
     with st.expander("📑 அனைத்து தனிநபர் பரிவர்த்தனைகளின் விரிவான பட்டியல் (Detailed Log)"):
-        st.dataframe(df_rep, use_container_width=True)
+        st.dataframe(df_filtered, use_container_width=True)
 
     csv = staff_summary.to_csv(index=False).encode('utf-8')
     st.download_button(
@@ -423,7 +459,7 @@ def render_staff_attribution_report(selected_branch_id=None):
     )
 
 # ==========================================
-# 4. தற்காலிக சேமிப்பக மாறிகள் (Session State)
+# 4. தற்காலிக மாறிகள்
 # ==========================================
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
@@ -660,7 +696,10 @@ else:
                     st.rerun()
 
         with tab8:
-            render_staff_attribution_report()
+            rep_b_opts = ["அனைத்து கிளைகளும் (All Branches)"] + list(branch_options.keys())
+            sel_rep_b = st.selectbox("கிளையை வடிகட்டவும்:", rep_b_opts, key="adm_rep_branch_sel")
+            filter_b_id = branch_options.get(sel_rep_b) if sel_rep_b != "அனைத்து கிளைகளும் (All Branches)" else None
+            render_staff_attribution_report(selected_branch_id=filter_b_id)
 
     # ----------------------------------------------------
     # B. ஆப்பரேஷன்ஸ் திரை (OPERATIONS CALLING & KYC DESK)
@@ -1230,44 +1269,35 @@ else:
 
                     entered_otp = st.text_input("OTP உள்ளிடவும்", max_chars=4)
                     if st.button("✅ வருகையை நிறைவு செய்க", type="primary", use_container_width=True):
-                        if not is_ready:
-                            st.error("❌ கணக்கீடு அல்லது UTR எண் விடுபட்டுள்ளது!")
-                        elif not otp_already_sent:
-                            st.error("❌ முதலில் வாடிக்கையாளருக்கு OTP அனுப்பவும்!")
+                        if is_ready and otp_already_sent and entered_otp == st.session_state.get("generated_otp"):
+                            pm_label = "Cash" if bank_portion == 0 else ("Bank/UPI" if cash_portion == 0 else "Split")
+                            vres = supabase.table("customer_visits").insert({
+                                "visit_no": visit["visit_no"],
+                                "customer_id": visit["customer_id"],
+                                "branch_id": st.session_state.branch_id,
+                                "total_paid": visit["total_paid"],
+                                "total_received": visit["total_received"],
+                                "net_cash_amount": visit["net_amount"],
+                                "cash_amount": float(cash_portion),
+                                "bank_amount": float(bank_portion),
+                                "payment_mode": pm_label,
+                                "bank_reference_no": bank_ref_no.strip() if bank_portion > 0 else None,
+                                "denomination_details": {
+                                    "in": {"500": in_500, "200": in_200, "100": in_100, "50": in_50, "20": in_20, "10": in_10, "5": in_5, "coins": in_coins, "total": total_cash_in},
+                                    "out": {"500": out_500, "200": out_200, "100": out_100, "50": out_50, "20": out_20, "10": out_10, "5": out_5, "coins": out_coins, "total": total_cash_out},
+                                },
+                                "otp_verified": True,
+                                "status": "Pending_Calling_Verification",
+                            }).execute()
+
+                            for txn in st.session_state.transactions_cart:
+                                txn["visit_id"] = vres.data[0]["id"]
+                                supabase.table("transactions").insert(txn).execute()
+
+                            st.success("வருகை வெற்றிகரமாக நிறைவடைந்தது!")
+                            st.session_state.current_visit = None
+                            st.session_state.transactions_cart = []
+                            st.session_state.generated_otp = None
+                            st.rerun()
                         else:
-                            expected_otp = st.session_state.get("generated_otp")
-                            if entered_otp and entered_otp == expected_otp:
-                                with st.spinner("வருகை சேமிக்கப்படுகிறது..."):
-                                    pm_label = "Cash" if bank_portion == 0 else ("Bank/UPI" if cash_portion == 0 else "Split")
-                                    visit_data = {
-                                        "visit_no": visit["visit_no"],
-                                        "customer_id": visit["customer_id"],
-                                        "branch_id": st.session_state.branch_id,
-                                        "total_paid": visit["total_paid"],
-                                        "total_received": visit["total_received"],
-                                        "net_cash_amount": visit["net_amount"],
-                                        "cash_amount": float(cash_portion),
-                                        "bank_amount": float(bank_portion),
-                                        "payment_mode": pm_label,
-                                        "bank_reference_no": bank_ref_no.strip() if bank_portion > 0 else None,
-                                        "denomination_details": {
-                                            "in": {"500": in_500, "200": in_200, "100": in_100, "50": in_50, "20": in_20, "10": in_10, "5": in_5, "coins": in_coins, "total": total_cash_in},
-                                            "out": {"500": out_500, "200": out_200, "100": out_100, "50": out_50, "20": out_20, "10": out_10, "5": out_5, "coins": out_coins, "total": total_cash_out},
-                                        },
-                                        "otp_verified": True,
-                                        "status": "Pending_Calling_Verification",
-                                    }
-                                    visit_res = supabase.table("customer_visits").insert(visit_data).execute()
-                                    created_visit_id = visit_res.data[0]["id"]
-
-                                    for txn in st.session_state.transactions_cart:
-                                        txn["visit_id"] = created_visit_id
-                                        supabase.table("transactions").insert(txn).execute()
-
-                                    st.success("வருகை வெற்றிகரமாக நிறைவடைந்தது!")
-                                    st.session_state.current_visit = None
-                                    st.session_state.transactions_cart = []
-                                    st.session_state.generated_otp = None
-                                    st.rerun()
-                            else:
-                                st.error("தவறான OTP அல்லது கணக்கீடு முரண்பாடு!")
+                            st.error("தவறான OTP அல்லது கணக்கீடு முரண்பாடு!")
