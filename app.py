@@ -880,7 +880,7 @@ else:
                                 else:
                                     st.error("காரணத்தை உள்ளிடவும்.")
 
-        # B.2 கிளை அனுப்பிய வாடிக்கையாளர் விவரத் திருத்தக் கோரிக்கைகள் (NEW)
+        # B.2 கிளை அனுப்பிய வாடிக்கையாளர் விவரத் திருத்தக் கோரிக்கைகள்
         with ops_tab2:
             st.subheader("📝 வாடிக்கையாளர் விவரத் திருத்தக் கோரிக்கைகள் (Profile Update Requests)")
             st.caption("கிளை ஊழியர்கள் அனுப்பிய வாடிக்கையாளர் மொபைல், முகவரி, புகைப்பட மாற்றக் கோரிக்கைகள்.")
@@ -943,17 +943,13 @@ else:
                         with btn_c1:
                             if st.button("✅ மாற்றங்களை ஏற்று அங்கீகரி (Approve & Update)", key=f"app_req_{u_req['id']}", type="primary"):
                                 try:
-                                    # 1. வாடிக்கையாளர் அட்டவணையில் புதிய விவரங்களைப் புதுப்பித்தல்
                                     supabase.table("customers").update(new_d).eq("id", target_c["id"]).execute()
-
-                                    # 2. கோரிக்கையை முடிவுக்குக் கொண்டுவருதல்
                                     supabase.table("customer_update_requests").update({
                                         "status": "Approved",
                                         "reviewed_by": st.session_state.username,
                                         "reviewed_at": datetime.now().isoformat(),
                                         "review_remarks": ops_rev_note.strip()
                                     }).eq("id", u_req["id"]).execute()
-
                                     st.success(f"வாடிக்கையாளர் {target_c.get('name')} விவரங்கள் வெற்றிகரமாக மாற்றப்பட்டன!")
                                     st.rerun()
                                 except Exception as e:
@@ -997,7 +993,7 @@ else:
     # ----------------------------------------------------
     elif st.session_state.user_role == "Auditor":
         st.header("🔍 தணிக்கையர் பணிப்பாய்வு (Auditor Verification)")
-        pending_visits = supabase.table("customer_visits").select("*, customers(name, mobile), transactions(*), audit_records(*)").eq("status", "Submitted_to_Auditor").execute().data or []
+        pending_visits = supabase.table("customer_visits").select("*, customers(name, mobile), transactions(*)").eq("status", "Submitted_to_Auditor").execute().data or []
         if not pending_visits:
             st.info("தணிக்கை செய்ய எந்த ஆவணங்களும் வரவில்லை.")
         else:
@@ -1006,10 +1002,6 @@ else:
                 with st.expander(f"வருகை: {item['visit_no']} | வாடிக்கையாளர்: {c_name} | ₹{item['net_cash_amount']:,.2f}"):
                     if item.get("transactions"):
                         st.dataframe(pd.DataFrame(item["transactions"]))
-                    audit_recs = item.get("audit_records", [])
-                    if audit_recs and audit_recs[0].get("document_urls"):
-                        for doc_url in audit_recs[0]["document_urls"]:
-                            st.markdown(f"- 🔗 [ஆவணத்தைப் பார்க்க]({doc_url})")
                     if st.button(f"அங்கீகரி (Approve) - {item['visit_no']}", key=f"aud_app_{item['id']}", type="primary"):
                         supabase.table("customer_visits").update({"status": "Approved"}).eq("id", item["id"]).execute()
                         st.success("அங்கீகரிக்கப்பட்டது!")
@@ -1106,7 +1098,7 @@ else:
 
         with branch_tab2:
             st.subheader("📁 கிளை ஆவணங்கள் பதிவேற்றம் (Upload Docs Desk)")
-            st.caption("OTP முடிந்து, ஆப்பரேஷன்ஸ் அழைப்பு உறுதி செய்யப்பட்ட வருகைகளுக்கு இங்கே ஆவணங்களை இணைத்து தணிக்கைக்கு (Auditor) அனுப்பலாம்.")
+            st.caption("OTP முடிந்து, ஆப்பரேஷன்ஸ் அழைப்பு உறுதி செய்யப்பட்ட வருகைகளுக்கு இங்கே ஆவணங்களை இணைத்து தணிக்கைக்கு அனுப்பலாம்.")
 
             branch_pending = (
                 supabase.table("customer_visits")
@@ -1146,6 +1138,9 @@ else:
                             else:
                                 st.error("குறைந்தது ஒரு ஆவணமாவது தேர்ந்தெடுக்கப்பட வேண்டும்.")
 
+        # ----------------------------------------------------
+        # branch_tab1: வாடிக்கையாளர் தேர்வு & திருத்தக் கோரிக்கை கட்டுப்பாடு
+        # ----------------------------------------------------
         with branch_tab1:
             staff_res = supabase.table("users").select("name").eq("branch_id", st.session_state.branch_id).eq("is_active", True).execute()
             current_staff_list = ["Walk-in (நேரடி வருகை)"] + [s["name"] for s in staff_res.data] if staff_res.data else ["Walk-in (நேரடி வருகை)"]
@@ -1178,6 +1173,19 @@ else:
                             selected_label = st.selectbox("வாடிக்கையாளர் பட்டியல்:", options=list(cust_dropdown_dict.keys()), key="dd_cust_sel")
                             selected_cust = cust_dropdown_dict[selected_label]
 
+                            # வாடிக்கையாளருக்கு ஏற்கனவே ஏதேனும் திருத்தக் கோரிக்கை நிலுவையில் உள்ளதா என சரிபார்த்தல்
+                            existing_req_check = (
+                                supabase.table("customer_update_requests")
+                                .select("*")
+                                .eq("customer_id", selected_cust["id"])
+                                .eq("status", "Pending_Approval")
+                                .order("id", desc=True)
+                                .limit(1)
+                                .execute()
+                                .data or []
+                            )
+                            has_pending_update_req = len(existing_req_check) > 0
+
                             with st.container(border=True):
                                 c_col1, c_col2, c_col3 = st.columns([1, 2.5, 1])
                                 with c_col1:
@@ -1189,6 +1197,11 @@ else:
                                     st.markdown(f"### {selected_cust['name']} <small style='color:gray;'>({selected_cust.get('customer_code', '')})</small>", unsafe_allow_html=True)
                                     st.write(f"📞 **முதன்மை:** {selected_cust.get('mobile', '-')} | **கூடுதல்:** {selected_cust.get('mobile2', '-')}")
                                     st.write(f"👨‍👦 **கார்டியன்:** {selected_cust.get('guardian_name', '-')} | 🏠 **முகவரி:** {selected_cust.get('address', '-')}")
+                                    
+                                    # கிளைக்கு நிலுவை அறிவிப்பு பேட்ஜ் காட்டுதல்
+                                    if has_pending_update_req:
+                                        p_req_info = existing_req_check[0]
+                                        st.warning(f"⏳ **விவரத் திருத்தக் கோரிக்கை ஆப்பரேஷன்ஸ் ஒப்புதலுக்கு நிலுவையில் உள்ளது!** (காரணம்: {p_req_info.get('change_reason', '-')})")
                                 with c_col3:
                                     if st.button("வருகையைத் தொடங்கு ➔", key=f"start_v_{selected_cust['id']}", type="primary", use_container_width=True):
                                         st.session_state.current_visit = {
@@ -1202,65 +1215,69 @@ else:
                                         st.rerun()
 
                             # ----------------------------------------------------
-                            # கிளையிலிருந்து வாடிக்கையாளர் விவரத் திருத்தக் கோரிக்கை
+                            # வாடிக்கையாளர் விவரத் திருத்தக் கோரிக்கை படிவம் (ஒற்றைக் கட்டுப்பாடு)
                             # ----------------------------------------------------
                             with st.expander(f"✏️ {selected_cust['name']} விவரங்களில் மாற்றம் செய்ய கோரிக்கை அனுப்புக (Request Profile Update)"):
-                                st.caption("வாடிக்கையாளரின் மொபைல் எண், முகவரி, புகைப்படம் போன்றவற்றில் மாற்றம் செய்ய இங்கே கோரலாம். ஆப்பரேஷன்ஸ் சரிபார்த்து மாற்றியமைக்கும்.")
+                                if has_pending_update_req:
+                                    st.error("🚫 **கவனம்:** இந்த வாடிக்கையாளருக்கு ஏற்கனவே அனுப்பிய விவரத் திருத்தக் கோரிக்கை ஆப்பரேஷன்ஸ் குழுவின் ஒப்புதலுக்காக நிலுவையில் உள்ளது! அது அங்கீகரிக்கப்பட்ட அல்லது நிராகரிக்கப்பட்ட பிறகே புதிய கோரிக்கையை அனுப்ப முடியும்.")
+                                    st.info(f"📋 **நிலுவையில் உள்ள கோரிக்கை விவரம்:**\n- கோரியவர்: `{existing_req_check[0].get('requested_by')}`\n- காரணம்: `{existing_req_check[0].get('change_reason')}`\n- தேதி: `{str(existing_req_check[0].get('requested_at'))[:16]}`")
+                                else:
+                                    st.caption("வாடிக்கையாளரின் மொபைல் எண், முகவரி, புகைப்படம் போன்றவற்றில் மாற்றம் செய்ய இங்கே கோரலாம். ஆப்பரேஷன்ஸ் சரிபார்த்து மாற்றியமைக்கும்.")
 
-                                with st.form(f"branch_req_cust_update_{selected_cust['id']}", clear_on_submit=True):
-                                    u_c1, u_c2 = st.columns(2)
-                                    with u_c1:
-                                        req_name = st.text_input("பெயர்", value=selected_cust.get("name", ""))
-                                        req_guard = st.text_input("கார்டியன் பெயர்", value=selected_cust.get("guardian_name", "") or "")
-                                        req_mob = st.text_input("புதிய முதன்மை மொபைல் எண்", value=selected_cust.get("mobile", ""))
-                                        req_mob2 = st.text_input("கூடுதல் மொபைல் எண்", value=selected_cust.get("mobile2", "") or "")
-                                    with u_c2:
-                                        req_addr = st.text_area("புதிய முகவரி", value=selected_cust.get("address", "") or "", height=80)
-                                        req_reason = st.text_input("விவர மாற்றத்திற்கான காரணம் *:", placeholder="எ.கா: வாடிக்கையாளர் முகவரி மாற்றம் / சிம் கார்டு மாற்றம்")
+                                    with st.form(f"branch_req_cust_update_{selected_cust['id']}", clear_on_submit=True):
+                                        u_c1, u_c2 = st.columns(2)
+                                        with u_c1:
+                                            req_name = st.text_input("பெயர்", value=selected_cust.get("name", ""))
+                                            req_guard = st.text_input("கார்டியன் பெயர்", value=selected_cust.get("guardian_name", "") or "")
+                                            req_mob = st.text_input("புதிய முதன்மை மொபைல் எண்", value=selected_cust.get("mobile", ""))
+                                            req_mob2 = st.text_input("கூடுதல் மொபைல் எண்", value=selected_cust.get("mobile2", "") or "")
+                                        with u_c2:
+                                            req_addr = st.text_area("புதிய முகவரி", value=selected_cust.get("address", "") or "", height=80)
+                                            req_reason = st.text_input("விவர மாற்றத்திற்கான காரணம் *:", placeholder="எ.கா: வாடிக்கையாளர் முகவரி மாற்றம் / சிம் கார்டு மாற்றம்")
 
-                                    st.markdown("##### 📁 புதிய ஆவணங்கள் / ஆதாரங்கள் (தேவைப்பட்டால் மட்டும்):")
-                                    doc_r1, doc_r2, doc_r3 = st.columns(3)
-                                    with doc_r1:
-                                        req_photo = st.file_uploader("புதிய புகைப்படம்:", type=["jpg", "jpeg", "png"], key=f"r_p_{selected_cust['id']}")
-                                    with doc_r2:
-                                        req_id_doc = st.file_uploader("புதிய அடையாள ஆவணம்:", type=["jpg", "jpeg", "png", "pdf"], key=f"r_id_{selected_cust['id']}")
-                                    with doc_r3:
-                                        req_proof = st.file_uploader("மாற்றத்திற்கான ஆதாரம் (EB Bill/Aadhaar/Letter):", type=["jpg", "jpeg", "png", "pdf"], key=f"r_prf_{selected_cust['id']}")
+                                        st.markdown("##### 📁 புதிய ஆவணங்கள் / ஆதாரங்கள் (தேவைப்பட்டால் மட்டும்):")
+                                        doc_r1, doc_r2, doc_r3 = st.columns(3)
+                                        with doc_r1:
+                                            req_photo = st.file_uploader("புதிய புகைப்படம்:", type=["jpg", "jpeg", "png"], key=f"r_p_{selected_cust['id']}")
+                                        with doc_r2:
+                                            req_id_doc = st.file_uploader("புதிய அடையாள ஆவணம்:", type=["jpg", "jpeg", "png", "pdf"], key=f"r_id_{selected_cust['id']}")
+                                        with doc_r3:
+                                            req_proof = st.file_uploader("மாற்றத்திற்கான ஆதாரம் (Letter/Govt ID/Proof):", type=["jpg", "jpeg", "png", "pdf"], key=f"r_prf_{selected_cust['id']}")
 
-                                    if st.form_submit_button("ஆப்பரேஷன்ஸ் ஒப்புதலுக்கு அனுப்புக (Submit Request)", type="primary"):
-                                        if req_reason.strip():
-                                            try:
-                                                with st.spinner("கோரிக்கை சமர்ப்பிக்கப்படுகிறது..."):
-                                                    new_photo_link = upload_single_file(req_photo, "customer_photos") if req_photo else selected_cust.get("photo_url")
-                                                    new_id_link = upload_single_file(req_id_doc, "customer_id_proofs") if req_id_doc else selected_cust.get("id_proof_url")
-                                                    proof_link = upload_single_file(req_proof, "update_proofs") if req_proof else None
+                                        if st.form_submit_button("ஆப்பரேஷன்ஸ் ஒப்புதலுக்கு அனுப்புக (Submit Request)", type="primary"):
+                                            if req_reason.strip():
+                                                try:
+                                                    with st.spinner("கோரிக்கை சமர்ப்பிக்கப்படுகிறது..."):
+                                                        new_photo_link = upload_single_file(req_photo, "customer_photos") if req_photo else selected_cust.get("photo_url")
+                                                        new_id_link = upload_single_file(req_id_doc, "customer_id_proofs") if req_id_doc else selected_cust.get("id_proof_url")
+                                                        proof_link = upload_single_file(req_proof, "update_proofs") if req_proof else None
 
-                                                    updated_data_dict = {
-                                                        "name": req_name.strip(),
-                                                        "guardian_name": req_guard.strip(),
-                                                        "mobile": req_mob.strip(),
-                                                        "mobile2": req_mob2.strip(),
-                                                        "address": req_addr.strip(),
-                                                        "photo_url": new_photo_link,
-                                                        "id_proof_url": new_id_link,
-                                                    }
+                                                        updated_data_dict = {
+                                                            "name": req_name.strip(),
+                                                            "guardian_name": req_guard.strip(),
+                                                            "mobile": req_mob.strip(),
+                                                            "mobile2": req_mob2.strip(),
+                                                            "address": req_addr.strip(),
+                                                            "photo_url": new_photo_link,
+                                                            "id_proof_url": new_id_link,
+                                                        }
 
-                                                    supabase.table("customer_update_requests").insert({
-                                                        "customer_id": selected_cust["id"],
-                                                        "branch_id": st.session_state.branch_id,
-                                                        "requested_by": st.session_state.username,
-                                                        "updated_data": updated_data_dict,
-                                                        "change_reason": req_reason.strip(),
-                                                        "proof_document_url": proof_link,
-                                                        "status": "Pending_Approval"
-                                                    }).execute()
+                                                        supabase.table("customer_update_requests").insert({
+                                                            "customer_id": selected_cust["id"],
+                                                            "branch_id": st.session_state.branch_id,
+                                                            "requested_by": st.session_state.username,
+                                                            "updated_data": updated_data_dict,
+                                                            "change_reason": req_reason.strip(),
+                                                            "proof_document_url": proof_link,
+                                                            "status": "Pending_Approval"
+                                                        }).execute()
 
-                                                    st.success("✅ வாடிக்கையாளர் விவரத் திருத்தக் கோரிக்கை ஆப்பரேஷன்ஸ் குழுவுக்கு அனுப்பப்பட்டது! அவர்கள் சரிபார்த்து மாற்றியமைப்பார்கள்.")
-                                                    st.rerun()
-                                            except Exception as e:
-                                                st.error(f"பிழை: {e}")
-                                        else:
-                                            st.error("தயவுசெய்து மாற்றத்திற்கான காரணத்தைக் குறிப்பிடவும்.")
+                                                        st.success("✅ வாடிக்கையாளர் விவரத் திருத்தக் கோரிக்கை ஆப்பரேஷன்ஸ் குழுவுக்கு அனுப்பப்பட்டது! அவர்கள் சரிபார்த்து மாற்றியமைப்பார்கள்.")
+                                                        st.rerun()
+                                                except Exception as e:
+                                                    st.error(f"பிழை: {e}")
+                                            else:
+                                                st.error("தயவுசெய்து மாற்றத்திற்கான காரணத்தைக் குறிப்பிடவும்.")
                         else:
                             st.warning("பொருந்தும் அல்லது அங்கீகரிக்கப்பட்ட வாடிக்கையாளர் விவரங்கள் இல்லை.")
 
