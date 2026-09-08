@@ -927,38 +927,35 @@ else:
                 if st.form_submit_button("விதியைச் சேமி / புதுப்பி (Save Rule)", type="primary"):
                     try:
                         clean_basis = "Amount" if "Amount" in ir_basis else "Weight_Grams"
-                        payload = {
-                            "transaction_type": ir_txn_type,
-                            "basis_type": clean_basis,
-                            "unit_value": float(ir_unit),
-                            "points_per_unit": float(ir_pts),
-                            "is_active": True,
-                        }
-
-                        # upsert-க்கு பதிலாக முதலில் உள்ளதா எனச் சரிபார்க்கிறோம்
-                        check_existing = (
+                        
+                        # 1. ஏற்கனவே இந்த நடவடிக்கைக்கான விதி உள்ளதா எனச் சரிபார்க்கிறோம்
+                        existing_check = (
                             supabase.table("staff_incentive_rules")
                             .select("id")
                             .eq("transaction_type", ir_txn_type)
                             .execute()
                         )
 
-                        if check_existing.data:
-                            # ஏற்கனவே இருந்தால் update செய்கிறோம்
-                            rule_id = check_existing.data[0]["id"]
-                            supabase.table("staff_incentive_rules").update(
-                                payload
-                            ).eq("id", rule_id).execute()
-                        else:
-                            # புதிய விதியாக இருந்தால் insert செய்கிறோம்
-                            supabase.table("staff_incentive_rules").insert(
-                                payload
-                            ).execute()
+                        payload = {
+                            "transaction_type": ir_txn_type,
+                            "basis_type": clean_basis,
+                            "unit_value": float(ir_unit),
+                            "points_per_unit": float(ir_pts),
+                            "is_active": True
+                        }
 
-                        st.success(f"✅ '{ir_txn_type}' விதியானது சேமிக்கப்பட்டது!")
+                        if existing_check.data:
+                            # ஏற்கனவே இருந்தால் ID-ஐப் பயன்படுத்தி Update செய்கிறோம்
+                            rule_id = existing_check.data[0]["id"]
+                            supabase.table("staff_incentive_rules").update(payload).eq("id", rule_id).execute()
+                        else:
+                            # புதியதாக இருந்தால் Insert செய்கிறோம்
+                            supabase.table("staff_incentive_rules").insert(payload).execute()
+
+                        st.success(f"✅ '{ir_txn_type}' விதியானது வெற்றிகரமாகச் சேமிக்கப்பட்டது!")
                         st.rerun()
                     except Exception as e:
-                        st.error(f"பிழை: {e}")
+                        st.error(f"பிழை விவரம்: {e}")
 
             st.markdown("###### 📋 தற்போதுள்ள இன்சென்டிவ் விதிகள் பட்டியல்")
             rules_view = supabase.table("staff_incentive_rules").select("*").eq("is_active", True).execute().data or []
