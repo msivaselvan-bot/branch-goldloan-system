@@ -626,7 +626,7 @@ else:
                 st.success(f"{len(df_cust)} வாடிக்கையாளர்கள் பதிவு செய்யப்படுகிறார்கள்...")
 
         # -----------------------------------------------------------------
-        # tab4: வாடிக்கையாளர் மேலாண்மை (முழுமையான திருத்தப் படிவத்துடன்)
+        # tab4: வாடிக்கையாளர் மேலாண்மை & திருத்தம்
         # -----------------------------------------------------------------
         with tab4:
             st.subheader("🗂️ வாடிக்கையாளர் பட்டியல் & திருத்தம் (Customer Directory & Edit)")
@@ -802,15 +802,17 @@ else:
             render_staff_attribution_report(selected_branch_id=filter_b_id)
 
     # ----------------------------------------------------
-    # B. ஆப்பரேஷன்ஸ் திரை (OPERATIONS CALLING & KYC DESK)
+    # B. ஆப்பரேஷன்ஸ் திரை (OPERATIONS DESK: KYC, CALLS & PROFILE UPDATES)
     # ----------------------------------------------------
     elif st.session_state.user_role == "Operations":
         st.header("📞 ஆப்பரேஷன்ஸ் மேசை (Operations Desk)")
-        ops_tab1, ops_tab2 = st.tabs([
-            "👤 புதிய வாடிக்கையாளர் KYC ஒப்புதல் (New Customer KYC)",
+        ops_tab1, ops_tab2, ops_tab3 = st.tabs([
+            "👤 புதிய வாடிக்கையாளர் KYC ஒப்புதல் (New KYC)",
+            "📝 வாடிக்கையாளர் விவரத் திருத்தக் கோரிக்கைகள் (Profile Update Requests)",
             "🔔 பரிவர்த்தனை அழைப்பு சரிபார்ப்பு (Transaction Calls)"
         ])
 
+        # B.1 புதிய வாடிக்கையாளர் KYC
         with ops_tab1:
             st.subheader("👤 புதிய வாடிக்கையாளர் KYC ஆவண சரிபார்ப்பு & ஒப்புதல்")
             pending_kyc_custs = (
@@ -850,19 +852,13 @@ else:
                             st.markdown("##### 📁 KYC ஆவணங்கள்")
                             if pcust.get("id_proof_url"):
                                 st.markdown(f"- 🪪 [அடையாள ஆவணத்தைப் பார்க்க]({pcust['id_proof_url']})")
-                            else:
-                                st.caption("🪪 அடையாள ஆவணம் இல்லை")
-
                             if pcust.get("address_proof_url"):
                                 st.markdown(f"- 📄 [முகவரி ஆவணத்தைப் பார்க்க]({pcust['address_proof_url']})")
-                            else:
-                                st.caption("📄 முகவரி ஆவணம் இல்லை")
 
-                        kyc_reason = st.text_input("காரணம் / குறிப்பு:", key=f"kyc_note_{pcust['id']}")
-
+                        kyc_reason = st.text_input("குறிப்பு / காரணம்:", key=f"kyc_note_{pcust['id']}")
                         kyc_btn1, kyc_btn2 = st.columns(2)
                         with kyc_btn1:
-                            if st.button("✅ வாடிக்கையாளரை அங்கீகரி (Approve KYC)", key=f"app_kyc_{pcust['id']}", type="primary"):
+                            if st.button("✅ அங்கீகரி (Approve KYC)", key=f"app_kyc_{pcust['id']}", type="primary"):
                                 supabase.table("customers").update({
                                     "kyc_status": "Approved",
                                     "is_active": True,
@@ -884,8 +880,102 @@ else:
                                 else:
                                     st.error("காரணத்தை உள்ளிடவும்.")
 
+        # B.2 கிளை அனுப்பிய வாடிக்கையாளர் விவரத் திருத்தக் கோரிக்கைகள் (NEW)
         with ops_tab2:
-            st.subheader("📞 அழைப்பு சரிபார்ப்பு (Operations Calling Desk)")
+            st.subheader("📝 வாடிக்கையாளர் விவரத் திருத்தக் கோரிக்கைகள் (Profile Update Requests)")
+            st.caption("கிளை ஊழியர்கள் அனுப்பிய வாடிக்கையாளர் மொபைல், முகவரி, புகைப்பட மாற்றக் கோரிக்கைகள்.")
+
+            pending_update_reqs = (
+                supabase.table("customer_update_requests")
+                .select("*, customers(*), branches(branch_name)")
+                .eq("status", "Pending_Approval")
+                .order("id", desc=True)
+                .execute()
+                .data or []
+            )
+
+            if not pending_update_reqs:
+                st.info("✅ எந்த வாடிக்கையாளர் திருத்தக் கோரிக்கைகளும் நிலுவையில் இல்லை.")
+            else:
+                for u_req in pending_update_reqs:
+                    target_c = u_req.get("customers", {})
+                    b_name = u_req.get("branches", {}).get("branch_name", "Branch")
+                    new_d = u_req.get("updated_data", {})
+
+                    with st.expander(f"📌 {target_c.get('customer_code', '')} - {target_c.get('name')} | கிளை: {b_name} | கோரியவர்: {u_req.get('requested_by')}"):
+                        st.write(f"📅 **கோரப்பட்ட தேதி:** {u_req.get('requested_at')}")
+                        st.info(f"💡 **மாற்றத்திற்கான காரணம்:** {u_req.get('change_reason', '-')}")
+
+                        u_col1, u_col2, u_col3 = st.columns([1.5, 1.5, 1])
+
+                        with u_col1:
+                            st.markdown("##### 🔴 பழைய விவரங்கள் (Old Data)")
+                            st.write(f"**பெயர்:** {target_c.get('name')}")
+                            st.write(f"**கார்டியன்:** {target_c.get('guardian_name', '-')}")
+                            st.write(f"**முதன்மை மொபைல்:** `{target_c.get('mobile', '-')}`")
+                            st.write(f"**கூடுதல் மொபைல்:** `{target_c.get('mobile2', '-')}`")
+                            st.write(f"**முகவரி:** {target_c.get('address', '-')}")
+                            if target_c.get("photo_url"):
+                                st.image(target_c["photo_url"], width=100, caption="பழைய படம்")
+
+                        with u_col2:
+                            st.markdown("##### 🟢 கோரப்பட்ட புதிய விவரங்கள் (Requested New Data)")
+                            st.write(f"**பெயர்:** {new_d.get('name', target_c.get('name'))}")
+                            st.write(f"**கார்டியன்:** {new_d.get('guardian_name', target_c.get('guardian_name'))}")
+                            st.write(f"**முதன்மை மொபைல்:** `{new_d.get('mobile', target_c.get('mobile'))}`")
+                            st.write(f"**கூடுதல் மொபைல்:** `{new_d.get('mobile2', target_c.get('mobile2'))}`")
+                            st.write(f"**முகவரி:** {new_d.get('address', target_c.get('address'))}")
+                            if new_d.get("photo_url"):
+                                st.image(new_d["photo_url"], width=100, caption="புதிய படம்")
+
+                        with u_col3:
+                            st.markdown("##### 📁 ஆதார ஆவணங்கள்")
+                            if u_req.get("proof_document_url"):
+                                st.markdown(f"🔗 [இணைக்கப்பட்ட ஆதார ஆவணம்]({u_req['proof_document_url']})")
+                            if new_d.get("id_proof_url"):
+                                st.markdown(f"🪪 [புதிய அடையாள ஆவணம்]({new_d['id_proof_url']})")
+                            if new_d.get("address_proof_url"):
+                                st.markdown(f"📄 [புதிய முகவரி ஆவணம்]({new_d['address_proof_url']})")
+
+                        ops_rev_note = st.text_input("ஆப்பரேஷன்ஸ் குறிப்பு:", key=f"ops_rev_{u_req['id']}")
+                        btn_c1, btn_c2 = st.columns(2)
+
+                        with btn_c1:
+                            if st.button("✅ மாற்றங்களை ஏற்று அங்கீகரி (Approve & Update)", key=f"app_req_{u_req['id']}", type="primary"):
+                                try:
+                                    # 1. வாடிக்கையாளர் அட்டவணையில் புதிய விவரங்களைப் புதுப்பித்தல்
+                                    supabase.table("customers").update(new_d).eq("id", target_c["id"]).execute()
+
+                                    # 2. கோரிக்கையை முடிவுக்குக் கொண்டுவருதல்
+                                    supabase.table("customer_update_requests").update({
+                                        "status": "Approved",
+                                        "reviewed_by": st.session_state.username,
+                                        "reviewed_at": datetime.now().isoformat(),
+                                        "review_remarks": ops_rev_note.strip()
+                                    }).eq("id", u_req["id"]).execute()
+
+                                    st.success(f"வாடிக்கையாளர் {target_c.get('name')} விவரங்கள் வெற்றிகரமாக மாற்றப்பட்டன!")
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"பிழை: {e}")
+
+                        with btn_c2:
+                            if st.button("❌ நிராகரி (Reject Request)", key=f"rej_req_{u_req['id']}"):
+                                if ops_rev_note.strip():
+                                    supabase.table("customer_update_requests").update({
+                                        "status": "Rejected",
+                                        "reviewed_by": st.session_state.username,
+                                        "reviewed_at": datetime.now().isoformat(),
+                                        "review_remarks": ops_rev_note.strip()
+                                    }).eq("id", u_req["id"]).execute()
+                                    st.warning("கோரிக்கை நிராகரிக்கப்பட்டது.")
+                                    st.rerun()
+                                else:
+                                    st.error("நிராகரிப்பதற்கான காரணத்தை உள்ளிடவும்.")
+
+        # B.3 பரிவர்த்தனை அழைப்பு சரிபார்ப்பு
+        with ops_tab3:
+            st.subheader("📞 பரிவர்த்தனை அழைப்பு சரிபார்ப்பு")
             ops_visits = supabase.table("customer_visits").select("*, customers(*), transactions(*), branches(branch_name)").eq("status", "Pending_Calling_Verification").order("id").execute().data or []
             if not ops_visits:
                 st.info("✅ சரிபார்ப்புக்கு பரிவர்த்தனைகள் எதுவும் இல்லை.")
@@ -1014,9 +1104,6 @@ else:
                             st.success("அனுப்பப்பட்டது!")
                             st.rerun()
 
-        # -----------------------------------------------------------------
-        # branch_tab2: கிளை ஆவணங்கள் பதிவேற்றம் (மீண்டும் முழுமையாக இணைக்கப்பட்டது)
-        # -----------------------------------------------------------------
         with branch_tab2:
             st.subheader("📁 கிளை ஆவணங்கள் பதிவேற்றம் (Upload Docs Desk)")
             st.caption("OTP முடிந்து, ஆப்பரேஷன்ஸ் அழைப்பு உறுதி செய்யப்பட்ட வருகைகளுக்கு இங்கே ஆவணங்களை இணைத்து தணிக்கைக்கு (Auditor) அனுப்பலாம்.")
@@ -1113,6 +1200,67 @@ else:
                                             "step": "TRANSACTIONS",
                                         }
                                         st.rerun()
+
+                            # ----------------------------------------------------
+                            # கிளையிலிருந்து வாடிக்கையாளர் விவரத் திருத்தக் கோரிக்கை
+                            # ----------------------------------------------------
+                            with st.expander(f"✏️ {selected_cust['name']} விவரங்களில் மாற்றம் செய்ய கோரிக்கை அனுப்புக (Request Profile Update)"):
+                                st.caption("வாடிக்கையாளரின் மொபைல் எண், முகவரி, புகைப்படம் போன்றவற்றில் மாற்றம் செய்ய இங்கே கோரலாம். ஆப்பரேஷன்ஸ் சரிபார்த்து மாற்றியமைக்கும்.")
+
+                                with st.form(f"branch_req_cust_update_{selected_cust['id']}", clear_on_submit=True):
+                                    u_c1, u_c2 = st.columns(2)
+                                    with u_c1:
+                                        req_name = st.text_input("பெயர்", value=selected_cust.get("name", ""))
+                                        req_guard = st.text_input("கார்டியன் பெயர்", value=selected_cust.get("guardian_name", "") or "")
+                                        req_mob = st.text_input("புதிய முதன்மை மொபைல் எண்", value=selected_cust.get("mobile", ""))
+                                        req_mob2 = st.text_input("கூடுதல் மொபைல் எண்", value=selected_cust.get("mobile2", "") or "")
+                                    with u_c2:
+                                        req_addr = st.text_area("புதிய முகவரி", value=selected_cust.get("address", "") or "", height=80)
+                                        req_reason = st.text_input("விவர மாற்றத்திற்கான காரணம் *:", placeholder="எ.கா: வாடிக்கையாளர் முகவரி மாற்றம் / சிம் கார்டு மாற்றம்")
+
+                                    st.markdown("##### 📁 புதிய ஆவணங்கள் / ஆதாரங்கள் (தேவைப்பட்டால் மட்டும்):")
+                                    doc_r1, doc_r2, doc_r3 = st.columns(3)
+                                    with doc_r1:
+                                        req_photo = st.file_uploader("புதிய புகைப்படம்:", type=["jpg", "jpeg", "png"], key=f"r_p_{selected_cust['id']}")
+                                    with doc_r2:
+                                        req_id_doc = st.file_uploader("புதிய அடையாள ஆவணம்:", type=["jpg", "jpeg", "png", "pdf"], key=f"r_id_{selected_cust['id']}")
+                                    with doc_r3:
+                                        req_proof = st.file_uploader("மாற்றத்திற்கான ஆதாரம் (EB Bill/Aadhaar/Letter):", type=["jpg", "jpeg", "png", "pdf"], key=f"r_prf_{selected_cust['id']}")
+
+                                    if st.form_submit_button("ஆப்பரேஷன்ஸ் ஒப்புதலுக்கு அனுப்புக (Submit Request)", type="primary"):
+                                        if req_reason.strip():
+                                            try:
+                                                with st.spinner("கோரிக்கை சமர்ப்பிக்கப்படுகிறது..."):
+                                                    new_photo_link = upload_single_file(req_photo, "customer_photos") if req_photo else selected_cust.get("photo_url")
+                                                    new_id_link = upload_single_file(req_id_doc, "customer_id_proofs") if req_id_doc else selected_cust.get("id_proof_url")
+                                                    proof_link = upload_single_file(req_proof, "update_proofs") if req_proof else None
+
+                                                    updated_data_dict = {
+                                                        "name": req_name.strip(),
+                                                        "guardian_name": req_guard.strip(),
+                                                        "mobile": req_mob.strip(),
+                                                        "mobile2": req_mob2.strip(),
+                                                        "address": req_addr.strip(),
+                                                        "photo_url": new_photo_link,
+                                                        "id_proof_url": new_id_link,
+                                                    }
+
+                                                    supabase.table("customer_update_requests").insert({
+                                                        "customer_id": selected_cust["id"],
+                                                        "branch_id": st.session_state.branch_id,
+                                                        "requested_by": st.session_state.username,
+                                                        "updated_data": updated_data_dict,
+                                                        "change_reason": req_reason.strip(),
+                                                        "proof_document_url": proof_link,
+                                                        "status": "Pending_Approval"
+                                                    }).execute()
+
+                                                    st.success("✅ வாடிக்கையாளர் விவரத் திருத்தக் கோரிக்கை ஆப்பரேஷன்ஸ் குழுவுக்கு அனுப்பப்பட்டது! அவர்கள் சரிபார்த்து மாற்றியமைப்பார்கள்.")
+                                                    st.rerun()
+                                            except Exception as e:
+                                                st.error(f"பிழை: {e}")
+                                        else:
+                                            st.error("தயவுசெய்து மாற்றத்திற்கான காரணத்தைக் குறிப்பிடவும்.")
                         else:
                             st.warning("பொருந்தும் அல்லது அங்கீகரிக்கப்பட்ட வாடிக்கையாளர் விவரங்கள் இல்லை.")
 
@@ -1261,7 +1409,7 @@ else:
                     elif txn_category == "GS (Gold Sale)":
                         received_amt = st.number_input("பெற்ற தொகை (₹) *", min_value=0.0, step=500.0)
 
-                    if st.form_submit_button("➕列表中 சேர் (Add to Cart)", type="primary"):
+                    if st.form_submit_button("➕ பட்டியலில் சேர் (Add to Cart)", type="primary"):
                         if paid_amt > 0 or received_amt > 0:
                             all_remarks = " | ".join(detail_summary)
                             if custom_remarks.strip():
