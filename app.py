@@ -672,7 +672,6 @@ else:
             "🔔 பரிவர்த்தனை அழைப்பு சரிபார்ப்பு (Transaction Calls)"
         ])
 
-        # B.1 புதிய வாடிக்கையாளர் KYC ஒப்புதல்
         with ops_tab1:
             st.subheader("👤 புதிய வாடிக்கையாளர் KYC ஆவண சரிபார்ப்பு & ஒப்புதல்")
             pending_kyc_custs = (
@@ -720,7 +719,7 @@ else:
                             else:
                                 st.caption("📄 முகவரி ஆவணம் இல்லை")
 
-                        kyc_reason = st.text_input("காரணம் / குறிப்பு (விருப்பப்பட்டால்):", key=f"kyc_note_{pcust['id']}")
+                        kyc_reason = st.text_input("காரணம் / குறிப்பு:", key=f"kyc_note_{pcust['id']}")
 
                         kyc_btn1, kyc_btn2 = st.columns(2)
                         with kyc_btn1:
@@ -730,23 +729,22 @@ else:
                                     "is_active": True,
                                     "kyc_remarks": f"Approved by {st.session_state.username} | {kyc_reason}"
                                 }).eq("id", pcust["id"]).execute()
-                                st.success(f"{pcust['name']} வெற்றிகரமாக அங்கீகரிக்கப்பட்டு ஆக்டிவ் செய்யப்பட்டார்!")
+                                st.success(f"{pcust['name']} அங்கீகரிக்கப்பட்டார்!")
                                 st.rerun()
 
                         with kyc_btn2:
-                            if st.button("❌ மறுப்பு / ஆவணம் தவறு (Reject)", key=f"rej_kyc_{pcust['id']}"):
+                            if st.button("❌ மறுப்பு (Reject)", key=f"rej_kyc_{pcust['id']}"):
                                 if kyc_reason.strip():
                                     supabase.table("customers").update({
                                         "kyc_status": "Rejected",
                                         "is_active": False,
                                         "kyc_remarks": f"Rejected by {st.session_state.username} | {kyc_reason.strip()}"
                                     }).eq("id", pcust["id"]).execute()
-                                    st.warning("வாடிக்கையாளர் நிராகரிக்கப்பட்டார்.")
+                                    st.warning("நிராகரிக்கப்பட்டார்.")
                                     st.rerun()
                                 else:
-                                    st.error("நிராகரிப்பிற்கான காரணத்தை உள்ளிடவும்.")
+                                    st.error("காரணத்தை உள்ளிடவும்.")
 
-        # B.2 பரிவர்த்தனை அழைப்பு சரிபார்ப்பு
         with ops_tab2:
             st.subheader("📞 அழைப்பு சரிபார்ப்பு (Operations Calling Desk)")
             ops_visits = supabase.table("customer_visits").select("*, customers(*), transactions(*), branches(branch_name)").eq("status", "Pending_Calling_Verification").order("id").execute().data or []
@@ -908,16 +906,14 @@ else:
 
                     if len(search_query.strip()) >= 2:
                         q = search_query.strip()
-                        # சரிபார்க்கப்பட்ட மற்றும் ஆக்டிவ் வாடிக்கையாளர்கள் மட்டுமே தோன்றுவார்கள்
-                        # புதிய திருத்தப்பட்ட குறியீடு:
-# பழைய வாடிக்கையாளர்கள் (NULL) மற்றும் அங்கீகரிக்கப்பட்டவர்கள் அனைவரும் தேடலில் வருவர்; Rejected ஆனவர்கள் மட்டுமே தவிர்க்கப்படுவர்
-cust_filter_query = (
-    supabase.table("customers")
-    .select("*")
-    .eq("is_active", True)
-    .neq("kyc_status", "Rejected")
-    .neq("kyc_status", "Pending_KYC_Approval")
-)
+                        cust_filter_query = (
+                            supabase.table("customers")
+                            .select("*")
+                            .eq("is_active", True)
+                            .neq("kyc_status", "Rejected")
+                            .neq("kyc_status", "Pending_KYC_Approval")
+                        )
+
                         if st.session_state.user_role not in ["Admin", "Auditor", "Operations"]:
                             cust_filter_query = cust_filter_query.eq("branch_id", st.session_state.branch_id)
 
@@ -951,10 +947,9 @@ cust_filter_query = (
                                         }
                                         st.rerun()
                         else:
-                            st.warning("பொருந்தும் அல்லது அங்கீகரிக்கப்பட்ட (Approved KYC) வாடிக்கையாளர் விவரங்கள் இல்லை.")
+                            st.warning("பொருந்தும் அல்லது அங்கீகரிக்கப்பட்ட வாடிக்கையாளர் விவரங்கள் இல்லை.")
 
                 else:
-                    # புதிய வாடிக்கையாளர் பதிவு - போட்டோ, ஐடி ப்ரூஃப், அட்ரஸ் ப்ரூஃப் தனித்தனியாக அட்டாச்
                     st.markdown("##### 📝 புதிய வாடிக்கையாளர் பதிவுப் படிவம் (New KYC Registration)")
                     with st.form("new_customer_form", clear_on_submit=True):
                         col_n1, col_n2, col_n3 = st.columns(3)
@@ -977,7 +972,7 @@ cust_filter_query = (
                             new_relation = st.text_input("உறவுமுறை")
                             new_addr_doc = st.file_uploader("3. முகவரி சான்று ஆவணம் (Address Proof Image/PDF) *", type=["jpg", "jpeg", "png", "pdf"])
 
-                        st.caption("ℹ️ குறிப்பு: புதிய வாடிக்கையாளர் பதிவு செய்தவுடன் ஆப்பரேஷன்ஸ் ஒப்புதலுக்கு (Operations KYC Desk) செல்லும். ஆப்பரேஷன்ஸ் அங்கீகரித்த பிறகே கடன் பரிவர்த்தனை தொடங்க முடியும்.")
+                        st.caption("ℹ️ குறிப்பு: புதிய வாடிக்கையாளர் பதிவு செய்தவுடன் ஆப்பரேஷன்ஸ் ஒப்புதலுக்குச் செல்லும் (Pending KYC). அவர்கள் ஒப்புதல் அளித்த பிறகே கடன் பரிவர்த்தனை செய்ய முடியும்.")
 
                         if st.form_submit_button("வாடிக்கையாளரைப் பதிவு செய்து ஒப்புதலுக்கு அனுப்புக (Submit KYC)", type="primary"):
                             if new_name.strip() and new_mob1.strip() and new_address.strip():
@@ -1004,10 +999,10 @@ cust_filter_query = (
                                             "id_proof_url": id_doc_url,
                                             "address_proof_url": addr_doc_url,
                                             "kyc_status": "Pending_KYC_Approval",
-                                            "is_active": False,  # ஆப்பரேஷன்ஸ் அங்கீகரிக்கும் வரை செயல் படாது
+                                            "is_active": False,
                                         }).execute()
 
-                                    st.success(f"✅ வாடிக்கையாளர் {new_name} பதிவு செய்யப்பட்டு, ஆப்பரேஷன்ஸ் ஒப்புதலுக்கு (Operations Desk) அனுப்பப்பட்டுள்ளது! ஆப்பரேஷன்ஸ் ஒப்புதல் அளித்தவுடன் வருகையைத் தொடங்கலாம்.")
+                                    st.success(f"✅ வாடிக்கையாளர் {new_name} பதிவு செய்யப்பட்டு ஆப்பரேஷன்ஸ் ஒப்புதலுக்கு அனுப்பப்பட்டது!")
                                     st.rerun()
                                 except Exception as e:
                                     st.error(f"பதிவு செய்வதில் பிழை: {e}")
@@ -1235,35 +1230,44 @@ cust_filter_query = (
 
                     entered_otp = st.text_input("OTP உள்ளிடவும்", max_chars=4)
                     if st.button("✅ வருகையை நிறைவு செய்க", type="primary", use_container_width=True):
-                        if is_ready and otp_already_sent and entered_otp == st.session_state.get("generated_otp"):
-                            pm_label = "Cash" if bank_portion == 0 else ("Bank/UPI" if cash_portion == 0 else "Split")
-                            vres = supabase.table("customer_visits").insert({
-                                "visit_no": visit["visit_no"],
-                                "customer_id": visit["customer_id"],
-                                "branch_id": st.session_state.branch_id,
-                                "total_paid": visit["total_paid"],
-                                "total_received": visit["total_received"],
-                                "net_cash_amount": visit["net_amount"],
-                                "cash_amount": float(cash_portion),
-                                "bank_amount": float(bank_portion),
-                                "payment_mode": pm_label,
-                                "bank_reference_no": bank_ref_no.strip() if bank_portion > 0 else None,
-                                "denomination_details": {
-                                    "in": {"500": in_500, "200": in_200, "100": in_100, "50": in_50, "20": in_20, "10": in_10, "5": in_5, "coins": in_coins, "total": total_cash_in},
-                                    "out": {"500": out_500, "200": out_200, "100": out_100, "50": out_50, "20": out_20, "10": out_10, "5": out_5, "coins": out_coins, "total": total_cash_out},
-                                },
-                                "otp_verified": True,
-                                "status": "Pending_Calling_Verification",
-                            }).execute()
-
-                            for txn in st.session_state.transactions_cart:
-                                txn["visit_id"] = vres.data[0]["id"]
-                                supabase.table("transactions").insert(txn).execute()
-
-                            st.success("வருகை வெற்றிகரமாக நிறைவடைந்தது!")
-                            st.session_state.current_visit = None
-                            st.session_state.transactions_cart = []
-                            st.session_state.generated_otp = None
-                            st.rerun()
+                        if not is_ready:
+                            st.error("❌ கணக்கீடு அல்லது UTR எண் விடுபட்டுள்ளது!")
+                        elif not otp_already_sent:
+                            st.error("❌ முதலில் வாடிக்கையாளருக்கு OTP அனுப்பவும்!")
                         else:
-                            st.error("தவறான OTP அல்லது கணக்கீடு முரண்பாடு!")
+                            expected_otp = st.session_state.get("generated_otp")
+                            if entered_otp and entered_otp == expected_otp:
+                                with st.spinner("வருகை சேமிக்கப்படுகிறது..."):
+                                    pm_label = "Cash" if bank_portion == 0 else ("Bank/UPI" if cash_portion == 0 else "Split")
+                                    visit_data = {
+                                        "visit_no": visit["visit_no"],
+                                        "customer_id": visit["customer_id"],
+                                        "branch_id": st.session_state.branch_id,
+                                        "total_paid": visit["total_paid"],
+                                        "total_received": visit["total_received"],
+                                        "net_cash_amount": visit["net_amount"],
+                                        "cash_amount": float(cash_portion),
+                                        "bank_amount": float(bank_portion),
+                                        "payment_mode": pm_label,
+                                        "bank_reference_no": bank_ref_no.strip() if bank_portion > 0 else None,
+                                        "denomination_details": {
+                                            "in": {"500": in_500, "200": in_200, "100": in_100, "50": in_50, "20": in_20, "10": in_10, "5": in_5, "coins": in_coins, "total": total_cash_in},
+                                            "out": {"500": out_500, "200": out_200, "100": out_100, "50": out_50, "20": out_20, "10": out_10, "5": out_5, "coins": out_coins, "total": total_cash_out},
+                                        },
+                                        "otp_verified": True,
+                                        "status": "Pending_Calling_Verification",
+                                    }
+                                    visit_res = supabase.table("customer_visits").insert(visit_data).execute()
+                                    created_visit_id = visit_res.data[0]["id"]
+
+                                    for txn in st.session_state.transactions_cart:
+                                        txn["visit_id"] = created_visit_id
+                                        supabase.table("transactions").insert(txn).execute()
+
+                                    st.success("வருகை வெற்றிகரமாக நிறைவடைந்தது!")
+                                    st.session_state.current_visit = None
+                                    st.session_state.transactions_cart = []
+                                    st.session_state.generated_otp = None
+                                    st.rerun()
+                            else:
+                                st.error("தவறான OTP அல்லது கணக்கீடு முரண்பாடு!")
