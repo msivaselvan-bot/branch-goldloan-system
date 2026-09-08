@@ -336,7 +336,7 @@ def get_current_branch_cash_drawer(branch_id: int):
         return empty_stock
 
 # ==============================================================================
-# காரணப் பணியாளர், Walk-in பகிர்வு (60:40, 40:30:30) & நெகட்டிவ் புள்ளிகள் அறிக்கை
+# காரணப் பணியாளர், Walk-in பகிர்வு (60:40, 40:30:30) & தனிப்பயன் புள்ளிகள் அறிக்கை
 # ==============================================================================
 def render_staff_attribution_report(selected_branch_id=None):
     st.markdown("### 📊 காரணப் பணியாளர் அறிக்கை & ஊக்கத்தொகை (Incentive & Points Report)")
@@ -351,6 +351,11 @@ def render_staff_attribution_report(selected_branch_id=None):
 
     start_dt_str = f"{start_date}T00:00:00"
     end_dt_str = f"{end_date}T23:59:59"
+
+    # இன்சென்டிவ் மற்றும் புள்ளி மதிப்பு அமைப்புகள்
+    set_res = supabase.table("incentive_settings").select("*").eq("id", 1).execute().data
+    rupees_per_point = float(set_res[0].get("rupees_per_point", 5.0)) if set_res else 5.0
+    penalty_per_lakh = float(set_res[0].get("negative_growth_penalty_per_lakh", 15.0)) if set_res else 15.0
 
     inc_rules = supabase.table("staff_incentive_rules").select("*").eq("is_active", True).execute().data or []
     rule_map = {r["transaction_type"]: r for r in inc_rules}
@@ -382,14 +387,11 @@ def render_staff_attribution_report(selected_branch_id=None):
 
     flat_data = []
     staff_points_map = {}
-    staff_incentive_map = {}
 
-    def add_staff_reward(name, pts, inc):
+    def add_staff_points(name, pts):
         if name not in staff_points_map:
             staff_points_map[name] = 0.0
-            staff_incentive_map[name] = 0.0
         staff_points_map[name] += pts
-        staff_incentive_map[name] += inc
 
     for v in visits:
         b_id = v.get("branch_id")
@@ -405,33 +407,48 @@ def render_staff_attribution_report(selected_branch_id=None):
             raw_staff = t.get("staff_name") or "Walk-in (நேரடி வருகை)"
             paid_val = float(t.get("paid_amount", 0.0))
             rec_val = float(t.get("received_amount", 0.0))
-            txn_vol = paid_val if paid_val > 0 else rec_val
+            remarks_str = str(t.get("remarks", ""))
 
+            # புள்ளி கணக்கீட்டு அடிப்படை (தொகை வழி அல்லது கிராம் வழி)
             rule_info = rule_map.get(txn_type, {})
-            pts_per_lakh = float(rule_info.get("points_per_lakh", 10.0))
-            inc_percent = float(rule_info.get("incentive_percent", 0.20))
+            basis = rule_info.get("basis_type", "Amount")
+            unit_val = float(rule_info.get("unit_value", 100000.0) or 100000.0)
+            pts_per_unit = float(rule_info.get("points_per_unit", 10.0) or 0.0)
 
-            calc_pts = (txn_vol / 100000.0) * pts_per_lakh
-            calc_inc = (txn_vol * (inc_percent / 100.0)) if inc_percent > 0 else 0.0
+            # கிராம் வழி கணக்கீடு (GP / GS)
+            calc_pts = 0.0
+            if basis == "Weight_Grams":
+                grams_val = 0.0
+                try:
+                    if "எடை:" in remarks_str:
+                        part = remarks_str.split("எடை:")[1].split("g")[0].strip()
+                        grams_val = float(part)
+                except Exception:
+                    grams_val = 0.0
+                calc_pts = (grams_val / unit_val) * pts_per_unit if unit_val > 0 else 0.0
+            else:
+                # தொகை வழி கணக்கீடு (Pledge, Release, RD, FD)
+                txn_amt = paid_val if paid_val > 0 else rec_val
+                calc_pts = (txn_amt / unit_val) * pts_per_unit if unit_val > 0 else 0.0
 
             # Walk-in வணிகப் பங்கீட்டு விதிமுறை (60:40 & 40:30:30)
             if "Walk-in" in raw_staff:
                 if total_staff_count == 2 and head_staff and other_staff:
-                    add_staff_reward(head_staff, calc_pts * 0.60, calc_inc * 0.60)
-                    add_staff_reward(other_staff[0], calc_pts * 0.40, calc_inc * 0.40)
+                    add_staff_points(head_staff, calc_pts * 0.60)
+                    add_staff_points(other_staff[0], calc_pts * 0.40)
                 elif total_staff_count == 3 and head_staff and len(other_staff) == 2:
-                    add_staff_reward(head_staff, calc_pts * 0.40, calc_inc * 0.40)
-                    add_staff_reward(other_staff[0], calc_pts * 0.30, calc_inc * 0.30)
-                    add_staff_reward(other_staff[1], calc_pts * 0.30, calc_inc * 0.30)
+                    add_staff_points(head_staff, calc_pts * 0.40)
+                    add_staff_points(other_staff[0], calc_pts * 0.30)
+                    add_staff_points(other_staff[1], calc_pts * 0.30)
                 elif total_staff_count > 3 and head_staff:
-                    add_staff_reward(head_staff, calc_pts * 0.40, calc_inc * 0.40)
+                    add_staff_points(head_staff, calc_pts * 0.40)
                     split_ratio = 0.60 / len(other_staff) if other_staff else 0.0
                     for s in other_staff:
-                        add_staff_reward(s, calc_pts * split_ratio, calc_inc * split_ratio)
+                        add_staff_points(s, calc_pts * split_ratio)
                 elif head_staff:
-                    add_staff_reward(head_staff, calc_pts, calc_inc)
+                    add_staff_points(head_staff, calc_pts)
             else:
-                add_staff_reward(raw_staff, calc_pts, calc_inc)
+                add_staff_points(raw_staff, calc_pts)
 
             flat_data.append({
                 "தேதி": str(v.get("created_at", ""))[:10],
@@ -441,8 +458,7 @@ def render_staff_attribution_report(selected_branch_id=None):
                 "நடவடிக்கை வகை": txn_type,
                 "பட்டுவாடா (Paid ₹)": paid_val,
                 "வரவு (Received ₹)": rec_val,
-                "பணம் செலுத்திய முறை": v.get("payment_mode", "Cash"),
-                "குறிப்பு": t.get("remarks", "")
+                "குறிப்பு": remarks_str
             })
 
     if not flat_data:
@@ -458,7 +474,7 @@ def render_staff_attribution_report(selected_branch_id=None):
     is_negative_growth = net_gold_growth < 0
     penalty_pts = 0.0
     if is_negative_growth:
-        penalty_pts = (abs(net_gold_growth) / 100000.0) * 15.0
+        penalty_pts = (abs(net_gold_growth) / 100000.0) * penalty_per_lakh
 
     staff_filter_options = ["அனைத்து பணியாளர்களும் (All Staff & Walk-in)"] + sorted(list(staff_points_map.keys()))
     with f_col3:
@@ -486,17 +502,21 @@ def render_staff_attribution_report(selected_branch_id=None):
 
     st.markdown("---")
 
-    st.markdown("##### 🏆 பணியாளர் வாரியான ஈட்டிய புள்ளிகள் & இன்சென்டிவ் தொகை (Performance & Incentive Summary)")
+    st.markdown(f"##### 🏆 பணியாளர் வாரியான புள்ளிகள் & நிலையான ஊக்கத்தொகை (1 புள்ளி = ₹{rupees_per_point:.2f})")
     perf_rows = []
+    active_staff_count = max(1, len(staff_points_map))
+
     for s_name, pts in staff_points_map.items():
-        inc_val = staff_incentive_map.get(s_name, 0.0)
-        final_pts = pts - (penalty_pts / len(staff_points_map)) if is_negative_growth else pts
+        deduct_pts = (penalty_pts / active_staff_count) if is_negative_growth else 0.0
+        final_pts = max(0.0, pts - deduct_pts)
+        final_incentive = final_pts * rupees_per_point
+
         perf_rows.append({
             "பணியாளர் பெயர்": s_name,
-            "ஈட்டிய அடிப்படை புள்ளிகள்": round(pts, 2),
-            "நெகட்டிவ் புள்ளிகள் கழிவு": f"-{round(penalty_pts / len(staff_points_map), 2)}" if is_negative_growth else "0",
+            "ஈட்டிய புள்ளிகள்": round(pts, 2),
+            "நெகட்டிவ் அபராதப் புள்ளிகள்": f"-{round(deduct_pts, 2)}" if is_negative_growth else "0",
             "நிகரப் புள்ளிகள் (Net Points)": round(final_pts, 2),
-            "பரிந்துரைக்கப்பட்ட இன்சென்டிவ் (₹)": f"₹{inc_val:,.2f}"
+            "நிலையான ஊக்கத்தொகை (Incentive ₹)": f"₹{final_incentive:,.2f}"
         })
 
     st.dataframe(pd.DataFrame(perf_rows), use_container_width=True)
@@ -607,7 +627,7 @@ else:
     st.markdown("---")
 
     # ----------------------------------------------------
-    # A. நிர்வாக மேலாண்மை திரை (ADMIN PANEL: 10 FULL TABS)
+    # A. நிர்வாக மேலாண்மை திரை (ADMIN PANEL WITH 10 FULL TABS)
     # ----------------------------------------------------
     if st.session_state.user_role == "Admin":
         st.header("⚙️ நிர்வாக மேலாண்மை (Admin Control Panel)")
@@ -616,7 +636,7 @@ else:
                 "🏢 கிளைகள்",
                 "👥 பணியாளர்கள்",
                 "📋 ஸ்கீம்கள் மேலாண்மை (Pledge, FD, RD)",
-                "🎯 இன்சென்டிவ் & புள்ளிகள் விதிகள்",
+                "🎯 இன்சென்டிவ் & புள்ளி விதிகள்",
                 "📥 மொத்தப் பதிவேற்றம்",
                 "🗂️ வாடிக்கையாளர் மேலாண்மை",
                 "📊 வருகை & பரிவர்த்தனை திருத்தம்",
@@ -757,12 +777,10 @@ else:
                                     "penal_charges_percent": float(gs_penal_chg),
                                     "is_active": True
                                 }).execute()
-                                st.success(f"✅ '{gs_name}' திட்டம் (RPG: ₹{gs_rpg:,.2f}) வெற்றிகரமாகச் சேமிக்கப்பட்டது!")
+                                st.success(f"✅ '{gs_name}' திட்டம் வெற்றிகரமாகச் சேமிக்கப்பட்டது!")
                                 st.rerun()
                             except Exception as e:
                                 st.error(f"பிழை: {e}")
-                        else:
-                            st.error("திட்டத்தின் பெயரை உள்ளிடவும்.")
 
                 g_schemes = supabase.table("gold_loan_schemes").select("*").order("id", desc=True).execute().data or []
                 if g_schemes:
@@ -783,26 +801,9 @@ else:
                     with fd_c3:
                         fd_payout = st.selectbox("Interest Payout", ["Monthly", "Quarterly", "Half-Yearly", "Yearly", "At Maturity"])
 
-                    st.markdown("###### 📊 Pre-closure Interest Slabs (முதிர்வுக்கு முன் எடுப்பதற்கான வட்டி):")
-                    p_c1, p_c2, p_c3 = st.columns(3)
-                    with p_c1:
-                        p1_m = st.number_input("0 முதல் எத்தனை மாதம் வரை?", value=3, step=1, key="p1_m")
-                        p1_r = st.number_input("வட்டி விகிதம் (%)", value=0.0, step=0.5, key="p1_r")
-                    with p_c2:
-                        p2_m = st.number_input("அடுத்த எத்தனை மாதம் வரை?", value=6, step=1, key="p2_m")
-                        p2_r = st.number_input("வட்டி விகிதம் (%)", value=5.0, step=0.5, key="p2_r")
-                    with p_c3:
-                        p3_m = st.number_input("முதிர்வு வரை (மாதம்)", value=12, step=1, key="p3_m")
-                        p3_r = st.number_input("வட்டி விகிதம் (%)", value=7.0, step=0.5, key="p3_r")
-
                     if st.form_submit_button("FD ஸ்கீமைச் சேமி (Save FD Scheme)", type="primary"):
                         if fd_name.strip():
                             try:
-                                fd_slabs_list = [
-                                    {"from_month": 1, "to_month": int(p1_m), "roi": float(p1_r)},
-                                    {"from_month": int(p1_m) + 1, "to_month": int(p2_m), "roi": float(p2_r)},
-                                    {"from_month": int(p2_m) + 1, "to_month": int(p3_m), "roi": float(p3_r)}
-                                ]
                                 supabase.table("fd_schemes").insert({
                                     "scheme_name": fd_name.strip(),
                                     "tenure_months": int(fd_tenure),
@@ -811,15 +812,12 @@ else:
                                     "annual_interest_percent": float(fd_interest),
                                     "interest_type": fd_int_type,
                                     "interest_payout": fd_payout,
-                                    "preclosure_interest_slabs": fd_slabs_list,
                                     "is_active": True
                                 }).execute()
-                                st.success(f"✅ '{fd_name}' FD திட்டம் வெற்றிகரமாகச் சேமிக்கப்பட்டது!")
+                                st.success(f"✅ '{fd_name}' FD திட்டம் சேமிக்கப்பட்டது!")
                                 st.rerun()
                             except Exception as e:
                                 st.error(f"பிழை: {e}")
-                        else:
-                            st.error("திட்டத்தின் பெயரை உள்ளிடவும்.")
 
                 fd_list_data = supabase.table("fd_schemes").select("*").order("id", desc=True).execute().data or []
                 if fd_list_data:
@@ -857,26 +855,49 @@ else:
                                     "fine_percentage": float(rd_fine),
                                     "is_active": True
                                 }).execute()
-                                st.success(f"✅ '{rd_name}' RD திட்டம் வெற்றிகரமாகச் சேமிக்கப்பட்டது!")
+                                st.success(f"✅ '{rd_name}' RD திட்டம் சேமிக்கப்பட்டது!")
                                 st.rerun()
                             except Exception as e:
                                 st.error(f"பிழை: {e}")
-                        else:
-                            st.error("திட்டத்தின் பெயரை உள்ளிடவும்.")
 
                 rd_list_data = supabase.table("rd_schemes").select("*").order("id", desc=True).execute().data or []
                 if rd_list_data:
                     st.dataframe(pd.DataFrame(rd_list_data)[["scheme_name", "tenure_months", "annual_interest_percent", "due_frequency", "grace_days", "fine_percentage"]], use_container_width=True)
 
         # -----------------------------------------------------------------
-        # tab4: இன்சென்டிவ் & புள்ளிகள் விதிகள் மேலாண்மை (Admin Master)
+        # tab4: இன்சென்டிவ் & புள்ளி விதிகள் (Staff Incentive Master with Basis & Fixed Value)
         # -----------------------------------------------------------------
         with tab4:
             st.subheader("🎯 பணியாளர் இன்சென்டிவ் & புள்ளிகள் விதிகள் (Staff Incentive Master)")
-            st.caption("ஒவ்வொரு பரிவர்த்தனை வகைக்கும் எத்தனை புள்ளிகள் மற்றும் எத்தனை % இன்சென்டிவ் என்பதை அட்மின் இங்கே நிர்ணயிக்கலாம்.")
+            
+            # நிலையான புள்ளி மதிப்பு நிர்ணயம் (Global Point Monetary Value)
+            set_res = supabase.table("incentive_settings").select("*").eq("id", 1).execute().data
+            curr_rpp = float(set_res[0].get("rupees_per_point", 5.0)) if set_res else 5.0
+            curr_pen = float(set_res[0].get("negative_growth_penalty_per_lakh", 15.0)) if set_res else 15.0
 
-            with st.form("admin_incentive_rule_form", clear_on_submit=True):
-                ir_c1, ir_c2, ir_c3 = st.columns(3)
+            with st.container(border=True):
+                st.markdown("##### 🪙 நிலையான புள்ளி பண மதிப்பு (Global Point Value)")
+                gp_col1, gp_col2, gp_col3 = st.columns(3)
+                with gp_col1:
+                    new_rpp = st.number_input("ஒரு புள்ளிக்கான ரூபாய் மதிப்பு (1 Point = ₹):", value=curr_rpp, step=0.5)
+                with gp_col2:
+                    new_pen = st.number_input("நெகட்டிவ் கடன் வளர்ச்சி அபராதப் புள்ளி (₹1 லட்சத்திற்கு):", value=curr_pen, step=1.0)
+                with gp_col3:
+                    st.write("")
+                    st.write("")
+                    if st.button("💾 பொது மதிப்புகளைச் சேமி (Update Values)", type="primary"):
+                        supabase.table("incentive_settings").upsert({
+                            "id": 1,
+                            "rupees_per_point": float(new_rpp),
+                            "negative_growth_penalty_per_lakh": float(new_pen)
+                        }).execute()
+                        st.success("புள்ளி மதிப்பு புதுப்பிக்கப்பட்டது!")
+                        st.rerun()
+
+            st.markdown("---")
+            st.markdown("##### ⚙️ பரிவர்த்தனை வகை வாரியான புள்ளி விதிகள்")
+            with st.form("admin_custom_incentive_form", clear_on_submit=True):
+                ir_c1, ir_c2, ir_c3, ir_c4 = st.columns(4)
                 with ir_c1:
                     ir_txn_type = st.selectbox(
                         "நடவடிக்கை வகை *:",
@@ -887,31 +908,48 @@ else:
                             "Part Payment (அசல் வரவு)",
                             "Take Over (பிற நிறுவன கடன் மீட்டல்)",
                             "FD Open (புதிய வைப்பு நிதி)",
-                            "RD Open (புதிய RD சேமிப்பு)"
+                            "RD Open (புதிய RD சேமிப்பு)",
+                            "GP (Gold Purchase)",
+                            "GS (Gold Sale)"
                         ]
                     )
                 with ir_c2:
-                    ir_pts_per_lakh = st.number_input("ஒவ்வொரு ₹1 லட்சத்திற்குமான புள்ளிகள் (Points/Lakh) *", value=10.0, step=1.0)
+                    ir_basis = st.selectbox(
+                        "கணக்கீட்டு முறை *:",
+                        ["Amount (தொகை வழி - ₹)", "Weight_Grams (எடை வழி - Grams)"]
+                    )
                 with ir_c3:
-                    ir_inc_percent = st.number_input("ஊக்கத்தொகை சதவீதம் (Incentive %)", value=0.20, step=0.05)
+                    ir_unit = st.number_input("அடிப்படை அலகு (Unit Value) *:", value=100000.0 if "Amount" in ir_basis else 1.0, step=100.0)
+                    st.caption("எ.கா: தொகைக்கு 100000, RD-க்கு 500, தங்கத்திற்கு 1 கிராம்")
+                with ir_c4:
+                    ir_pts = st.number_input("யூனிட்டுக்கான புள்ளிகள் (Points Per Unit) *:", value=10.0, step=1.0)
 
                 if st.form_submit_button("விதியைச் சேமி / புதுப்பி (Save Rule)", type="primary"):
                     try:
-                        supabase.table("staff_incentive_rules").upsert({
+                        clean_basis = "Amount" if "Amount" in ir_basis else "Weight_Grams"
+                        payload = {
                             "transaction_type": ir_txn_type,
-                            "points_per_lakh": float(ir_pts_per_lakh),
-                            "incentive_percent": float(ir_inc_percent),
+                            "basis_type": clean_basis,
+                            "unit_value": float(ir_unit),
+                            "points_per_unit": float(ir_pts),
                             "is_active": True
-                        }, on_conflict="transaction_type").execute()
-                        st.success(f"✅ '{ir_txn_type}' விதியானது வெற்றிகரமாகச் சேமிக்கப்பட்டது!")
+                        }
+                        # On-conflict update
+                        supabase.table("staff_incentive_rules").upsert(payload, on_conflict="transaction_type").execute()
+                        st.success(f"✅ '{ir_txn_type}' விதியானது சேமிக்கப்பட்டது!")
                         st.rerun()
                     except Exception as e:
                         st.error(f"பிழை: {e}")
 
             st.markdown("###### 📋 தற்போதுள்ள இன்சென்டிவ் விதிகள் பட்டியல்")
-            current_rules = supabase.table("staff_incentive_rules").select("*").eq("is_active", True).execute().data or []
-            if current_rules:
-                st.dataframe(pd.DataFrame(current_rules)[["transaction_type", "points_per_lakh", "incentive_percent"]], use_container_width=True)
+            rules_view = supabase.table("staff_incentive_rules").select("*").eq("is_active", True).execute().data or []
+            if rules_view:
+                st.dataframe(pd.DataFrame([{
+                    "நடவடிக்கை வகை": r["transaction_type"],
+                    "கணக்கீட்டு முறை": "தொகை வழி (₹)" if r.get("basis_type") == "Amount" else "எடை வழி (Grams)",
+                    "அடிப்படை யூனிட்": f"{float(r.get('unit_value', 1)):,.0f}",
+                    "வழங்கப்படும் புள்ளிகள்": float(r.get("points_per_unit", 0))
+                } for r in rules_view]), use_container_width=True)
 
         with tab5:
             st.subheader("📥 பழைய வாடிக்கையாளர் இறக்குமதி (Bulk Import)")
@@ -1212,7 +1250,11 @@ else:
         with branch_tab4:
             st.subheader("💼 கிளை கல்லா கையிருப்பு நிலை (Live Approved Stock)")
             curr_stock = get_current_branch_cash_drawer(st.session_state.branch_id)
-            total_stock_val = sum(curr_stock[k] * int(k) for k in ["500", "200", "100", "50", "20", "10", "5"]) + curr_stock["coins"]
+            total_stock_val = (
+                (curr_stock["500"] * 500) + (curr_stock["200"] * 200) + (curr_stock["100"] * 100) +
+                (curr_stock["50"] * 50) + (curr_stock["20"] * 20) + (curr_stock["10"] * 10) +
+                (curr_stock["5"] * 5) + curr_stock["coins"]
+            )
             st.metric("கல்லாவில் உள்ள மொத்த ரொக்கம்", f"₹{total_stock_val:,.2f}")
             c1, c2, c3, c4 = st.columns(4)
             c1.metric("₹500", f"{curr_stock['500']}")
@@ -1531,9 +1573,9 @@ else:
                             gs_item_name = st.text_input("பொருள் பெயர்")
                         with gs_col2:
                             received_amt = st.number_input("பெற்ற தொகை (Received ₹) *", min_value=0.0, step=500.0)
-                        detail_summary = [f"பில்: {gs_bill_no}", f"பொருள்: {gs_item_name}"]
+                        detail_summary = [f"பில்: {gs_bill_no}", f"பொருள்: {gs_item_name}", f"எடை: {t.get('net_wt', 1.0)}g"]
 
-                    if st.form_submit_button("➕ பட்டியலில் சேர் (Add to Cart)", type="primary"):
+                    if st.form_submit_button("➕列表中 சேர் (Add to Cart)", type="primary"):
                         if paid_amt > 0 or received_amt > 0:
                             all_remarks = " | ".join(detail_summary)
                             if custom_remarks.strip():
@@ -1577,6 +1619,9 @@ else:
                             st.session_state.transactions_cart = []
                             st.rerun()
 
+            # -----------------------------------------------------------------
+            # Step 3: பணப் பரிமாற்றம், 8 ரூபாய் நோட்டுகள் & OTP சரிபார்ப்பு
+            # -----------------------------------------------------------------
             elif st.session_state.current_visit["step"] == "CASH_OTP":
                 visit = st.session_state.current_visit
                 net_target = visit["net_amount"]
@@ -1634,7 +1679,7 @@ else:
                     ds2.metric("₹10", f"{current_drawer['10']} தாள்கள்")
                     ds3.metric("₹100", f"{current_drawer['100']} தாள்கள்")
                     ds3.metric("₹5", f"{current_drawer['5']} தாள்கள்")
-                    ds4.metric("₹50", f"{current_drawer['50']}")
+                    ds4.metric("₹50", f"{current_drawer['50']} தாள்கள்")
                     ds4.metric("நாணயங்கள்", f"₹{current_drawer['coins']:,.2f}")
 
                 if otp_already_sent:
