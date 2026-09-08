@@ -909,7 +909,15 @@ else:
                     if len(search_query.strip()) >= 2:
                         q = search_query.strip()
                         # சரிபார்க்கப்பட்ட மற்றும் ஆக்டிவ் வாடிக்கையாளர்கள் மட்டுமே தோன்றுவார்கள்
-                        cust_filter_query = supabase.table("customers").select("*").eq("is_active", True).eq("kyc_status", "Approved")
+                        # புதிய திருத்தப்பட்ட குறியீடு:
+# பழைய வாடிக்கையாளர்கள் (NULL) மற்றும் அங்கீகரிக்கப்பட்டவர்கள் அனைவரும் தேடலில் வருவர்; Rejected ஆனவர்கள் மட்டுமே தவிர்க்கப்படுவர்
+cust_filter_query = (
+    supabase.table("customers")
+    .select("*")
+    .eq("is_active", True)
+    .neq("kyc_status", "Rejected")
+    .neq("kyc_status", "Pending_KYC_Approval")
+)
                         if st.session_state.user_role not in ["Admin", "Auditor", "Operations"]:
                             cust_filter_query = cust_filter_query.eq("branch_id", st.session_state.branch_id)
 
