@@ -1450,7 +1450,6 @@ else:
                     total_cash_in = (i_500*500) + (i_200*200) + (i_100*100) + (i_50*50) + (i_20*20) + (i_10*10) + (i_5*5) + i_coins
                     st.markdown(f"**பெற்ற மீதி மொத்தப் பணம்:** `₹{total_cash_in:,.2f}`")
 
-                # கல்லாவில் இருந்து குறையும் நிகரப் பணம் = கொடுத்தது - திரும்ப வாங்கியது
                 net_deducted_cash = total_cash_out - total_cash_in
 
                 st.markdown("---")
@@ -1465,6 +1464,7 @@ else:
                     col_m3.error(f"❌ வித்தியாசம்: ₹{abs(actual_exp_amount - net_deducted_cash):,.2f}")
 
                 st.caption("ℹ️ குறிப்பு: ஆப்பரேஷன்ஸ் அங்கீகரித்த பின்னரே கல்லாவில் இருந்து நிகரப் பணம் கழியும்.")
+
                 if st.form_submit_button("செலவுப் பதிவை ஆப்பரேஷன்ஸ் ஒப்புதலுக்கு அனுப்புக", type="primary"):
                     if is_tally and actual_exp_amount > 0 and exp_ref.strip() and exp_desc.strip():
                         try:
@@ -1490,6 +1490,7 @@ else:
                             st.error(f"பிழை: {e}")
                     else:
                         st.error("⚠️ உண்மையான செலவுத் தொகையும், (கொடுத்த பணம் - மீதிப் பணம்) கணக்கீடும் சரியாகப் பொருந்த வேண்டும்.")
+
             st.markdown("---")
             st.subheader("📋 கிளை செலவுகளின் சமீபத்திய நிலை (Expense Logs)")
             b_exp_logs = supabase.table("branch_expenses").select("*").eq("branch_id", st.session_state.branch_id).order("id", desc=True).limit(15).execute().data or []
