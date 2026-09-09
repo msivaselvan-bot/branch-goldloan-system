@@ -336,10 +336,10 @@ def get_current_branch_cash_drawer(branch_id: int):
         return empty_stock
 
 # ==============================================================================
-# காரணப் பணியாளர் அறிக்கை (புதிய விதிகளுடன்: Specific Staff vs Walk-in & Release Principal Only)
+# காரணப் பணியாளர் அறிக்கை (புதிய விதிகளுடன்: Specific Staff, Walk-in & Release/Part Payment Principal)
 # ==============================================================================
 def render_staff_attribution_report(selected_branch_id=None):
-    st.markdown("### 📊 காரணப் பணியாளர் அறிக்கை & ஊக்கத்தொகை (Scheme-wise Incentive & Points Report)")
+    st.markdown("### 📊 காரணப் பணியாளர் அறிக்கை & ஸ்கீம் வாரியான ஊக்கத்தொகை (Scheme-wise Incentive & Points Report)")
 
     f_col1, f_col2, f_col3 = st.columns([1.5, 1.5, 2])
     start_date = f_col1.date_input("தொடக்கத் தேதி (From):", value=date.today().replace(day=1), key=f"rep_s_{selected_branch_id}")
@@ -412,7 +412,10 @@ def render_staff_attribution_report(selected_branch_id=None):
             rec_val = float(t.get("received_amount", 0.0))
             remarks_str = str(t.get("remarks", ""))
 
-            # அடமான மீட்டலில் (GL Release) வட்டி மற்றும் இதர கட்டணங்களை நீக்கிவிட்டு 'அசல் தொகை' (Principal) மட்டுமே கணக்கீடு செய்தல்
+            # -----------------------------------------------------------------
+            # புதிய விதி: GL Release மற்றும் Part Payment-ல் அசல் (Principal) தொகையை மட்டும் எடுத்துக்கொள்வதுடன், 
+            # GL Release-க்கு நெகட்டிவ் புள்ளிகள் வழங்கப்படுவதை உறுதி செய்தல்.
+            # -----------------------------------------------------------------
             effective_vol = 0.0
             if "Release" in txn_type:
                 try:
@@ -423,6 +426,8 @@ def render_staff_attribution_report(selected_branch_id=None):
                         effective_vol = rec_val
                 except Exception:
                     effective_vol = rec_val
+            elif "Part Payment" in txn_type:
+                effective_vol = rec_val  # பகுதி அசல் செலுத்துதல்
             else:
                 effective_vol = paid_val if paid_val > 0 else rec_val
 
@@ -453,12 +458,14 @@ def render_staff_attribution_report(selected_branch_id=None):
                 calc_pts = (grams_val / unit_val) * pts_per_unit if unit_val > 0 else 0.0
                 disp_val = f"{grams_val} g"
             else:
-                calc_pts = (effective_vol / unit_val) * pts_per_unit if unit_val > 0 else 0.0
+                # GL Release மற்றும் Part Payment-க்கு புள்ளிகள் நெகட்டிவாக (-) மாற வேண்டும்
+                multiplier = -1.0 if ("Release" in txn_type or "Part Payment" in txn_type) else 1.0
+                calc_pts = ((effective_vol / unit_val) * pts_per_unit) * multiplier if unit_val > 0 else 0.0
                 disp_val = f"₹{effective_vol:,.2f}"
 
             # -----------------------------------------------------------------
-            # புதிய விதி: காரணப் பணியாளர் ஒரு குறிப்பிட்ட நபராக இருந்தால் முழுப் புள்ளியும் அவருக்கே!
-            # Walk-in எனில் மட்டுமே ஊழியர் எண்ணிக்கைக்கு ஏற்ப 60:40 & 40:30:30 எனப் பிரிக்கப்படும்.
+            # புதிய விதி: காரணப் பணியாளர் ஒரு குறிப்பிட்ட நபராக இருந்தால் முழுப் பலனும் அவரே!
+            # Walk-in எனில் மட்டுமே பணியாளர் எண்ணிக்கைக்கு ஏற்ப 60:40 அல்லது 40:30:30 எனப் பிரிக்கப்படும்.
             # -----------------------------------------------------------------
             assigned_staff_list = []
             if "Walk-in" in raw_staff or not raw_staff or "நேரடி" in raw_staff:
@@ -476,7 +483,7 @@ def render_staff_attribution_report(selected_branch_id=None):
                 else:
                     assigned_staff_list = [("Walk-in", calc_pts)]
             else:
-                # குறிப்பிட்ட பணியாளர் எனில் முழுப் புள்ளியும் அவரே!
+                # குறிப்பிட்ட பணியாளர் எனில் முழுப் புள்ளியும்/நெகட்டிவ் புள்ளியும் அவரே!
                 assigned_staff_list = [(raw_staff, calc_pts)]
 
             for staff_member, s_pts in assigned_staff_list:
@@ -489,7 +496,7 @@ def render_staff_attribution_report(selected_branch_id=None):
                     "நடவடிக்கை வகை": txn_type,
                     "திட்டம் (Scheme)": detected_scheme,
                     "வணிக அளவு (Effective)": disp_val,
-                    "raw_amount": effective_vol,  # கணக்கீட்டிற்கு மட்டும்
+                    "raw_amount": effective_vol,
                     "ஈட்டிய புள்ளிகள்": round(s_pts, 2),
                     "குறிப்பு": remarks_str
                 })
@@ -539,14 +546,12 @@ def render_staff_attribution_report(selected_branch_id=None):
 
     for s_name, pts in staff_points_map.items():
         deduct_pts = (penalty_pts / active_staff_count) if is_negative_growth else 0.0
-        final_pts = max(0.0, pts - deduct_pts)
+        final_pts = pts - deduct_pts  # Note: pts ஏற்கெனவே Release-க்கு நெகட்டிவ் மதிப்பாகத்தான் வரும்
         final_incentive = final_pts * rupees_per_point
 
         perf_rows.append({
             "பணியாளர் பெயர்": s_name,
-            "ஈட்டிய புள்ளிகள்": round(pts, 2),
-            "நெகட்டிவ் அபராதப் புள்ளிகள்": f"-{round(deduct_pts, 2)}" if is_negative_growth else "0",
-            "நிகரப் புள்ளிகள் (Net Points)": round(final_pts, 2),
+            "ஈட்டிய/குறைந்த நிகரப் புள்ளிகள்": round(final_pts, 2),
             "ஊக்கத்தொகை (Incentive ₹)": f"₹{final_incentive:,.2f}"
         })
 
@@ -1437,7 +1442,7 @@ else:
                             part_gl_no = st.text_input("கடன் எண் *")
                         with i_col2:
                             received_amt = st.number_input("செலுத்திய தொகை (₹) *", min_value=0.0, step=100.0)
-                        detail_summary = [f"GL: {part_gl_no}"]
+                        detail_summary = [f"GL: {part_gl_no}", f"அசல்: ₹{received_amt}" if "Part Payment" in txn_category else f"வட்டி: ₹{received_amt}"]
 
                     elif txn_category == "Take Over (பிற நிறுவன கடன் மீட்டல்)":
                         to_col1, to_col2 = st.columns(2)
