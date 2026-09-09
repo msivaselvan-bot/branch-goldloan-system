@@ -655,13 +655,16 @@ if not st.session_state.logged_in:
 # 6. முதன்மை திரை
 # ==========================================
 else:
-    top_col1, top_col2, top_col3 = st.columns([3, 2, 1])
+    top_col1, top_col2, top_col3, top_col4 = st.columns([2.5, 2, 1, 1])
     with top_col1:
         st.write(f"🏢 **கிளை:** {st.session_state.branch}")
     with top_col2:
         st.write(f"👤 **பயனர்:** {st.session_state.username} ({st.session_state.user_role})")
     with top_col3:
-        if st.button("வெளியேறு (Logout)"):
+        if st.button("🔄 Refresh", use_container_width=True, help="பக்கத்தை முழுமையாகப் புதுப்பிக்க"):
+            st.rerun()
+    with top_col4:
+        if st.button("வெளியேறு", use_container_width=True):
             st.session_state.logged_in = False
             st.session_state.current_visit = None
             st.session_state.transactions_cart = []
