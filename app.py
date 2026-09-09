@@ -327,7 +327,8 @@ def get_current_branch_cash_drawer(branch_id: int):
                         stock[k] += notes_qty
                     elif t_type == "BRANCH_TO_HO":
                         stock[k] -= notes_qty
-                        # அங்கீகரிக்கப்பட்ட கிளைச் செலவுகளுக்கான நோட்டுகளைக் கழித்து, மீதி வாங்கியதைச் சேர்த்தல்
+
+        # அங்கீகரிக்கப்பட்ட கிளைச் செலவுகளுக்கான நோட்டுகளைக் கழித்து, மீதி வாங்கியதைச் சேர்த்தல்
         exp_res = (
             supabase.table("branch_expenses")
             .select("denomination_details")
@@ -341,28 +342,12 @@ def get_current_branch_cash_drawer(branch_id: int):
                 out_notes = e_den.get("out", {})
                 in_notes = e_den.get("in", {})
                 
-                # ஒருவேளை பழைய முறையில் சேமிக்கப்பட்டிருந்தால் அதற்கேற்ப கையாளுதல்
                 if not out_notes and not in_notes:
-                    out_notes = e_den # Fallback
+                    out_notes = e_den
                 
                 for k in stock:
                     stock[k] -= int(out_notes.get(k, 0) or 0)
                     stock[k] += int(in_notes.get(k, 0) or 0)
-
-        # அங்கீகரிக்கப்பட்ட கிளைச் செலவுகளுக்கான (Approved Expenses) நோட்டுகளைக் கழித்தல்
-        exp_res = (
-            supabase.table("branch_expenses")
-            .select("denomination_details")
-            .eq("branch_id", branch_id)
-            .eq("status", "Approved")
-            .execute()
-        )
-        if exp_res.data:
-            for e_row in exp_res.data:
-                e_den = e_row.get("denomination_details") or {}
-                for k in stock:
-                    exp_qty = int(e_den.get(k, 0) or 0)
-                    stock[k] -= exp_qty
 
         for k in stock:
             stock[k] = max(0, stock[k])
@@ -1090,37 +1075,38 @@ else:
                             supabase.table("branch_fund_transfers").update({"status": "Approved", "approved_by": st.session_state.username}).eq("id", f_item["id"]).execute()
                             st.success("அங்கீகரிக்கப்பட்டது!")
                             st.rerun()
-     # ஆப்பரேஷன்ஸ் மேசை tab-களில் கிளைச் செலவு ஒப்புதல் பகுதி
-        st.subheader("💸 கிளைச் செலவு ஒப்புதல் மேசை (Branch Expenses Approval Desk)")
-        pending_expenses = supabase.table("branch_expenses").select("*, branches(branch_name)").eq("status", "Pending_Approval").order("id", desc=True).execute().data or []
-        
-        if not pending_expenses:
-            st.info("✅ ஒப்புதலுக்கு நிலுவையில் உள்ள கிளைச் செலவுகள் எதுவும் இல்லை.")
-        else:
-            for ex in pending_expenses:
-                b_name = ex.get("branches", {}).get("branch_name", "Branch")
-                with st.expander(f"📌 செலவு: {ex['expense_head']} | கிளை: {b_name} | தொகை: ₹{float(ex['amount']):,.2f} | வவுச்சர்: {ex.get('voucher_no', '-')}"):
-                    st.write(f"• **விளக்கம்:** {ex.get('description', '-')}")
-                    st.write(f"• **பதிவு செய்தவர்:** {ex.get('created_by', '-')}")
-                    st.write(f"• **தேதி:** {ex.get('expense_date', '-')}")
-                    
-                    st.markdown("##### 💵 செலவுக்கான டினாமினேஷன் விவரம்:")
-                    st.json(ex.get("denomination_details", {}))
-                    
-                    col_ex1, col_ex2 = st.columns(2)
-                    with col_ex1:
-                        if st.button("✅ அங்கீகரி (Approve Expense)", key=f"app_ex_{ex['id']}", type="primary"):
-                            try:
-                                supabase.table("branch_expenses").update({"status": "Approved", "approved_by": st.session_state.username}).eq("id", ex["id"]).execute()
-                                st.success("செலவு அங்கீகரிக்கப்பட்டு கல்லாவில் இருந்து நோட்டுகள் கணக்கிடப்பட்டன!")
+
+            st.markdown("---")
+            st.subheader("💸 கிளைச் செலவு ஒப்புதல் மேசை (Branch Expenses Approval Desk)")
+            pending_expenses = supabase.table("branch_expenses").select("*, branches(branch_name)").eq("status", "Pending_Approval").order("id", desc=True).execute().data or []
+            
+            if not pending_expenses:
+                st.info("✅ ஒப்புதலுக்கு நிலுவையில் உள்ள கிளைச் செலவுகள் எதுவும் இல்லை.")
+            else:
+                for ex in pending_expenses:
+                    b_name = ex.get("branches", {}).get("branch_name", "Branch")
+                    with st.expander(f"📌 செலவு: {ex['expense_head']} | கிளை: {b_name} | தொகை: ₹{float(ex['amount']):,.2f} | வவுச்சர்: {ex.get('voucher_no', '-')}"):
+                        st.write(f"• **விளக்கம்:** {ex.get('description', '-')}")
+                        st.write(f"• **பதிவு செய்தவர்:** {ex.get('created_by', '-')}")
+                        st.write(f"• **தேதி:** {ex.get('expense_date', '-')}")
+                        
+                        st.markdown("##### 💵 செலவுக்கான டினாமினேஷன் விவரம்:")
+                        st.json(ex.get("denomination_details", {}))
+                        
+                        col_ex1, col_ex2 = st.columns(2)
+                        with col_ex1:
+                            if st.button("✅ அங்கீகரி (Approve Expense)", key=f"app_ex_{ex['id']}", type="primary"):
+                                try:
+                                    supabase.table("branch_expenses").update({"status": "Approved", "approved_by": st.session_state.username}).eq("id", ex["id"]).execute()
+                                    st.success("செலவு அங்கீகரிக்கப்பட்டு கல்லாவில் இருந்து நோட்டுகள் கணக்கிடப்பட்டன!")
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"பிழை: {e}")
+                        with col_ex2:
+                            if st.button("❌ நிராகரி (Reject)", key=f"rej_ex_{ex['id']}", type="secondary"):
+                                supabase.table("branch_expenses").update({"status": "Rejected", "approved_by": st.session_state.username}).eq("id", ex["id"]).execute()
+                                st.warning("செலவு நிராகரிக்கப்பட்டது.")
                                 st.rerun()
-                            except Exception as e:
-                                st.error(f"பிழை: {e}")
-                    with col_ex2:
-                        if st.button("❌ நிராகரி (Reject)", key=f"rej_ex_{ex['id']}", type="secondary"):
-                            supabase.table("branch_expenses").update({"status": "Rejected", "approved_by": st.session_state.username}).eq("id", ex["id"]).execute()
-                            st.warning("செலவு நிராகரிக்கப்பட்டது.")
-                            st.rerun()
 
         with ops_tab2:
             st.subheader("👤 புதிய வாடிக்கையாளர் KYC ஒப்புதல்")
@@ -1264,9 +1250,6 @@ else:
         with branch_tab6:
             render_staff_attribution_report(selected_branch_id=st.session_state.branch_id)
 
-       # ----------------------------------------------------
-        # branch_tab5: தலைமையக பணப் பரிமாற்றம் & டினாமினேஷன்
-        # ----------------------------------------------------
         with branch_tab5:
             st.subheader("🏦 தலைமையக பணப் பரிமாற்றம் (Head Office ⇄ Branch Fund Transfer Desk)")
             st.caption("தலைமையகத்திலிருந்து ரொக்கம் பெறுதல் அல்லது தலைமையகத்திற்கு ரொக்கம் அனுப்புதல். (அனைத்துப் பரிமாற்றங்களும் ஆப்பரேஷன்ஸ் ஒப்புதலுக்குப் பிறகே கல்லாவில் கணக்கிடப்படும்).")
@@ -1379,7 +1362,7 @@ else:
                     "குறிப்பு / UTR": f.get("reference_no", "-"),
                     "பதிவு செய்தவர்": f.get("created_by", "-")
                 } for f in b_fund_logs]), use_container_width=True)
-                
+
         with branch_tab4:
             st.subheader("💸 கிளை செலவுப் பதிவு & சில்லறை மேலாண்மை (Branch Expense Desk)")
             st.caption("செலவுத் தொகைக்கு நாம் கொடுத்த நோட்டுகளையும், கடைக்காரர் திருப்பிக் கொடுத்த மீதி சில்லறையையும் (Cash Return) சரியாக உள்ளிடவும்.")
@@ -1520,6 +1503,7 @@ else:
                             supabase.table("customer_visits").update({"status": "Submitted_to_Auditor", "verification_remarks": b_rep}).eq("id", c_item["id"]).execute()
                             st.success("அனுப்பப்பட்டது!")
                             st.rerun()
+
         with branch_tab2:
             st.subheader("📁 கிளை ஆவணங்கள் பதிவேற்றம் (Upload Docs Desk)")
             st.caption("தணிக்கைக்கு அனுப்ப வேண்டிய வாடிக்கையாளர் வருகைகள் மற்றும் அவர்களின் வணிக நடவடிக்கைகள்.")
