@@ -1108,13 +1108,63 @@ else:
                             st.rerun()
 
         with ops_tab4:
-            st.subheader("📞 பரிவர்த்தனை அழைப்பு சரிபார்ப்பு")
-            ops_visits = supabase.table("customer_visits").select("*, customers(*)").eq("status", "Pending_Calling_Verification").execute().data or []
-            for item in ops_visits:
-                with st.expander(f"🔔 {item['visit_no']} | {item.get('customers', {}).get('name')}"):
-                    if st.button("✅ சரிபார்க்கப்பட்டது", key=f"v_call_{item['id']}", type="primary"):
-                        supabase.table("customer_visits").update({"status": "Pending_Branch_Docs"}).eq("id", item["id"]).execute()
-                        st.rerun()
+            st.subheader("📞 பரிவர்த்தனை அழைப்பு சரிபார்ப்பு (Transaction Call Verification)")
+            st.caption("கிளை ஊழியர்களால் முடிக்கப்பட்டு, வாடிக்கையாளர் அழைப்புச் சரிபார்ப்புக்காக நிலுவையில் உள்ள வருகைகள்.")
+            
+            ops_visits = (
+                supabase.table("customer_visits")
+                .select("*, customers(name, mobile, mobile2), transactions(*), branches(branch_name)")
+                .eq("status", "Pending_Calling_Verification")
+                .order("id", desc=True)
+                .execute()
+                .data or []
+            )
+
+            if not ops_visits:
+                st.info("✅ சரிபார்க்க வேண்டிய வருகைகள் எதுவும் நிலுவையில் இல்லை.")
+            else:
+                for item in ops_visits:
+                    cust = item.get("customers", {}) or {}
+                    b_name = item.get("branches", {}).get("branch_name", "கிளை")
+                    txns = item.get("transactions", []) or []
+
+                    with st.expander(f"🔔 வருகை எண்: {item['visit_no']} | வாடிக்கையாளர்: {cust.get('name', '-')} | கிளை: {b_name} | நிகரத் தொகை: ₹{float(item.get('net_cash_amount', 0)):,.2f}"):
+                        
+                        col_o1, col_o2 = st.columns(2)
+                        with col_o1:
+                            st.markdown("##### 👤 வாடிக்கையாளர் விவரங்கள்:")
+                            st.write(f"• **பெயர்:** {cust.get('name', '-')}")
+                            st.write(f"• **முதன்மை மொபைல்:** `{cust.get('mobile', '-')}`")
+                            st.write(f"• **கூடுதல் மொபைல்:** `{cust.get('mobile2', '-')}`")
+                        with col_o2:
+                            st.markdown("##### 💳 பரிவர்த்தனை & செலுத்தும் முறை:")
+                            st.write(f"• **பரிமாற்ற முறை:** {item.get('payment_mode', 'Cash')}")
+                            if item.get('bank_reference_no'):
+                                st.write(f"• **UTR / Ref எண்:** `{item.get('bank_reference_no')}`")
+                            st.write(f"• **OTP சரிபார்ப்பு:** {'🟢 Verified' if item.get('otp_verified') else '🔴 Pending'}")
+
+                        st.markdown("---")
+                        st.markdown("##### 🛒 இந்த வருகையில் மேற்கொள்ளப்பட்ட நடவடிக்கைகள் (Transactions):")
+                        if txns:
+                            df_ops_txns = pd.DataFrame([{
+                                "நடவடிக்கை வகை": t.get("transaction_type", "-"),
+                                "காரணப் பணியாளர்": t.get("staff_name", "-"),
+                                "பட்டுவாடா (Paid ₹)": f"₹{float(t.get('paid_amount', 0)):,.2f}",
+                                "வரவு (Received ₹)": f"₹{float(t.get('received_amount', 0)):,.2f}",
+                                "குறிப்பு / விவரம்": t.get("remarks", "-")
+                            } for t in txns])
+                            st.dataframe(df_ops_txns, use_container_width=True)
+                        else:
+                            st.warning("⚠️ இந்த வருகையில் நடவடிக்கைகள் எதுவும் பதிவு செய்யப்படவில்லை.")
+
+                        st.markdown("---")
+                        if st.button("✅ தொலைபேசி வழி சரிபார்க்கப்பட்டது (Approve & Send to Branch Docs)", key=f"v_call_{item['id']}", type="primary"):
+                            try:
+                                supabase.table("customer_visits").update({"status": "Pending_Branch_Docs"}).eq("id", item["id"]).execute()
+                                st.success(f"✅ வருகை {item['visit_no']} சரிபார்க்கப்பட்டு கிளை ஆவணங்கள் பதிவேற்றத்திற்கு மாற்றப்பட்டது!")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"பிழை: {e}")
 
     # ----------------------------------------------------
     # C. தணிக்கையர் திரை (AUDITOR DESK)
