@@ -455,6 +455,29 @@ def render_staff_attribution_report(selected_branch_id=None):
                 disp_val = f"{grams_val} g"
             else:
                 base_calc = (effective_vol / unit_val) * pts_per_unit if unit_val > 0 else 0.0
+                if "Release" in txn_type or "Part Payment" in txn_type:
+                    calc_pts = -abs(base_calc)
+                else:
+                    calc_pts = abs(base_calc)
+                disp_val = f"₹{effective_vol:,.2f}"
+
+            assigned_staff_list = []
+            if "Walk-in" in raw_staff or not raw_staff or "நேரடி" in raw_staff:
+                if total_staff_count == 2 and head_staff and other_staff:
+                    assigned_staff_list = [(head_staff, calc_pts * 0.60), (other_staff[0], calc_pts * 0.40)]
+                elif total_staff_count == 3 and head_staff and len(other_staff) == 2:
+                    assigned_staff_list = [(head_staff, calc_pts * 0.40), (other_staff[0], calc_pts * 0.30), (other_staff[1], calc_pts * 0.30)]
+                elif total_staff_count > 3 and head_staff:
+                    split_ratio = 0.60 / len(other_staff) if other_staff else 0.0
+                    assigned_staff_list = [(head_staff, calc_pts * 0.40)]
+                    for s in other_staff:
+                        assigned_staff_list.append((s, calc_pts * split_ratio))
+                elif head_staff:
+                    assigned_staff_list = [(head_staff, calc_pts)]
+                else:
+                    assigned_staff_list = [("Walk-in", calc_pts)]
+            else:
+                assigned_staff_list = [(raw_staff, calc_pts)]
                 
                 # -------------------------------------------------------------
                 # திருத்தம்: GL Release மற்றும் Part Payment-க்கு புள்ளிகள் நெகட்டிவாக மாற வேண்டும்
