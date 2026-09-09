@@ -336,7 +336,7 @@ def get_current_branch_cash_drawer(branch_id: int):
         return empty_stock
 
 # ==============================================================================
-# காரணப் பணியாளர் அறிக்கை (திருத்தப்பட்ட நெகட்டிவ் புள்ளிகள் கணக்கீட்டுடன்)
+# காரணப் பணியாளர் அறிக்கை (திருத்தப்பட்ட நெகட்டிவ் புள்ளிகள் & பங்கீட்டு விதிகளுடன்)
 # ==============================================================================
 def render_staff_attribution_report(selected_branch_id=None):
     st.markdown("### 📊 காரணப் பணியாளர் அறிக்கை & ஸ்கீம் வாரியான ஊக்கத்தொகை (Scheme-wise Incentive & Points Report)")
@@ -441,8 +441,8 @@ def render_staff_attribution_report(selected_branch_id=None):
             basis = rule_info.get("basis_type", "Amount")
             unit_val = float(rule_info.get("unit_value", 100000.0) or 100000.0)
             pts_per_unit = float(rule_info.get("points_per_unit", 10.0) or 0.0)
-            
-                calc_pts = 0.0
+
+            calc_pts = 0.0
             if basis == "Weight_Grams":
                 grams_val = 0.0
                 try:
@@ -540,115 +540,6 @@ def render_staff_attribution_report(selected_branch_id=None):
     for s_name, pts in staff_points_map.items():
         deduct_pts = (penalty_pts / active_staff_count) if is_negative_growth else 0.0
         final_pts = pts - deduct_pts
-        final_incentive = final_pts * rupees_per_point
-
-        perf_rows.append({
-            "பணியாளர் பெயர்": s_name,
-            "ஈட்டிய/குறைந்த நிகரப் புள்ளிகள்": round(final_pts, 2),
-            "ஊக்கத்தொகை (Incentive ₹)": f"₹{final_incentive:,.2f}"
-        })
-
-    st.dataframe(pd.DataFrame(perf_rows), use_container_width=True)
-
-    st.markdown("##### 🔍 பரிவர்த்தனை & ஸ்கீம் வாரியான விரிவான புள்ளி அறிக்கை (Detailed Breakdown)")
-    st.dataframe(display_df, use_container_width=True)
-
-    csv = pd.DataFrame(perf_rows).to_csv(index=False).encode('utf-8')
-    st.download_button(
-        label="📥 அறிக்கையைப் பதிவிறக்குக (Download CSV)",
-        data=csv,
-        file_name=f"Staff_Scheme_Incentive_Report_{start_date}_to_{end_date}.csv",
-        mime="text/csv",
-        key=f"dl_csv_{selected_branch_id}"
-    )
-            # -----------------------------------------------------------------
-            # புதிய விதி: காரணப் பணியாளர் ஒரு குறிப்பிட்ட நபராக இருந்தால் முழுப் பலனும் அவரே!
-            # Walk-in எனில் மட்டுமே பணியாளர் எண்ணிக்கைக்கு ஏற்ப 60:40 அல்லது 40:30:30 எனப் பிரிக்கப்படும்.
-            # -----------------------------------------------------------------
-            assigned_staff_list = []
-            # காரணப் பணியாளர் பங்கீட்டு விதி
-            assigned_staff_list = []
-            if "Walk-in" in raw_staff or not raw_staff or "நேரடி" in raw_staff:
-                if total_staff_count == 2 and head_staff and other_staff:
-                    assigned_staff_list = [(head_staff, calc_pts * 0.60), (other_staff[0], calc_pts * 0.40)]
-                elif total_staff_count == 3 and head_staff and len(other_staff) == 2:
-                    assigned_staff_list = [(head_staff, calc_pts * 0.40), (other_staff[0], calc_pts * 0.30), (other_staff[1], calc_pts * 0.30)]
-                elif total_staff_count > 3 and head_staff:
-                    split_ratio = 0.60 / len(other_staff) if other_staff else 0.0
-                    assigned_staff_list = [(head_staff, calc_pts * 0.40)]
-                    for s in other_staff:
-                        assigned_staff_list.append((s, calc_pts * split_ratio))
-                elif head_staff:
-                    assigned_staff_list = [(head_staff, calc_pts)]
-                else:
-                    assigned_staff_list = [("Walk-in", calc_pts)]
-            else:
-                assigned_staff_list = [(raw_staff, calc_pts)]
-            else:
-                # குறிப்பிட்ட பணியாளர் எனில் முழுப் புள்ளியும்/நெகட்டிவ் புள்ளியும் அவரே!
-                assigned_staff_list = [(raw_staff, calc_pts)]
-
-            for staff_member, s_pts in assigned_staff_list:
-                add_staff_points(staff_member, s_pts)
-                detailed_txn_logs.append({
-                    "தேதி": str(v.get("created_at", ""))[:10],
-                    "வருகை எண்": v.get("visit_no", "-"),
-                    "கிளை": b_name,
-                    "பணியாளர்": staff_member,
-                    "நடவடிக்கை வகை": txn_type,
-                    "திட்டம் (Scheme)": detected_scheme,
-                    "வணிக அளவு (Effective)": disp_val,
-                    "raw_amount": effective_vol,
-                    "ஈட்டிய புள்ளிகள்": round(s_pts, 2),
-                    "குறிப்பு": remarks_str
-                })
-
-    if not detailed_txn_logs:
-        st.info("தேர்ந்தெடுக்கப்பட்ட தேதி வரம்பில் பரிவர்த்தனைகள் எதுவும் இல்லை.")
-        return
-
-    df_txns = pd.DataFrame(detailed_txn_logs)
-
-    tot_pledge = df_txns[df_txns["நடவடிக்கை வகை"].str.contains("Pledge", na=False)]["raw_amount"].sum()
-    tot_release = df_txns[df_txns["நடவடிக்கை வகை"].str.contains("Release", na=False)]["raw_amount"].sum()
-    net_gold_growth = tot_pledge - tot_release
-
-    is_negative_growth = net_gold_growth < 0
-    penalty_pts = 0.0
-    if is_negative_growth:
-        penalty_pts = (abs(net_gold_growth) / 100000.0) * penalty_per_lakh
-
-    staff_filter_options = ["அனைத்து பணியாளர்களும் (All Staff & Walk-in)"] + sorted(list(staff_points_map.keys()))
-    with f_col3:
-        selected_staff_filter = st.selectbox("காரணப் பணியாளரைத் தேர்ந்தெடுக்கவும்:", staff_filter_options, key=f"staff_flt_{selected_branch_id}")
-
-    if selected_staff_filter != "அனைத்து பணியாளர்களும் (All Staff & Walk-in)":
-        df_filtered = df_txns[df_txns["பணியாளர்"] == selected_staff_filter].copy()
-    else:
-        df_filtered = df_txns.copy()
-
-    display_df = df_filtered.drop(columns=["raw_amount"]) if "raw_amount" in df_filtered.columns else df_filtered
-
-    m1, m2, m3, m4 = st.columns(4)
-    m1.metric("மொத்த நடவடிக்கைகள்", f"{len(df_filtered):,}")
-    m2.metric("புதிய நகைக்கடன் (Pledge)", f"₹{tot_pledge:,.2f}")
-    m3.metric("அடகு மீட்டல் (Principal)", f"₹{tot_release:,.2f}")
-
-    if is_negative_growth:
-        m4.metric("நிகர நகைக் கடன் வளர்ச்சி", f"-₹{abs(net_gold_growth):,.2f}", delta="-நெகட்டிவ் வளர்ச்சி", delta_color="inverse")
-        st.error(f"⚠️ **எச்சரிக்கை:** நகைக் கடன் வளர்ச்சி நெகட்டிவாக உள்ளது (-₹{abs(net_gold_growth):,.2f}). இதனால் ஊழியர் கணக்கில் மொத்தமாக **-{penalty_pts:,.1f} நெகட்டிவ் புள்ளிகள்** கழிக்கப்படும்.")
-    else:
-        m4.metric("நிகர நகைக் கடன் வளர்ச்சி", f"+₹{net_gold_growth:,.2f}", delta="+பாசிட்டிவ் வளர்ச்சி")
-
-    st.markdown("---")
-
-    st.markdown(f"##### 🏆 பணியாளர் வாரியான புள்ளி விவரம் & ஊக்கத்தொகை (1 புள்ளி = ₹{rupees_per_point:.2f})")
-    perf_rows = []
-    active_staff_count = max(1, len(staff_points_map))
-
-    for s_name, pts in staff_points_map.items():
-        deduct_pts = (penalty_pts / active_staff_count) if is_negative_growth else 0.0
-        final_pts = pts - deduct_pts  # Note: pts ஏற்கெனவே Release-க்கு நெகட்டிவ் மதிப்பாகத்தான் வரும்
         final_incentive = final_pts * rupees_per_point
 
         perf_rows.append({
@@ -1037,7 +928,7 @@ else:
                 with ir_c5:
                     ir_pts = st.number_input("புள்ளிகள் (Points Per Unit) *:", value=10.0, step=1.0)
 
-                if st.form_submit_button("ஸ்கீம் விதியைச் சேமி (Save Rule)", type="primary"):
+                if st.form_submit_button("ஸ்கீம் விதியைச் சேமி", type="primary"):
                     try:
                         clean_basis = "Amount" if "Amount" in ir_basis else "Weight_Grams"
                         payload = {
