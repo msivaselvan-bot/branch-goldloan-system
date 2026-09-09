@@ -572,6 +572,8 @@ def render_staff_attribution_report(selected_branch_id=None):
             # Walk-in எனில் மட்டுமே பணியாளர் எண்ணிக்கைக்கு ஏற்ப 60:40 அல்லது 40:30:30 எனப் பிரிக்கப்படும்.
             # -----------------------------------------------------------------
             assigned_staff_list = []
+            # காரணப் பணியாளர் பங்கீட்டு விதி
+            assigned_staff_list = []
             if "Walk-in" in raw_staff or not raw_staff or "நேரடி" in raw_staff:
                 if total_staff_count == 2 and head_staff and other_staff:
                     assigned_staff_list = [(head_staff, calc_pts * 0.60), (other_staff[0], calc_pts * 0.40)]
@@ -586,6 +588,8 @@ def render_staff_attribution_report(selected_branch_id=None):
                     assigned_staff_list = [(head_staff, calc_pts)]
                 else:
                     assigned_staff_list = [("Walk-in", calc_pts)]
+            else:
+                assigned_staff_list = [(raw_staff, calc_pts)]
             else:
                 # குறிப்பிட்ட பணியாளர் எனில் முழுப் புள்ளியும்/நெகட்டிவ் புள்ளியும் அவரே!
                 assigned_staff_list = [(raw_staff, calc_pts)]
