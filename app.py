@@ -1066,6 +1066,37 @@ else:
                             supabase.table("branch_fund_transfers").update({"status": "Approved", "approved_by": st.session_state.username}).eq("id", f_item["id"]).execute()
                             st.success("அங்கீகரிக்கப்பட்டது!")
                             st.rerun()
+     # ஆப்பரேஷன்ஸ் மேசை tab-களில் கிளைச் செலவு ஒப்புதல் பகுதி
+        st.subheader("💸 கிளைச் செலவு ஒப்புதல் மேசை (Branch Expenses Approval Desk)")
+        pending_expenses = supabase.table("branch_expenses").select("*, branches(branch_name)").eq("status", "Pending_Approval").order("id", desc=True).execute().data or []
+        
+        if not pending_expenses:
+            st.info("✅ ஒப்புதலுக்கு நிலுவையில் உள்ள கிளைச் செலவுகள் எதுவும் இல்லை.")
+        else:
+            for ex in pending_expenses:
+                b_name = ex.get("branches", {}).get("branch_name", "Branch")
+                with st.expander(f"📌 செலவு: {ex['expense_head']} | கிளை: {b_name} | தொகை: ₹{float(ex['amount']):,.2f} | வவுச்சர்: {ex.get('voucher_no', '-')}"):
+                    st.write(f"• **விளக்கம்:** {ex.get('description', '-')}")
+                    st.write(f"• **பதிவு செய்தவர்:** {ex.get('created_by', '-')}")
+                    st.write(f"• **தேதி:** {ex.get('expense_date', '-')}")
+                    
+                    st.markdown("##### 💵 செலவுக்கான டினாமினேஷன் விவரம்:")
+                    st.json(ex.get("denomination_details", {}))
+                    
+                    col_ex1, col_ex2 = st.columns(2)
+                    with col_ex1:
+                        if st.button("✅ அங்கீகரி (Approve Expense)", key=f"app_ex_{ex['id']}", type="primary"):
+                            try:
+                                supabase.table("branch_expenses").update({"status": "Approved", "approved_by": st.session_state.username}).eq("id", ex["id"]).execute()
+                                st.success("செலவு அங்கீகரிக்கப்பட்டு கல்லாவில் இருந்து நோட்டுகள் கணக்கிடப்பட்டன!")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"பிழை: {e}")
+                    with col_ex2:
+                        if st.button("❌ நிராகரி (Reject)", key=f"rej_ex_{ex['id']}", type="secondary"):
+                            supabase.table("branch_expenses").update({"status": "Rejected", "approved_by": st.session_state.username}).eq("id", ex["id"]).execute()
+                            st.warning("செலவு நிராகரிக்கப்பட்டது.")
+                            st.rerun()
 
         with ops_tab2:
             st.subheader("👤 புதிய வாடிக்கையாளர் KYC ஒப்புதல்")
