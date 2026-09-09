@@ -1146,22 +1146,19 @@ else:
                         st.markdown("---")
                         st.markdown("##### 🛒 இந்த வருகையில் மேற்கொள்ளப்பட்ட நடவடிக்கைகள் (Transactions):")
                         if txns:
-                            df_ops_txns = pd.DataFrame([{
-                                "நடவடிக்கை வகை": t.get("transaction_type", "-"),
-                                "காரணப் பணியாளர்": t.get("staff_name", "-"),
-                                "பட்டுவாடா (Paid ₹)": f"₹{float(t.get('paid_amount', 0)):,.2f}",
-                                "வரவு (Received ₹)": f"₹{float(t.get('received_amount', 0)):,.2f}",
-                                "குறிப்பு / விவரம்": t.get("remarks", "-")
-                            } for t in txns])
-                            st.dataframe(df_ops_txns, use_container_width=True)
+                            for idx, t in enumerate(txns, 1):
+                                st.markdown(f"**{idx}. {t.get('transaction_type', '-')}** | பணியாளர்: `{t.get('staff_name', '-')}`")
+                                st.write(f"   • பட்டுவாடா: ₹{float(t.get('paid_amount', 0)):,.2f} | வரவு: ₹{float(t.get('received_amount', 0)):,.2f}")
+                                st.write(f"   • குறிப்பு: {t.get('remarks', '-')}")
+                                st.markdown("")
                         else:
                             st.warning("⚠️ இந்த வருகையில் நடவடிக்கைகள் எதுவும் பதிவு செய்யப்படவில்லை.")
 
                         st.markdown("---")
-                        if st.button("✅ தொலைபேசி வழி சரிபார்க்கப்பட்டது (Approve & Send to Branch Docs)", key=f"v_call_{item['id']}", type="primary"):
+                        if st.button("✅ தொலைபேசி வழி சரிபார்க்கப்பட்டது (Approve & Send)", key=f"v_call_{item['id']}", type="primary"):
                             try:
                                 supabase.table("customer_visits").update({"status": "Pending_Branch_Docs"}).eq("id", item["id"]).execute()
-                                st.success(f"✅ வருகை {item['visit_no']} சரிபார்க்கப்பட்டு கிளை ஆவணங்கள் பதிவேற்றத்திற்கு மாற்றப்பட்டது!")
+                                st.success(f"✅ வருகை {item['visit_no']} சரிபார்க்கப்பட்டது!")
                                 st.rerun()
                             except Exception as e:
                                 st.error(f"பிழை: {e}")
