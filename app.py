@@ -441,8 +441,8 @@ def render_staff_attribution_report(selected_branch_id=None):
             basis = rule_info.get("basis_type", "Amount")
             unit_val = float(rule_info.get("unit_value", 100000.0) or 100000.0)
             pts_per_unit = float(rule_info.get("points_per_unit", 10.0) or 0.0)
-
-            calc_pts = 0.0
+            
+                calc_pts = 0.0
             if basis == "Weight_Grams":
                 grams_val = 0.0
                 try:
