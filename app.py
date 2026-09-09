@@ -1324,24 +1324,105 @@ else:
                     "குறிப்பு / UTR": f.get("reference_no", "-"),
                     "பதிவு செய்தவர்": f.get("created_by", "-")
                 } for f in b_fund_logs]), use_container_width=True)
+                
         with branch_tab4:
-            st.subheader("💼 கிளை கல்லா கையிருப்பு நிலை (Live Approved Stock)")
-            curr_stock = get_current_branch_cash_drawer(st.session_state.branch_id)
-            total_stock_val = (
-                (curr_stock["500"] * 500) + (curr_stock["200"] * 200) + (curr_stock["100"] * 100) +
-                (curr_stock["50"] * 50) + (curr_stock["20"] * 20) + (curr_stock["10"] * 10) +
-                (curr_stock["5"] * 5) + curr_stock["coins"]
-            )
-            st.metric("கல்லாவில் உள்ள மொத்த ரொக்கம்", f"₹{total_stock_val:,.2f}")
-            c1, c2, c3, c4 = st.columns(4)
-            c1.metric("₹500", f"{curr_stock['500']}")
-            c1.metric("₹20", f"{curr_stock['20']}")
-            c2.metric("₹200", f"{curr_stock['200']}")
-            c2.metric("₹10", f"{curr_stock['10']}")
-            c3.metric("₹100", f"{curr_stock['100']}")
-            c3.metric("₹5", f"{curr_stock['5']}")
-            c4.metric("₹50", f"{curr_stock['50']}")
-            c4.metric("நாணயங்கள்", f"₹{curr_stock['coins']:,.2f}")
+            st.subheader("💸 கிளை செலவுப் பதிவு & டினாமினேஷன் (Branch Expense Desk)")
+            st.caption("செலவுகளுக்கான விவரங்கள் மற்றும் ரூபாய் நோட்டுகளை உள்ளிடவும். (ஆப்பரேஷன்ஸ் ஒப்புதலுக்குப் பிறகே கல்லாவில் இருந்து குறையும்).")
+
+            curr_b_drawer = get_current_branch_cash_drawer(st.session_state.branch_id)
+
+            with st.expander("💼 தற்போதைய நேரடி கல்லா கையிருப்பு (Live Approved Stock)", expanded=False):
+                bd1, bd2, bd3, bd4 = st.columns(4)
+                bd1.metric("₹500 தாள்கள்", f"{curr_b_drawer['500']}")
+                bd1.metric("₹20 தாள்கள்", f"{curr_b_drawer['20']}")
+                bd2.metric("₹200 தாள்கள்", f"{curr_b_drawer['200']}")
+                bd2.metric("₹10 தாள்கள்", f"{curr_b_drawer['10']}")
+                bd3.metric("₹100 தாள்கள்", f"{curr_b_drawer['100']}")
+                bd3.metric("₹5 தாள்கள்", f"{curr_b_drawer['5']}")
+                bd4.metric("₹50 தாள்கள்", f"{curr_b_drawer['50']}")
+                bd4.metric("நாணயங்கள் (₹)", f"{curr_b_drawer['coins']:,.2f}")
+
+            with st.form("branch_expense_flow_form", clear_on_submit=True):
+                st.markdown("##### 🔄 புதிய செலவுப் பதிவு (Submit for Operations Approval)")
+                ex_c1, ex_c2 = st.columns(2)
+                with ex_c1:
+                    exp_head = st.selectbox(
+                        "செலவினத் தலைப்பு (Expense Head) *:",
+                        [
+                            "Rent (வாடகை)", "Electricity (மின் கட்டணம்)", "Staff Salary (சம்பளம்)",
+                            "Tea / Refreshments (தேநீர் & சிற்றுண்டி)", "Stationery / Printing (ஸ்டேஷனரி)",
+                            "Maintenance / Repair (பராமரிப்பு)", "Transport / Courier (போக்குவரத்து)", "Miscellaneous (இதர செலவுகள்)"
+                        ],
+                        key="exp_head_sel"
+                    )
+                with ex_c2:
+                    exp_ref = st.text_input("வவுச்சர் எண் / பில் எண் *:", placeholder="எ.கா: VOU-101 / Bill No...", key="exp_ref_in")
+
+                exp_desc = st.text_area("செலவுக்கான விளக்கம் / காரணங்கள் *:", placeholder="எ.கா: அலுவலக மின் கட்டணம் செலுத்தியது...", key="exp_desc_in")
+
+                st.markdown("##### 💵 செலவுக்கு வழங்கப்படும் ரூபாய் நோட்டுகள் விவரம் (Denominations):")
+                st.caption("கல்லா இருப்பைக் கவனித்து நோட்டுகளை உள்ளிடவும்.")
+                ef_1, ef_2, ef_3, ef_4 = st.columns(4)
+
+                with ef_1:
+                    e_500 = st.number_input("₹500 தாள்கள்", min_value=0, max_value=curr_b_drawer['500'], step=1, key="ex_500")
+                    e_20 = st.number_input("₹20 தாள்கள்", min_value=0, max_value=curr_b_drawer['20'], step=1, key="ex_20")
+                with ef_2:
+                    e_200 = st.number_input("₹200 தாள்கள்", min_value=0, max_value=curr_b_drawer['200'], step=1, key="ex_200")
+                    e_10 = st.number_input("₹10 தாள்கள்", min_value=0, max_value=curr_b_drawer['10'], step=1, key="ex_10")
+                with ef_3:
+                    e_100 = st.number_input("₹100 தாள்கள்", min_value=0, max_value=curr_b_drawer['100'], step=1, key="ex_100")
+                    e_5 = st.number_input("₹5 தாள்கள்", min_value=0, max_value=curr_b_drawer['5'], step=1, key="ex_5")
+                with ef_4:
+                    e_50 = st.number_input("₹50 தாள்கள்", min_value=0, max_value=curr_b_drawer['50'], step=1, key="ex_50")
+                    e_coins = st.number_input("நாணயங்கள் (₹)", min_value=0.0, max_value=float(curr_b_drawer['coins']), step=1.0, key="ex_coins")
+
+                calc_exp_amt = (
+                    (e_500 * 500) + (e_200 * 200) + (e_100 * 100) + (e_50 * 50) +
+                    (e_20 * 20) + (e_10 * 10) + (e_5 * 5) + e_coins
+                )
+
+                st.info(f"💵 **செலவு மொத்தத் தொகை (நோட்டுகள் வழி): ₹{calc_exp_amt:,.2f}**")
+                st.caption("ℹ️ குறிப்பு: ஆப்பரேஷன்ஸ் அங்கீகரித்த பின்னரே இந்த நோட்டுகள் கல்லாவில் இருந்து கழியும்.")
+
+                if st.form_submit_button("செலவுப் பதிவை ஆப்பரேஷன்ஸ் ஒப்புதலுக்கு அனுப்புக", type="primary"):
+                    if calc_exp_amt > 0 and exp_ref.strip() and exp_desc.strip():
+                        try:
+                            supabase.table("branch_expenses").insert({
+                                "branch_id": st.session_state.branch_id,
+                                "expense_date": str(date.today()),
+                                "expense_head": exp_head,
+                                "amount": float(calc_exp_amt),
+                                "voucher_no": exp_ref.strip(),
+                                "description": exp_desc.strip(),
+                                "denomination_details": {
+                                    "500": e_500, "200": e_200, "100": e_100, "50": e_50,
+                                    "20": e_20, "10": e_10, "5": e_5, "coins": e_coins
+                                },
+                                "created_by": st.session_state.username,
+                                "status": "Pending_Approval"
+                            }).execute()
+
+                            st.success(f"✅ ₹{calc_exp_amt:,.2f} செலவுப் பதிவு ஆப்பரேஷன்ஸ் ஒப்புதலுக்கு அனுப்பப்பட்டது!")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"பிழை: {e}")
+                    else:
+                        st.error("தயவுசெய்து நோட்டுகளையும் அனைத்து விவரங்களையும் சரியாக உள்ளிடவும்.")
+
+            st.markdown("---")
+            st.subheader("📋 கிளை செலவுகளின் சமீபத்திய நிலை (Expense Logs)")
+            b_exp_logs = supabase.table("branch_expenses").select("*").eq("branch_id", st.session_state.branch_id).order("id", desc=True).limit(15).execute().data or []
+            if b_exp_logs:
+                st.dataframe(pd.DataFrame([{
+                    "தேதி": e["expense_date"],
+                    "தலைப்பு": e["expense_head"],
+                    "தொகை (₹)": f"₹{float(e['amount']):,.2f}",
+                    "வவுச்சர் எண்": e.get("voucher_no", "-"),
+                    "விவரம்": e.get("description", "-"),
+                    "நிலை (Status)": "🟢 Approved (ஏற்கப்பட்டது)" if e.get("status") == "Approved" else ("🔴 Rejected (மறுக்கப்பட்டது)" if e.get("status") == "Rejected" else "🟡 Pending (ஒப்புதல் நிலுவை)"),
+                    "பதிவு செய்தவர்": e.get("created_by", "-")
+                } for e in b_exp_logs]), use_container_width=True)
 
         with branch_tab3:
             st.subheader("⚠️ தலைமை அலுவலக விளக்கங்கள் & மறுப்புகள்")
