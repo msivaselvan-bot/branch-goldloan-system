@@ -328,6 +328,21 @@ def get_current_branch_cash_drawer(branch_id: int):
                     elif t_type == "BRANCH_TO_HO":
                         stock[k] -= notes_qty
 
+        # அங்கீகரிக்கப்பட்ட கிளைச் செலவுகளுக்கான (Approved Expenses) நோட்டுகளைக் கழித்தல்
+        exp_res = (
+            supabase.table("branch_expenses")
+            .select("denomination_details")
+            .eq("branch_id", branch_id)
+            .eq("status", "Approved")
+            .execute()
+        )
+        if exp_res.data:
+            for e_row in exp_res.data:
+                e_den = e_row.get("denomination_details") or {}
+                for k in stock:
+                    exp_qty = int(e_den.get(k, 0) or 0)
+                    stock[k] -= exp_qty
+
         for k in stock:
             stock[k] = max(0, stock[k])
 
