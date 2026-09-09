@@ -1360,8 +1360,8 @@ else:
                 } for f in b_fund_logs]), use_container_width=True)
                 
         with branch_tab4:
-            st.subheader("💸 கிளை செலவுப் பதிவு & டினாமினேஷன் (Branch Expense Desk)")
-            st.caption("செலவுகளுக்கான விவரங்கள் மற்றும் ரூபாய் நோட்டுகளை உள்ளிடவும். (ஆப்பரேஷன்ஸ் ஒப்புதலுக்குப் பிறகே கல்லாவில் இருந்து குறையும்).")
+            st.subheader("💸 கிளை செலவுப் பதிவு & சில்லறை மேலாண்மை (Branch Expense Desk)")
+            st.caption("செலவுத் தொகைக்கு நாம் கொடுத்த நோட்டுகளையும், கடைக்காரர் திருப்பிக் கொடுத்த மீதி சில்லறையையும் (Cash Return) சரியாக உள்ளிடவும்.")
 
             curr_b_drawer = get_current_branch_cash_drawer(st.session_state.branch_id)
 
@@ -1378,71 +1378,98 @@ else:
 
             with st.form("branch_expense_flow_form", clear_on_submit=True):
                 st.markdown("##### 🔄 புதிய செலவுப் பதிவு (Submit for Operations Approval)")
-                ex_c1, ex_c2 = st.columns(2)
+                ex_c1, ex_c2, ex_c3 = st.columns(3)
                 with ex_c1:
                     exp_head = st.selectbox(
                         "செலவினத் தலைப்பு (Expense Head) *:",
                         [
                             "Rent (வாடகை)", "Electricity (மின் கட்டணம்)", "Staff Salary (சம்பளம்)",
-                            "Water / Staff wellfare ( குடிநீ்ர் & பணியார்சார் செலவுகள்", "Stationery / Printing (ஸ்டேஷனரி)",
+                            "Tea / Refreshments (தேநீர் & சிற்றுண்டி)", "Stationery / Printing (ஸ்டேஷனரி)",
                             "Maintenance / Repair (பராமரிப்பு)", "Transport / Courier (போக்குவரத்து)", "Miscellaneous (இதர செலவுகள்)"
                         ],
                         key="exp_head_sel"
                     )
                 with ex_c2:
-                    exp_ref = st.text_input("வவுச்சர் எண் / பில் எண் *:", placeholder="எ.கா: VOU-101 / Bill No...", key="exp_ref_in")
+                    actual_exp_amount = st.number_input("உண்மையான செலவுத் தொகை (Actual Expense ₹) *:", min_value=1.0, step=10.0, key="actual_exp_amt")
+                with ex_c3:
+                    exp_ref = st.text_input("வவுச்சர் / பில் எண் *:", placeholder="எ.கா: VOU-101...", key="exp_ref_in")
 
-                exp_desc = st.text_area("செலவுக்கான விளக்கம் / காரணங்கள் *:", placeholder="எ.கா: அலுவலக மின் கட்டணம் செலுத்தியது...", key="exp_desc_in")
+                exp_desc = st.text_area("செலவுக்கான விளக்கம் / காரணங்கள் *:", placeholder="எ.கா: தேநீர் மற்றும் சிற்றுண்டி வாங்கியது...", key="exp_desc_in")
 
-                st.markdown("##### 💵 செலவுக்கு வழங்கப்படும் ரூபாய் நோட்டுகள் விவரம் (Denominations):")
-                st.caption("கல்லா இருப்பைக் கவனித்து நோட்டுகளை உள்ளிடவும்.")
-                ef_1, ef_2, ef_3, ef_4 = st.columns(4)
+                st.markdown("---")
+                col_ex_in, col_ex_out = st.columns(2)
 
-                with ef_1:
-                    e_500 = st.number_input("₹500 தாள்கள்", min_value=0, max_value=curr_b_drawer['500'], step=1, key="ex_500")
-                    e_20 = st.number_input("₹20 தாள்கள்", min_value=0, max_value=curr_b_drawer['20'], step=1, key="ex_20")
-                with ef_2:
-                    e_200 = st.number_input("₹200 தாள்கள்", min_value=0, max_value=curr_b_drawer['200'], step=1, key="ex_200")
-                    e_10 = st.number_input("₹10 தாள்கள்", min_value=0, max_value=curr_b_drawer['10'], step=1, key="ex_10")
-                with ef_3:
-                    e_100 = st.number_input("₹100 தாள்கள்", min_value=0, max_value=curr_b_drawer['100'], step=1, key="ex_100")
-                    e_5 = st.number_input("₹5 தாள்கள்", min_value=0, max_value=curr_b_drawer['5'], step=1, key="ex_5")
-                with ef_4:
-                    e_50 = st.number_input("₹50 தாள்கள்", min_value=0, max_value=curr_b_drawer['50'], step=1, key="ex_50")
-                    e_coins = st.number_input("நாணயங்கள் (₹)", min_value=0.0, max_value=float(curr_b_drawer['coins']), step=1.0, key="ex_coins")
+                with col_ex_out:
+                    st.markdown("##### 📤 நாம் கொடுத்த நோட்டுகள் (Cash OUT):")
+                    st.caption("செலவுக்காகவும் சில்லறை வாங்குவதற்காகவும் நாம் கொடுத்தவை:")
+                    o_500 = st.number_input("₹500 கொடுத்தது", min_value=0, max_value=curr_b_drawer['500'], step=1, key="ex_out_500")
+                    o_200 = st.number_input("₹200 கொடுத்தது", min_value=0, max_value=curr_b_drawer['200'], step=1, key="ex_out_200")
+                    o_100 = st.number_input("₹100 கொடுத்தது", min_value=0, max_value=curr_b_drawer['100'], step=1, key="ex_out_100")
+                    o_50  = st.number_input("₹50 கொடுத்தது", min_value=0, max_value=curr_b_drawer['50'], step=1, key="ex_out_50")
+                    o_20  = st.number_input("₹20 கொடுத்தது", min_value=0, max_value=curr_b_drawer['20'], step=1, key="ex_out_20")
+                    o_10  = st.number_input("₹10 கொடுத்தது", min_value=0, max_value=curr_b_drawer['10'], step=1, key="ex_out_10")
+                    o_5   = st.number_input("₹5 கொடுத்தது", min_value=0, max_value=curr_b_drawer['5'], step=1, key="ex_out_5")
+                    o_coins = st.number_input("நாணயங்கள் கொடுத்தது (₹)", min_value=0.0, max_value=float(curr_b_drawer['coins']), step=1.0, key="ex_out_coins")
 
-                calc_exp_amt = (
-                    (e_500 * 500) + (e_200 * 200) + (e_100 * 100) + (e_50 * 50) +
-                    (e_20 * 20) + (e_10 * 10) + (e_5 * 5) + e_coins
-                )
+                    total_cash_out = (o_500*500) + (o_200*200) + (o_100*100) + (o_50*50) + (o_20*20) + (o_10*10) + (o_5*5) + o_coins
+                    st.markdown(f"**கொடுத்த மொத்தப் பணம்:** `₹{total_cash_out:,.2f}`")
 
-                st.info(f"💵 **செலவு மொத்தத் தொகை (நோட்டுகள் வழி): ₹{calc_exp_amt:,.2f}**")
-                st.caption("ℹ️ குறிப்பு: ஆப்பரேஷன்ஸ் அங்கீகரித்த பின்னரே இந்த நோட்டுகள் கல்லாவில் இருந்து கழியும்.")
+                with col_ex_in:
+                    st.markdown("##### 📥 கடைக்காரர் திருப்பிக் கொடுத்த மீதி (Cash IN - Return):")
+                    st.caption("கடைக்காரர் மீதியாகத் திருப்பிக் கொடுத்த நோட்டுகள்:")
+                    i_500 = st.number_input("₹500 மீதி பெற்றது", min_value=0, step=1, key="ex_in_500")
+                    i_200 = st.number_input("₹200 மீதி பெற்றது", min_value=0, step=1, key="ex_in_200")
+                    i_100 = st.number_input("₹100 மீதி பெற்றது", min_value=0, step=1, key="ex_in_100")
+                    i_50  = st.number_input("₹50 மீதி பெற்றது", min_value=0, step=1, key="ex_in_50")
+                    i_20  = st.number_input("₹20 மீதி பெற்றது", min_value=0, step=1, key="ex_in_20")
+                    i_10  = st.number_input("₹10 மீதி பெற்றது", min_value=0, step=1, key="ex_in_10")
+                    i_5   = st.number_input("₹5 மீதி பெற்றது", min_value=0, step=1, key="ex_in_5")
+                    i_coins = st.number_input("நாணயங்கள் மீதி பெற்றது (₹)", min_value=0.0, step=1.0, key="ex_in_coins")
+
+                    total_cash_in = (i_500*500) + (i_200*200) + (i_100*100) + (i_50*50) + (i_20*20) + (i_10*10) + (i_5*5) + i_coins
+                    st.markdown(f"**பெற்ற மீதி மொத்தப் பணம்:** `₹{total_cash_in:,.2f}`")
+
+                # கல்லாவில் இருந்து குறையும் நிகரப் பணம் = கொடுத்தது - திரும்ப வாங்கியது
+                net_deducted_cash = total_cash_out - total_cash_in
+
+                st.markdown("---")
+                col_m1, col_m2, col_m3 = st.columns(3)
+                col_m1.metric("உண்மையான செலவு", f"₹{actual_exp_amount:,.2f}")
+                col_m2.metric("கல்லாவில் குறையும் நிகரப் பணம்", f"₹{net_deducted_cash:,.2f}")
+                
+                is_tally = (net_deducted_cash == actual_exp_amount)
+                if is_tally:
+                    col_m3.success("✅ கணக்கீடு சரியானது!")
+                else:
+                    col_m3.error(f"❌ வித்தியாசம்: ₹{abs(actual_exp_amount - net_deducted_cash):,.2f}")
+
+                st.caption("ℹ️ குறிப்பு: ஆப்பரேஷன்ஸ் அங்கீகரித்த பின்னரே கல்லாவில் இருந்து நிகரப் பணம் கழியும்.")
 
                 if st.form_submit_button("செலவுப் பதிவை ஆப்பரேஷன்ஸ் ஒப்புதலுக்கு அனுப்புக", type="primary"):
-                    if calc_exp_amt > 0 and exp_ref.strip() and exp_desc.strip():
+                    if is_tally and actual_exp_amount > 0 and exp_ref.strip() and exp_desc.strip():
                         try:
                             supabase.table("branch_expenses").insert({
                                 "branch_id": st.session_state.branch_id,
                                 "expense_date": str(date.today()),
                                 "expense_head": exp_head,
-                                "amount": float(calc_exp_amt),
+                                "amount": float(actual_exp_amount),
                                 "voucher_no": exp_ref.strip(),
                                 "description": exp_desc.strip(),
                                 "denomination_details": {
-                                    "500": e_500, "200": e_200, "100": e_100, "50": e_50,
-                                    "20": e_20, "10": e_10, "5": e_5, "coins": e_coins
+                                    "out": {"500": o_500, "200": o_200, "100": o_100, "50": o_50, "20": o_20, "10": o_10, "5": o_5, "coins": o_coins},
+                                    "in": {"500": i_500, "200": i_200, "100": i_100, "50": i_50, "20": i_20, "10": i_10, "5": i_5, "coins": i_coins},
+                                    "net_deducted": net_deducted_cash
                                 },
                                 "created_by": st.session_state.username,
                                 "status": "Pending_Approval"
                             }).execute()
 
-                            st.success(f"✅ ₹{calc_exp_amt:,.2f} செலவுப் பதிவு ஆப்பரேஷன்ஸ் ஒப்புதலுக்கு அனுப்பப்பட்டது!")
+                            st.success(f"✅ ₹{actual_exp_amount:,.2f} செலவுப் பதிவு ஆப்பரேஷன்ஸ் ஒப்புதலுக்கு அனுப்பப்பட்டது!")
                             st.rerun()
                         except Exception as e:
-                            st.error(f"பிழை: {e}")
+                            st.error(f_{f"பிழை: {e}"})
                     else:
-                        st.error("தயவுசெய்து நோட்டுகளையும் அனைத்து விவரங்களையும் சரியாக உள்ளிடவும்.")
+                        st.error("⚠️ உண்மையான செலவுத் தொகையும், (கொடுத்த பணம் - மீதிப் பணம்) கணக்கீடும் சரியாகப் பொருந்த வேண்டும்.")
 
             st.markdown("---")
             st.subheader("📋 கிளை செலவுகளின் சமீபத்திய நிலை (Expense Logs)")
