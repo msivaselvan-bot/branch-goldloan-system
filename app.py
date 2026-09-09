@@ -357,7 +357,7 @@ def render_staff_attribution_report(selected_branch_id=None):
     rupees_per_point = float(set_res[0].get("rupees_per_point", 5.0)) if set_res else 5.0
     penalty_per_lakh = float(set_res[0].get("negative_growth_penalty_per_lakh", 15.0)) if set_res else 15.0
 
-    # 2. ஸ்கீம் மற்றும் நடவடிக்கை வாரியான விதிகளை வாசித்தல் (Mapping: txn_type + scheme_name)
+    # 2. ஸ்கீம் மற்றும் நடவடிக்கை வாரியான விதிகளை வாசித்தல்
     inc_rules = supabase.table("staff_incentive_rules").select("*").eq("is_active", True).execute().data or []
     rule_dict = {}
     for r in inc_rules:
@@ -424,7 +424,7 @@ def render_staff_attribution_report(selected_branch_id=None):
             except Exception:
                 detected_scheme = "All"
 
-            # ஸ்கீம் வாரியான விதியைத் தேடுதல் (குறிப்பிட்ட ஸ்கீம் ➔ இல்லையெனில் 'All')
+            # விதிகளைத் தேடுதல்
             rule_info = rule_dict.get((txn_type, detected_scheme)) or rule_dict.get((txn_type, "All")) or {"basis_type": "Amount", "unit_value": 100000.0, "points_per_unit": 10.0}
 
             basis = rule_info.get("basis_type", "Amount")
@@ -432,8 +432,10 @@ def render_staff_attribution_report(selected_branch_id=None):
             pts_per_unit = float(rule_info.get("points_per_unit", 10.0) or 0.0)
 
             calc_pts = 0.0
+            txn_amt = paid_val if paid_val > 0 else rec_val
+            grams_val = 0.0
+
             if basis == "Weight_Grams":
-                grams_val = 0.0
                 try:
                     if "எடை:" in remarks_str:
                         part = remarks_str.split("எடை:")[1].split("g")[0].strip()
@@ -441,9 +443,12 @@ def render_staff_attribution_report(selected_branch_id=None):
                 except Exception:
                     grams_val = 0.0
                 calc_pts = (grams_val / unit_val) * pts_per_unit if unit_val > 0 else 0.0
+                disp_val = f"{grams_val} g"
+                raw_amt = grams_val
             else:
-                txn_amt = paid_val if paid_val > 0 else rec_val
                 calc_pts = (txn_amt / unit_val) * pts_per_unit if unit_val > 0 else 0.0
+                disp_val = f"₹{txn_amt:,.2f}"
+                raw_amt = txn_amt
 
             # Walk-in வணிகப் பங்கீட்டு விதிமுறை (60:40 & 40:30:30)
             assigned_staff_list = []
@@ -473,7 +478,8 @@ def render_staff_attribution_report(selected_branch_id=None):
                     "பணியாளர்": staff_member,
                     "நடவடிக்கை வகை": txn_type,
                     "திட்டம் (Scheme)": detected_scheme,
-                    "வணிக அளவு": f"₹{paid_val if paid_val > 0 else rec_val:,.2f}" if basis == "Amount" else f"{remarks_str} g",
+                    "வணிக அளவு": disp_val,
+                    "raw_amount": txn_amt,  # கணக்கீட்டிற்கு மட்டும் (UI-ல் காட்டப்படாது)
                     "ஈட்டிய புள்ளிகள்": round(s_pts, 2),
                     "குறிப்பு": remarks_str
                 })
@@ -484,8 +490,9 @@ def render_staff_attribution_report(selected_branch_id=None):
 
     df_txns = pd.DataFrame(detailed_txn_logs)
 
-    tot_pledge = df_txns[df_txns["நடவடிக்கை வகை"].str.contains("Pledge", na=False)]["வணிக அளவு"].apply(lambda x: float(str(x).replace("₹", "").replace(",", "")) if "₹" in str(x) else 0.0).sum()
-    tot_release = df_txns[df_txns["நடவடிக்கை வகை"].str.contains("Release", na=False)]["வணிக அளவு"].apply(lambda x: float(str(x).replace("₹", "").replace(",", "")) if "₹" in str(x) else 0.0).sum()
+    # 100% பாதுகாப்பான Numeric Calculation (Strings-ஐ கழிக்காமல் raw_amount-ஐ பயன்படுத்துகிறோம்)
+    tot_pledge = df_txns[df_txns["நடவடிக்கை வகை"].str.contains("Pledge", na=False)]["raw_amount"].sum()
+    tot_release = df_txns[df_txns["நடவடிக்கை வகை"].str.contains("Release", na=False)]["raw_amount"].sum()
     net_gold_growth = tot_pledge - tot_release
 
     is_negative_growth = net_gold_growth < 0
@@ -502,10 +509,13 @@ def render_staff_attribution_report(selected_branch_id=None):
     else:
         df_filtered = df_txns.copy()
 
+    # raw_amount என்ற column-ஐ திரையில் காட்டுவதைத் தவிர்க்கிறோம்
+    display_df = df_filtered.drop(columns=["raw_amount"]) if "raw_amount" in df_filtered.columns else df_filtered
+
     m1, m2, m3, m4 = st.columns(4)
     m1.metric("மொத்த நடவடிக்கைகள்", f"{len(df_filtered):,}")
-    m2.metric("புதிய நகைக்கடன்", f"₹{tot_pledge:,.2f}")
-    m3.metric("அடகு மீட்டல்", f"₹{tot_release:,.2f}")
+    m2.metric("புதிய நகைக்கடன் (Pledge)", f"₹{tot_pledge:,.2f}")
+    m3.metric("அடகு மீட்டல் (Release)", f"₹{tot_release:,.2f}")
 
     if is_negative_growth:
         m4.metric("நிகர நகைக் கடன் வளர்ச்சி", f"-₹{abs(net_gold_growth):,.2f}", delta="-நெகட்டிவ் வளர்ச்சி", delta_color="inverse")
@@ -535,7 +545,7 @@ def render_staff_attribution_report(selected_branch_id=None):
     st.dataframe(pd.DataFrame(perf_rows), use_container_width=True)
 
     st.markdown("##### 🔍 பரிவர்த்தனை & ஸ்கீம் வாரியான விரிவான புள்ளி அறிக்கை (Detailed Breakdown)")
-    st.dataframe(df_filtered, use_container_width=True)
+    st.dataframe(display_df, use_container_width=True)
 
     csv = pd.DataFrame(perf_rows).to_csv(index=False).encode('utf-8')
     st.download_button(
@@ -640,7 +650,7 @@ else:
     st.markdown("---")
 
     # ----------------------------------------------------
-    # A. நிர்வாக மேலாண்மை திரை (ADMIN PANEL WITH 10 FULL TABS)
+    # A. நிர்வாக மேலாண்மை திரை (ADMIN PANEL)
     # ----------------------------------------------------
     if st.session_state.user_role == "Admin":
         st.header("⚙️ நிர்வாக மேலாண்மை (Admin Control Panel)")
@@ -738,7 +748,7 @@ else:
                     gs_col1, gs_col2, gs_col3 = st.columns(3)
                     with gs_col1:
                         gs_name = st.text_input("Scheme Name *", placeholder="எ.கா: சூப்பர் சேவர் 12%")
-                        gs_rpg = st.number_input("Rate Per Gram (RPG ₹) *", min_value=100.0, value=5500.0, step=50.0)
+                        gs_rpg = st.number_input("Rate Per Gram (RPG ₹) *", min_value=100.0, value=5500.0, step=50.0, help="ஒரு கிராம் தங்கத்திற்கான அனுமதிக்கப்படும் அதிகபட்ச கடன் தொகை")
                         gs_min = st.number_input("Min Loan Value (₹)", min_value=0.0, value=1000.0, step=500.0)
                         gs_max = st.number_input("Max Loan Value (₹)", min_value=0.0, value=1000000.0, step=5000.0)
                     with gs_col2:
@@ -855,7 +865,7 @@ else:
                             st.rerun()
 
         # -----------------------------------------------------------------
-        # tab4: இன்சென்டிவ் & புள்ளி விதிகள் (Staff Incentive Master with Delete/Edit)
+        # tab4: இன்சென்டிவ் & புள்ளி விதிகள் (Delete / Edit / Multi-Scheme)
         # -----------------------------------------------------------------
         with tab4:
             st.subheader("🎯 பணியாளர் இன்சென்டிவ் & புள்ளிகள் விதிகள் (Staff Incentive Master)")
@@ -889,7 +899,7 @@ else:
             all_g_sch = [s["scheme_name"] for s in supabase.table("gold_loan_schemes").select("scheme_name").execute().data or []]
             all_fd_sch = [s["scheme_name"] for s in supabase.table("fd_schemes").select("scheme_name").execute().data or []]
             all_rd_sch = [s["scheme_name"] for s in supabase.table("rd_schemes").select("scheme_name").execute().data or []]
-            available_schemes = ["All"] + all_g_sch + all_fd_sch + all_rd_sch
+            available_schemes = ["All (அனைத்து ஸ்கீம்களுக்கும் பொதுவானது)"] + all_g_sch + all_fd_sch + all_rd_sch
 
             with st.form("admin_custom_incentive_form", clear_on_submit=True):
                 ir_c1, ir_c2, ir_c3, ir_c4, ir_c5 = st.columns(5)
@@ -912,26 +922,42 @@ else:
                 with ir_c5:
                     ir_pts = st.number_input("புள்ளிகள் (Points Per Unit) *:", value=10.0, step=1.0)
 
-                if st.form_submit_button("ஸ்கீம் விதியைச் சேமி (Save Rule)", type="primary"):
+                if st.form_submit_button("ஸ்கீம் விதியைச் சேமி / புதுப்பி (Save Rule)", type="primary"):
                     try:
                         clean_basis = "Amount" if "Amount" in ir_basis else "Weight_Grams"
+                        clean_scheme_name = ir_scheme.split(" (")[0] if " (" in ir_scheme else ir_scheme
+                        
                         payload = {
-                            "transaction_type": ir_txn_type, "scheme_name": ir_scheme,
-                            "basis_type": clean_basis, "unit_value": float(ir_unit),
-                            "points_per_unit": float(ir_pts), "is_active": True
+                            "transaction_type": ir_txn_type,
+                            "scheme_name": clean_scheme_name,
+                            "basis_type": clean_basis,
+                            "unit_value": float(ir_unit),
+                            "points_per_unit": float(ir_pts),
+                            "is_active": True
                         }
-                        check_existing = supabase.table("staff_incentive_rules").select("id").eq("transaction_type", ir_txn_type).eq("scheme_name", ir_scheme).execute()
+
+                        # Check existing unique constraint (transaction_type + scheme_name)
+                        check_existing = (
+                            supabase.table("staff_incentive_rules")
+                            .select("id")
+                            .eq("transaction_type", ir_txn_type)
+                            .eq("scheme_name", clean_scheme_name)
+                            .execute()
+                        )
+
                         if check_existing.data:
-                            supabase.table("staff_incentive_rules").update(payload).eq("id", check_existing.data[0]["id"]).execute()
+                            rule_id = check_existing.data[0]["id"]
+                            supabase.table("staff_incentive_rules").update(payload).eq("id", rule_id).execute()
                         else:
                             supabase.table("staff_incentive_rules").insert(payload).execute()
-                        st.success(f"✅ விதி சேமிக்கப்பட்டது!")
+
+                        st.success(f"✅ [{ir_txn_type} ➔ {clean_scheme_name}] விதி வெற்றிகரமாகச் சேமிக்கப்பட்டது!")
                         st.rerun()
                     except Exception as e:
-                        st.error(f"பிழை: {e}")
+                        st.error(f"பிழை விவரம்: {e}")
 
             st.markdown("###### 📋 தற்போதுள்ள விதிகள் (எடிட் / நீக்கு வசதியுடன்)")
-            rules_view = supabase.table("staff_incentive_rules").select("*").eq("is_active", True).execute().data or []
+            rules_view = supabase.table("staff_incentive_rules").select("*").order("id", desc=True).execute().data or []
             if rules_view:
                 for r in rules_view:
                     rc1, rc2, rc3, rc4, rc5 = st.columns([2.5, 2, 1.5, 1.5, 1])
@@ -941,7 +967,7 @@ else:
                     rc4.write(f"புள்ளிகள்: {r.get('points_per_unit')}")
                     if rc5.button("🗑️ நீக்கு", key=f"del_rule_{r['id']}"):
                         supabase.table("staff_incentive_rules").delete().eq("id", r["id"]).execute()
-                        st.success("நீக்கப்பட்டது!")
+                        st.success("விதி நீக்கப்பட்டது!")
                         st.rerun()
 
         with tab5:
@@ -953,14 +979,105 @@ else:
                 st.success(f"{len(df_cust)} வாடிக்கையாளர்கள் பதிவு செய்யப்படுகிறார்கள்...")
 
         with tab6:
-            st.subheader("🗂️ வாடிக்கையாளர் பட்டியல் & திருத்தம்")
-            cq = supabase.table("customers").select("*, branches(branch_name)").order("id", desc=True).limit(100)
+            st.subheader("🗂️ வாடிக்கையாளர் பட்டியல் & திருத்தம் (Customer Directory & Edit)")
+            filter_c1, filter_c2 = st.columns([2, 3])
+            with filter_c1:
+                b_filters = ["அனைத்து கிளைகளும் (All Branches)"] + list(branch_options.keys())
+                sel_b_flt = st.selectbox("கிளை வாரியாகப் பார்க்க:", b_filters, key="adm_cust_b_filter")
+            with filter_c2:
+                admin_search_q = st.text_input("வாடிக்கையாளர் பெயர் / மொபைல் / Code தேடுக:", placeholder="எ.கா: ராம் அல்லது 98765...", key="adm_cust_search")
+
+            cq = supabase.table("customers").select("*, branches(branch_name)").order("id", desc=True)
+            if sel_b_flt != "அனைத்து கிளைகளும் (All Branches)":
+                cq = cq.eq("branch_id", branch_options.get(sel_b_flt))
+
+            if admin_search_q.strip():
+                sq = admin_search_q.strip()
+                cq = cq.or_(f"name.ilike.%{sq}%,mobile.ilike.%{sq}%,customer_code.ilike.%{sq}%")
+            else:
+                cq = cq.limit(100)
+
             cust_list_data = cq.execute().data or []
+            st.write(f"📊 கண்டறியப்பட்ட வாடிக்கையாளர்கள்: **{len(cust_list_data)}**")
+
             if cust_list_data:
                 st.dataframe(pd.DataFrame([{
-                    "ID": c["id"], "Code": c.get("customer_code", "-"), "பெயர்": c["name"], "மொபைல்": c["mobile"],
-                    "கிளை": c.get("branches", {}).get("branch_name", "பொது"), "KYC நிலை": c.get("kyc_status", "Approved")
+                    "ID": c["id"], "Code": c.get("customer_code", "-"), "பெயர்": c["name"],
+                    "கார்டியன்": c.get("guardian_name", "-"), "மொபைல்": c.get("mobile", "-"),
+                    "கிளை": c.get("branches", {}).get("branch_name", "பொது"), "KYC நிலை": c.get("kyc_status", "Approved"),
+                    "நிலை": "🟢 Active" if c.get("is_active", True) else "🔴 Inactive", "முகவரி": c.get("address", "-")
                 } for c in cust_list_data]), use_container_width=True)
+
+                st.markdown("---")
+                st.subheader("✏️ வாடிக்கையாளர் விவரங்கள் மற்றும் KYC ஆவணங்கள் திருத்துதல்")
+                cust_dict_edit = {f"{c.get('customer_code', '')} - {c['name']} ({c.get('mobile', '')})": c for c in cust_list_data}
+                sel_cust_key = st.selectbox("திருத்த வேண்டிய வாடிக்கையாளரைத் தேர்வு செய்க:", list(cust_dict_edit.keys()), key="adm_sel_cust_edit")
+                curr_c = cust_dict_edit[sel_cust_key]
+
+                with st.form("admin_edit_customer_full_form"):
+                    e_col1, e_col2, e_col3 = st.columns(3)
+                    with e_col1:
+                        ed_name = st.text_input("வாடிக்கையாளர் பெயர்", value=curr_c.get("name", ""))
+                        ed_guard = st.text_input("கார்டியன் பெயர்", value=curr_c.get("guardian_name", "") or "")
+                        gender_list = ["Male", "Female", "Other", "ஆண்", "பெண்"]
+                        g_curr = curr_c.get("gender", "Male")
+                        g_idx = gender_list.index(g_curr) if g_curr in gender_list else 0
+                        ed_gender = st.selectbox("பாலினம்", gender_list, index=g_idx)
+                        ed_dob = st.text_input("பிறந்த தேதி (YYYY-MM-DD)", value=str(curr_c.get("dob", "") or ""))
+
+                    with e_col2:
+                        ed_mob = st.text_input("முதன்மை மொபைல்", value=str(curr_c.get("mobile", "") or ""))
+                        ed_mob2 = st.text_input("கூடுதல் மொபைல்", value=str(curr_c.get("mobile2", "") or ""))
+                        ed_bname = branch_id_to_name.get(curr_c.get("branch_id"), list(branch_options.keys())[0] if branch_options else "")
+                        b_opts_list = list(branch_options.keys())
+                        b_idx = b_opts_list.index(ed_bname) if ed_bname in b_opts_list else 0
+                        ed_branch = st.selectbox("ஒதுக்கப்பட்ட கிளை", b_opts_list, index=b_idx)
+                        ed_nominee = st.text_input("நாமினி பெயர்", value=curr_c.get("nominee_name", "") or "")
+                        ed_rel = st.text_input("நாமினி உறவுமுறை", value=curr_c.get("nominee_relation", "") or "")
+
+                    with e_col3:
+                        ed_addr = st.text_area("முழு முகவரி", value=curr_c.get("address", "") or "", height=80)
+                        kyc_options = ["Approved", "Pending_KYC_Approval", "Rejected"]
+                        curr_kyc_st = curr_c.get("kyc_status", "Approved") or "Approved"
+                        k_idx = kyc_options.index(curr_kyc_st) if curr_kyc_st in kyc_options else 0
+                        ed_kyc_st = st.selectbox("KYC ஒப்புதல் நிலை (KYC Status)", kyc_options, index=k_idx)
+                        ed_status = st.radio("நிலை", ["Active (செயலில் உள்ளார்)", "Inactive (முடக்கு)"], index=0 if curr_c.get("is_active", True) else 1)
+
+                    doc_c1, doc_c2, doc_c3 = st.columns(3)
+                    with doc_c1:
+                        if curr_c.get("photo_url"):
+                            st.markdown(f"🔗 [தற்போதைய படம்]({curr_c['photo_url']})")
+                        ed_new_photo = st.file_uploader("புதிய படம் மாற்ற:", type=["jpg", "jpeg", "png"], key=f"adm_n_p_{curr_c['id']}")
+                    with doc_c2:
+                        if curr_c.get("id_proof_url"):
+                            st.markdown(f"🔗 [தற்போதைய அடையாள அட்டை]({curr_c['id_proof_url']})")
+                        ed_new_id = st.file_uploader("புதிய அடையாள ஆவணம்:", type=["jpg", "jpeg", "png", "pdf"], key=f"adm_n_id_{curr_c['id']}")
+                    with doc_c3:
+                        if curr_c.get("address_proof_url"):
+                            st.markdown(f"🔗 [தற்போதைய முகவரி ஆவணம்]({curr_c['address_proof_url']})")
+                        ed_new_addr = st.file_uploader("புதிய முகவரி ஆவணம்:", type=["jpg", "jpeg", "png", "pdf"], key=f"adm_n_ad_{curr_c['id']}")
+
+                    if st.form_submit_button("வாடிக்கையாளர் மாற்றங்களைச் சேமி", type="primary"):
+                        try:
+                            up_payload = {
+                                "name": ed_name.strip(), "guardian_name": ed_guard.strip(), "gender": ed_gender,
+                                "dob": ed_dob.strip() if ed_dob.strip() else None, "mobile": ed_mob.strip(), "mobile2": ed_mob2.strip(),
+                                "branch_id": branch_options.get(ed_branch), "nominee_name": ed_nominee.strip(),
+                                "nominee_relation": ed_rel.strip(), "address": ed_addr.strip(), "kyc_status": ed_kyc_st,
+                                "is_active": True if "Active" in ed_status else False
+                            }
+                            if ed_new_photo:
+                                up_payload["photo_url"] = upload_single_file(ed_new_photo, "customer_photos")
+                            if ed_new_id:
+                                up_payload["id_proof_url"] = upload_single_file(ed_new_id, "customer_id_proofs")
+                            if ed_new_addr:
+                                up_payload["address_proof_url"] = upload_single_file(ed_new_addr, "customer_address_proofs")
+
+                            supabase.table("customers").update(up_payload).eq("id", curr_c["id"]).execute()
+                            st.success("வாடிக்கையாளர் விவரங்கள் புதுப்பிக்கப்பட்டன!")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"பிழை: {e}")
 
         with tab7:
             st.subheader("📊 வருகை & பரிவர்த்தனை மேலாண்மை")
@@ -1012,7 +1129,7 @@ else:
             render_staff_attribution_report(selected_branch_id=filter_b_id)
 
     # ----------------------------------------------------
-    # B. ஆப்பரேஷன்ஸ் திரை (OPERATIONS DESK: 4 FULL TABS)
+    # B. ஆப்பரேஷன்ஸ் திரை (OPERATIONS DESK)
     # ----------------------------------------------------
     elif st.session_state.user_role == "Operations":
         st.header("📞 ஆப்பரேஷன்ஸ் மேசை (Operations Desk)")
@@ -1120,7 +1237,7 @@ else:
                     st.rerun()
 
     # ----------------------------------------------------
-    # D. கிளை செயல்பாடுகள் திரை (BRANCH FLOW: FULL 14 TXNS & 8 DENOMINATIONS)
+    # D. கிளை செயல்பாடுகள் திரை (BRANCH FLOW)
     # ----------------------------------------------------
     else:
         branch_tab1, branch_tab2, branch_tab3, branch_tab4, branch_tab5, branch_tab6 = st.tabs([
