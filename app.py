@@ -1381,7 +1381,7 @@ else:
                         "செலவினத் தலைப்பு (Expense Head) *:",
                         [
                             "Rent (வாடகை)", "Electricity (மின் கட்டணம்)", "Staff Salary (சம்பளம்)",
-                            "Tea / Refreshments (தேநீர் & சிற்றுண்டி)", "Stationery / Printing (ஸ்டேஷனரி)",
+                            "Water / Staff wellfare ( குடிநீ்ர் & பணியார்சார் செலவுகள்", "Stationery / Printing (ஸ்டேஷனரி)",
                             "Maintenance / Repair (பராமரிப்பு)", "Transport / Courier (போக்குவரத்து)", "Miscellaneous (இதர செலவுகள்)"
                         ],
                         key="exp_head_sel"
