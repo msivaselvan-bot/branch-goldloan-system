@@ -1465,32 +1465,31 @@ else:
                     col_m3.error(f"❌ வித்தியாசம்: ₹{abs(actual_exp_amount - net_deducted_cash):,.2f}")
 
                 st.caption("ℹ️ குறிப்பு: ஆப்பரேஷன்ஸ் அங்கீகரித்த பின்னரே கல்லாவில் இருந்து நிகரப் பணம் கழியும்.")
+                if st.form_submit_button("செலவுப் பதிவை ஆப்பரேஷன்ஸ் ஒப்புதலுக்கு அனுப்புக", type="primary"):
+                    if is_tally and actual_exp_amount > 0 and exp_ref.strip() and exp_desc.strip():
+                        try:
+                            supabase.table("branch_expenses").insert({
+                                "branch_id": st.session_state.branch_id,
+                                "expense_date": str(date.today()),
+                                "expense_head": exp_head,
+                                "amount": float(actual_exp_amount),
+                                "voucher_no": exp_ref.strip(),
+                                "description": exp_desc.strip(),
+                                "denomination_details": {
+                                    "out": {"500": o_500, "200": o_200, "100": o_100, "50": o_50, "20": o_20, "10": o_10, "5": o_5, "coins": o_coins},
+                                    "in": {"500": i_500, "200": i_200, "100": i_100, "50": i_50, "20": i_20, "10": i_10, "5": i_5, "coins": i_coins},
+                                    "net_deducted": net_deducted_cash
+                                },
+                                "created_by": st.session_state.username,
+                                "status": "Pending_Approval"
+                            }).execute()
 
-               if st.form_submit_button("செலவுப் பதிவை ஆப்பரேஷன்ஸ் ஒப்புதலுக்கு அனுப்புக", type="primary"):
-                            if is_tally and actual_exp_amount > 0 and exp_ref.strip() and exp_desc.strip():
-                                try:
-                                    supabase.table("branch_expenses").insert({
-                                        "branch_id": st.session_state.branch_id,
-                                        "expense_date": str(date.today()),
-                                        "expense_head": exp_head,
-                                        "amount": float(actual_exp_amount),
-                                        "voucher_no": exp_ref.strip(),
-                                        "description": exp_desc.strip(),
-                                        "denomination_details": {
-                                            "out": {"500": o_500, "200": o_200, "100": o_100, "50": o_50, "20": o_20, "10": o_10, "5": o_5, "coins": o_coins},
-                                            "in": {"500": i_500, "200": i_200, "100": i_100, "50": i_50, "20": i_20, "10": i_10, "5": i_5, "coins": i_coins},
-                                            "net_deducted": net_deducted_cash
-                                        },
-                                        "created_by": st.session_state.username,
-                                        "status": "Pending_Approval"
-                                    }).execute()
-
-                                    st.success(f"✅ ₹{actual_exp_amount:,.2f} செலவுப் பதிவு ஆப்பரேஷன்ஸ் ஒப்புதலுக்கு அனுப்பப்பட்டது!")
-                                    st.rerun()
-                                except Exception as e:
-                                    st.error(f"பிழை: {e}")
-                            else:
-                                st.error("⚠️ உண்மையான செலவுத் தொகையும், (கொடுத்த பணம் - மீதிப் பணம்) கணக்கீடும் சரியாகப் பொருந்த வேண்டும்.")
+                            st.success(f"✅ ₹{actual_exp_amount:,.2f} செலவுப் பதிவு ஆப்பரேஷன்ஸ் ஒப்புதலுக்கு அனுப்பப்பட்டது!")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"பிழை: {e}")
+                    else:
+                        st.error("⚠️ உண்மையான செலவுத் தொகையும், (கொடுத்த பணம் - மீதிப் பணம்) கணக்கீடும் சரியாகப் பொருந்த வேண்டும்.")
             st.markdown("---")
             st.subheader("📋 கிளை செலவுகளின் சமீபத்திய நிலை (Expense Logs)")
             b_exp_logs = supabase.table("branch_expenses").select("*").eq("branch_id", st.session_state.branch_id).order("id", desc=True).limit(15).execute().data or []
