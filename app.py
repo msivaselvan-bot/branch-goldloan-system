@@ -1297,7 +1297,8 @@ if st.session_state.get("logged_in", False):
                                 "ID": c["id"], "Code": c.get("customer_code", "-"), "பெயர்": c["name"], "மொபைல்": c["mobile"],
                                 "கிளை": c.get("branches", {}).get("branch_name", "பொது") if isinstance(c.get("branches"), dict) else "பொது",
                                 "KYC நிலை": c.get("kyc_status", "Approved")
-                            } for c in cust_list_data]), use_container_width=True)
+                            } 
+                                for c in cust_list_data]), use_container_width=True)
             
                     with tab7:
                         st.subheader("📊 வருகை & பரிவர்த்தனை மேலாண்மை")
