@@ -1347,7 +1347,7 @@ with tab8:
         st.success("பதிவு செய்யப்பட்டது!")
         st.rerun()
 
-    with tab10:
+with tab10:
     rep_b_opts = ["அனைத்து கிளைகளும் (All Branches)"] + list(branch_options.keys())
     sel_rep_b = st.selectbox("கிளையை வடிகட்டவும்:", rep_b_opts, key="adm_rep_branch_sel")
     filter_b_id = branch_options.get(sel_rep_b) if sel_rep_b != "அனைத்து கிளைகளும் (All Branches)" else None
@@ -1356,9 +1356,9 @@ with tab8:
     # ----------------------------------------------------
     # B. ஆப்பரேஷன்ஸ் திரை (OPERATIONS DESK)
     # -------------------------------------------------
-elif st.session_state.user_role == "Operations":
-    st.header("📞 ஆப்பரேஷன்ஸ் மேசை (Operations Desk)")
-    ops_tab1, ops_tab2, ops_tab3, ops_tab4, ops_tab5 = st.tabs([
+    elif st.session_state.user_role == "Operations":
+        st.header("📞 ஆப்பரேஷன்ஸ் மேசை (Operations Desk)")
+        ops_tab1, ops_tab2, ops_tab3, ops_tab4, ops_tab5 = st.tabs([
         "🏦 நிதிப் பரிமாற்ற ஒப்புதல்", "👤 புதிய வாடிக்கையாளர் KYC",
         "📝 விவரத் திருத்தக் கோரிக்கைகள்", "🔔 பரிவர்த்தனை அழைப்பு சரிபார்ப்பு", 
         "📑 FD / RD பாண்ட் & சான்றிதழ்"
