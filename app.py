@@ -299,10 +299,10 @@ def generate_rd_certificate_pdf(data):
     c.drawString(480, y - 15, str(data.get('roi', '12.25%')))
     
     y -= 45
-    c.setFont("Helvetica-Bold", 9)
-    c.drawString(50, y, "INSTALLMENT AMOUNT")
-    c.drawString(200, y, "TOTAL DEPOSIT AMOUNT")
-    c.drawString(380, y, "MATURITY AMOUNT")
+    c.setFont("Helvetica", 9)
+    c.drawString(50, y - 15, f"Rs. {float(data.get('installment_amount') or 0):,.2f}")
+    c.drawString(200, y - 15, f"Rs. {float(data.get('total_deposit') or 0):,.2f}")
+    c.drawString(380, y - 15, f"Rs. {float(data.get('maturity_amount') or 0):,.2f}")
     
     c.setFont("Helvetica", 9)
     c.drawString(50, y - 15, f"Rs. {float(data.get('installment_amount', 0)):,.2f}")
