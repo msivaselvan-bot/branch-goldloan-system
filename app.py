@@ -769,7 +769,6 @@ if not st.session_state.logged_in:
 
             if submitted:
                 if username.strip() and password.strip():
-                    try:
     try:
         user_query = (
         supabase.table("users")
