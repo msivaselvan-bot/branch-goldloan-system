@@ -1735,9 +1735,9 @@ else:
 
         st.markdown("---")
         st.subheader("📋 உங்கள் கிளையின் சமீபத்திய பணப் பரிமாற்றங்கள் & ஒப்புதல் நிலை")
-        
+
 b_fund_logs = []
-    if "branch_id" in st.session_state and st.session_state.branch_id:
+if "branch_id" in st.session_state and st.session_state.branch_id:
         try:
             # உங்கள் Supabase டேபிளில் உள்ள சரியான காலம் (Column) பெயருக்கு ஏற்ப 'branch_id'-ஐ மாற்றிக் கொள்ளவும்
             b_fund_logs = (
