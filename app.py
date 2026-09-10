@@ -1213,11 +1213,19 @@ else:
 
         with ops_tab1:
             st.subheader("🏦 தலைமையக & கிளை நிதிப் பரிமாற்ற ஒப்புதல் மேசை")
-            pending_fund_transfers = supabase.table("branch_fund_transfers").select("*, branches(branch_name)").eq("status", "Pending_Approval").order("id", desc=True).execute().data or []
+            try:
+                pending_fund_transfers = supabase.table("branch_fund_transfers").select("*, branches(branch_name)").eq("status", "Pending_Approval").order("id", desc=True).execute().data or []
+            except Exception:
+                try:
+                    pending_fund_transfers = supabase.table("branch_fund_transfers").select("*").eq("status", "Pending_Approval").order("id", desc=True).execute().data or []
+                except Exception:
+                    pending_fund_transfers = []
+
             if not pending_fund_transfers:
                 st.info("✅ எந்த பணப் பரிமாற்றங்களும் நிலுவையில் இல்லை.")
             else:
                 for f_item in pending_fund_transfers:
+                    # (இதற்கு அடியில் உள்ள உங்களது ஒரிஜினல் for லூப் கோடுகள் அப்படியே தொடரும்)
                     b_name = f_item.get("branches", {}).get("branch_name", "Branch")
                     with st.expander(f"💰 {f_item['transfer_type']} | {b_name} | ₹{float(f_item['amount']):,.2f}"):
                         st.json(f_item.get("denomination_details", {}))
