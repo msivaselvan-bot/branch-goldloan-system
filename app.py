@@ -2325,65 +2325,66 @@ else:
                         # -----------------------------------------------------------------
                         # Step 3: பணப் பரிமாற்றம், 8 ரூபாய் நோட்டுகள் & OTP சரிபார்ப்பு
                         # -----------------------------------------------------------------
-    elif st.session_state.current_visit["step"] == "CASH_OTP":
-            visit = st.session_state.current_visit
-            net_target = visit["net_amount"]
-            total_needed_abs = abs(net_target)
-                current_drawer = get_current_branch_cash_drawer(st.session_state.branch_id)
-                otp_already_sent = "generated_otp" in st.session_state and st.session_state.generated_otp is not None
+elif st.session_state.current_visit["step"] == "CASH_OTP":
+    visit = st.session_state.current_visit
+    net_target = visit["net_amount"]
+    total_needed_abs = abs(net_target)
+    current_drawer = get_current_branch_cash_drawer(st.session_state.branch_id)
+    otp_already_sent = "generated_otp" in st.session_state and st.session_state.generated_otp is not None
 
-                st.subheader("படி 3: பணப் பரிமாற்ற முறை & நோட்டுகள் / மீதித் தொகை கணக்கீடு")
-                hdr_text = (
-                f"💸 வாடிக்கையாளருக்கு வழங்க வேண்டிய நிகரத் தொகை (Pay-OUT): ₹{net_target:,.2f}"
-                if net_target > 0
-                else f"💰 வாடிக்கையாளரிடம் பெற வேண்டிய நிகரத் தொகை (Pay-IN): ₹{total_needed_abs:,.2f}"
+    st.subheader("படி 3: பணப் பரிமாற்ற முறை & நோட்டுகள் / மீதித் தொகை கணக்கீடு")
+    hdr_text = (
+        f"💸 வாடிக்கையாளருக்கு வழங்க வேண்டிய நிகரத் தொகை (Pay-OUT): ₹{net_target:,.2f}"
+        if net_target > 0
+        else f"💰 வாடிக்கையாளரிடம் பெற வேண்டிய நிகரத் தொகை (Pay-IN): ₹{total_needed_abs:,.2f}"
+    )
+    st.info(f"**{hdr_text}** (வாடிக்கையாளர்: {visit['customer_name']})")
+
+    with st.container(border=True):
+        st.markdown("#### 💳 பணம் செலுத்தும் / பெறும் வழிகள் (Payment Split)")
+        pm_c1, pm_c2, pm_c3 = st.columns(3)
+        
+        with pm_c1:
+            pay_option = st.selectbox(
+                "பரிமாற்ற வகை:",
+                ["முழுவதும் ரொக்கம் (100% Cash)", "முழுவதும் வங்கி / UPI (100% Online)", "பகுதி ரொக்கம் + பகுதி வங்கி (Split)"],
+                disabled=otp_already_sent,
+                key="pay_option_select"
             )
-            st.info(f"**{hdr_text}** (வாடிக்கையாளர்: {visit['customer_name']})")
 
-            with st.container(border=True):
-                st.markdown("#### 💳 பணம் செலுத்தும் / பெறும் வழிகள் (Payment Split)")
-                pm_c1, pm_c2, pm_c3 = st.columns(3)
-                with pm_c1:
-                    pay_option = st.selectbox(
-                        "பரிமாற்ற வகை:",
-                        ["முழுவதும் ரொக்கம் (100% Cash)", "முழுவதும் வங்கி / UPI (100% Online)", "பகுதி ரொக்கம் + பகுதி வங்கி (Split)"],
-                        disabled=otp_already_sent,
-                        key="pay_option_select"
-                    )
+        with pm_c2:
+            if pay_option == "முழுவதும் ரொக்கம் (100% Cash)":
+                cash_portion = total_needed_abs
+                bank_portion = 0.0
+            elif pay_option == "முழுவதும் வங்கி / UPI (100% Online)":
+                cash_portion = 0.0
+                bank_portion = total_needed_abs
+            else:
+                cash_portion = st.number_input(
+                    "ரொக்கப் பகுதி (₹):",
+                    min_value=0.0,
+                    max_value=float(total_needed_abs),
+                    step=500.0,
+                    disabled=otp_already_sent,
+                    key="cash_portion_input"
+                )
+                bank_portion = total_needed_abs - cash_portion
+            st.metric("நிகர ரொக்க இலக்கு (Net Cash Target)", f"₹{cash_portion:,.2f}")
 
-                with pm_c2:
-                    if pay_option == "முழுவதும் ரொக்கம் (100% Cash)":
-                        cash_portion = total_needed_abs
-                        bank_portion = 0.0
-                    elif pay_option == "முழுவதும் வங்கி / UPI (100% Online)":
-                        cash_portion = 0.0
-                        bank_portion = total_needed_abs
-                    else:
-                        cash_portion = st.number_input(
-                            "ரொக்கப் பகுதி (₹):",
-                            min_value=0.0,
-                            max_value=float(total_needed_abs),
-                            step=500.0,
-                            disabled=otp_already_sent,
-                            key="cash_portion_input"
-                        )
-                        bank_portion = total_needed_abs - cash_portion
-                    st.metric("நிகர ரொக்க இலக்கு (Net Cash Target)", f"₹{cash_portion:,.2f}")
+        with pm_c3:
+            st.metric("வங்கி / UPI தொகை", f"₹{bank_portion:,.2f}")
+            bank_ref_no = st.text_input("UTR / Ref எண் *:", disabled=otp_already_sent, key="bank_ref_input") if bank_portion > 0 else ""
 
-                with pm_c3:
-                    st.metric("வங்கி / UPI தொகை", f"₹{bank_portion:,.2f}")
-                    bank_ref_no = st.text_input("UTR / Ref எண் *:", disabled=otp_already_sent, key="bank_ref_input") if bank_portion > 0 else ""
-
-            with st.expander("💼 தற்போதைய கல்லா கையிருப்பு நோட்டுகள் (Live Drawer Stock)", expanded=False):
-                ds1, ds2, ds3, ds4 = st.columns(4)
-                ds1.metric("₹500", f"{current_drawer['500']} தாள்கள்")
-                ds1.metric("₹20", f"{current_drawer['20']} தாள்கள்")
-                ds2.metric("₹200", f"{current_drawer['200']} தாள்கள்")
-                ds2.metric("₹10", f"{current_drawer['10']} தாள்கள்")
-                ds3.metric("₹100", f"{current_drawer['100']} தாள்கள்")
-                ds3.metric("₹5", f"{current_drawer['5']} தாள்கள்")
-                ds4.metric("₹50", f"{current_drawer['50']} தாள்கள்")
-                ds4.metric("நாணயங்கள்", f"₹{current_drawer['coins']:,.2f}")
+        with st.expander("💼 தற்போதைய கல்லா கையிருப்பு நோட்டுகள் (Live Drawer Stock)", expanded=False):
+            ds1, ds2, ds3, ds4 = st.columns(4)
+            ds1.metric("₹500", f"{current_drawer['500']} தாள்கள்")
+            ds1.metric("₹20", f"{current_drawer['20']} தாள்கள்")
+            ds2.metric("₹200", f"{current_drawer['200']} தாள்கள்")
+            ds2.metric("₹10", f"{current_drawer['10']} தாள்கள்")
+            ds3.metric("₹100", f"{current_drawer['100']} தாள்கள்")
+            ds3.metric("₹5", f"{current_drawer['5']} தாள்கள்")
+            ds4.metric("₹50", f"{current_drawer['50']} தாள்கள்")
+            ds4.metric("நாணயங்கள்", f"₹{current_drawer['coins']:,.2f}")
 
             if otp_already_sent:
                 st.warning("🔒 **OTP அனுப்பப்பட்டுவிட்டது! பணக் கணக்கீட்டில் இனி எந்த மாற்றமும் செய்ய முடியாது.**")
