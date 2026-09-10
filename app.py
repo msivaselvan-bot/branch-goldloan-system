@@ -826,9 +826,71 @@ with st.form("login_form_final"):
             st.warning("தயவுசெய்து Username மற்றும் Password இரண்டையும் உள்ளிடவும்.")
 
 # ==========================================
-# 6. முதன்மை திரை
+# 5. உள்நுழைவு / முதன்மை திரை கட்டுப்பாடு
 # ==========================================
-if st.session_state.get("logged_in", False):
+if not st.session_state.get("logged_in", False):
+    col_left, col_center, col_right = st.columns([1.2, 1.4, 1.2])
+    with col_center:
+        st.markdown("""
+        <div class="login-box">
+            <h3>🏦 முத்துசிஸ் கோல்டு கம்பெனி</h3>
+            <p>பணியாளர் பாதுகாப்பான உள்நுழைவு</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+        st.subheader("🔐 அமைப்புக்குள் உள்நுழைதல் (Login)")
+
+        with st.form("login_form_final"):
+            entered_username = st.text_input("Username").strip()
+            entered_password = st.text_input("Password", type="password").strip()
+            submit_login = st.form_submit_button("உள்நுழை (Login)", type="primary")
+
+            if submit_login:
+                if entered_username and entered_password:
+                    try:
+                        res = supabase.table("users").select("*").eq("username", entered_username).execute()
+                        user_list = res.data if res.data else []
+
+                        if user_list:
+                            user_info = user_list[0]
+                            db_pass = str(user_info.get("password_hash") or user_info.get("password") or "").strip()
+                            is_active = user_info.get("is_active", True)
+
+                            if db_pass == entered_password:
+                                if is_active:
+                                    st.session_state.logged_in = True
+                                    st.session_state.user_role = user_info.get("role", "Staff")
+                                    
+                                    b_id = user_info.get("branch_id")
+                                    b_name = "Head Office / பொது"
+                                    if b_id:
+                                        try:
+                                            b_res = supabase.table("branches").select("branch_name").eq("id", b_id).execute()
+                                            if b_res.data:
+                                                b_name = b_res.data[0].get("branch_name", "Head Office")
+                                        except Exception:
+                                            pass
+                                    
+                                    st.session_state.branch = b_name
+                                    st.session_state.branch_id = b_id
+                                    st.session_state.username = user_info.get("name", entered_username)
+                                    st.session_state.profile_image = user_info.get("profile_image_url")
+                                    
+                                    st.success("வெற்றிகரமாக உள்நுழைந்துவிட்டீர்கள்!")
+                                    st.rerun()
+                                else:
+                                    st.error("❌ இந்தக் கணக்கு முடக்கப்பட்டுள்ளது.")
+                            else:
+                                st.error("❌ தவறான கடவுச்சொல்!")
+                        else:
+                            st.error("❌ இந்தப் பெயரில் பயனர் இல்லை.")
+                    except Exception as err:
+                        st.error(f"பிழை: {err}")
+                else:
+                    st.warning("தயவுசெய்து Username மற்றும் Password இரண்டையும் உள்ளிடவும்.")
+
+else:
+    # பயனர் லாகின் செய்திருந்தால் மட்டுமே இந்தத் திரை முழுமையாகத் தெரியும் (Login Form வராது)
     top_col1, top_col2, top_col3, top_col4 = st.columns([2.5, 2, 1, 1])
     with top_col1:
         st.write(f"🏢 **கிளை:** {st.session_state.get('branch', 'General')}")
@@ -846,7 +908,6 @@ if st.session_state.get("logged_in", False):
             st.rerun()
 
     st.markdown("---")
-
     # ----------------------------------------------------
     # A. நிர்வாக மேலாண்மை திரை (ADMIN PANEL WITH 10 FULL TABS)
     # ----------------------------------------------------
