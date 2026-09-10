@@ -1305,8 +1305,8 @@ with tab6:
             for c in cust_list_data]), use_container_width=True)
 
     with tab7:
-    st.subheader("📊 வருகை & பரிவர்த்தனை மேலாண்மை")
-    v_records = supabase.table("customer_visits").select("*, customers(name, mobile), transactions(*)").order("id", desc=True).limit(20).execute().data or []
+        st.subheader("📊 வருகை & பரிவர்த்தனை மேலாண்மை")
+        v_records = supabase.table("customer_visits").select("*, customers(name, mobile), transactions(*)").order("id", desc=True).limit(20).execute().data or []
     for vr in v_records:
         c_name = vr.get("customers", {}).get("name", "-") if isinstance(vr.get("customers"), dict) else "-"
         with st.expander(f"{vr.get('visit_no', '-')} | {c_name} | ₹{vr.get('net_cash_amount', 0):,.2f} | {vr.get('status', '-')}"):
