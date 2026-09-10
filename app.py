@@ -1284,7 +1284,7 @@ with tab5:
         df_cust = df_raw.dropna(subset=["Full Name", "Mobile No"]).copy()
         st.success(f"{len(df_cust)} வாடிக்கையாளர்கள் பதிவு செய்யப்படுகிறார்கள்...")
             
-            with tab6:
+        with tab6:
                 st.subheader("🗂️ வாடிக்கையாளர் பட்டியல் & திருத்தம்")
                     try:
                         cq = supabase.table("customers").select("*, branches(branch_name)").order("id", desc=True).limit(100)
