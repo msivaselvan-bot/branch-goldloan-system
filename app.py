@@ -1735,7 +1735,7 @@ else:
 
         st.markdown("---")
         st.subheader("📋 உங்கள் கிளையின் சமீபத்திய பணப் பரிமாற்றங்கள் & ஒப்புதல் நிலை")
-        try:
+    try:
         b_fund_logs = (
             supabase.table("branch_fund_transfers")
             .select("*")
