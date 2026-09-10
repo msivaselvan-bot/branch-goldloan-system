@@ -1246,7 +1246,13 @@ else:
 
             st.markdown("---")
             st.subheader("💸 கிளைச் செலவு ஒப்புதல் மேசை (Branch Expenses Approval Desk)")
-            pending_expenses = supabase.table("branch_expenses").select("*, branches(branch_name)").eq("status", "Pending_Approval").order("id", desc=True).execute().data or []
+            try:
+                pending_expenses = supabase.table("branch_expenses").select("*, branches(branch_name)").eq("status", "Pending_Approval").order("id", desc=True).execute().data or []
+            except Exception:
+                try:
+                    pending_expenses = supabase.table("branch_expenses").select("*").eq("status", "Pending_Approval").order("id", desc=True).execute().data or []
+                except Exception:
+                    pending_expenses = []
             
             if not pending_expenses:
                 st.info("✅ ஒப்புதலுக்கு நிலுவையில் உள்ள கிளைச் செலவுகள் எதுவும் இல்லை.")
