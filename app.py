@@ -745,6 +745,10 @@ try:
 except Exception as e:
     branches_data = []
     st.error(f"⚠️ டேட்டாபேஸ் பிழை: {e}")
+
+# மேப்பிங் மாறிகள் சரியாக வரையறுக்கப்பட்டுள்ளதா என்பதை உறுதிப்படுத்தவும்:
+branch_options = {b["branch_name"]: b["id"] for b in branches_data}
+branch_id_to_name = {b["id"]: b["branch_name"] for b in branches_data}
 # ==========================================
 # 5. உள்நுழைவு திரை
 # ==========================================
