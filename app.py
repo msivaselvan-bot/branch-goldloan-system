@@ -2375,6 +2375,29 @@ elif st.session_state.current_visit["step"] == "CASH_OTP":
             st.metric("வங்கி / UPI தொகை", f"₹{bank_portion:,.2f}")
             bank_ref_no = st.text_input("UTR / Ref எண் *:", disabled=otp_already_sent, key="bank_ref_input") if bank_portion > 0 else ""
 
+        with pm_c2:
+            if pay_option == "முழுவதும் ரொக்கம் (100% Cash)":
+                cash_portion = total_needed_abs
+                bank_portion = 0.0
+            elif pay_option == "முழுவதும் வங்கி / UPI (100% Online)":
+                cash_portion = 0.0
+                bank_portion = total_needed_abs
+            else:
+                cash_portion = st.number_input(
+                    "ரொக்கப் பகுதி (₹):",
+                    min_value=0.0,
+                    max_value=float(total_needed_abs),
+                    step=500.0,
+                    disabled=otp_already_sent,
+                    key="cash_portion_input"
+                )
+                bank_portion = total_needed_abs - cash_portion
+            st.metric("நிகர ரொக்க இலக்கு (Net Cash Target)", f"₹{cash_portion:,.2f}")
+
+        with pm_c3:
+            st.metric("வங்கி / UPI தொகை", f"₹{bank_portion:,.2f}")
+            bank_ref_no = st.text_input("UTR / Ref எண் *:", disabled=otp_already_sent, key="bank_ref_input") if bank_portion > 0 else ""
+
         with st.expander("💼 தற்போதைய கல்லா கையிருப்பு நோட்டுகள் (Live Drawer Stock)", expanded=False):
             ds1, ds2, ds3, ds4 = st.columns(4)
             ds1.metric("₹500", f"{current_drawer['500']} தாள்கள்")
