@@ -536,18 +536,28 @@ def render_staff_attribution_report(selected_branch_id=None):
             branch_staff_dict[b_id] = []
         branch_staff_dict[b_id].append(u)
 
-    query = (
-        supabase.table("customer_visits")
-        .select("id, visit_no, branch_id, created_at, payment_mode, cash_amount, bank_amount, branches(branch_name), transactions(*)")
-        .gte("created_at", start_dt_str)
-        .lte("created_at", end_dt_str)
-    )
+    try:
+        query = (
+            supabase.table("customer_visits")
+            .select("id, visit_no, branch_id, created_at, payment_mode, cash_amount, bank_amount, branches(branch_name), transactions(*)")
+            .gte("created_at", start_dt_str)
+            .lte("created_at", end_dt_str)
+        )
 
-    if selected_branch_id:
-        query = query.eq("branch_id", selected_branch_id)
+        if selected_branch_id:
+            query = query.eq("branch_id", selected_branch_id)
 
-    res = query.execute()
-    visits = res.data or []
+        res = query.execute()
+        visits = res.data or []
+    except Exception:
+        # ரிலேஷன்ஷிப் வேலை செய்யவில்லை எனில், தனித்தனியாக தரவுகளை எடுத்தல்
+        try:
+            q_fallback = supabase.table("customer_visits").select("*").gte("created_at", start_dt_str).lte("created_at", end_dt_str)
+            if selected_branch_id:
+                q_fallback = q_fallback.eq("branch_id", selected_branch_id)
+            visits = q_fallback.execute().data or []
+        except Exception:
+            visits = []
 
     detailed_txn_logs = []
     staff_points_map = {}
