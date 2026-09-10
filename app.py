@@ -1333,13 +1333,13 @@ with tab8:
             st.success("சேமிக்கப்பட்டது!")
             st.rerun()
     with tab9:
-    st.subheader("🏦 தலைமையக பணப் பரிமாற்றம் (HO ⇄ Branch)")
-    with st.form("adm_fund_form"):
-    ft_b = st.selectbox("கிளை:", list(branch_options.keys()))
-    ft_type = st.selectbox("வகை:", ["HO_TO_BRANCH", "BRANCH_TO_HO"])
-    ft_amt = st.number_input("தொகை (₹):", min_value=0.0, step=1000.0)
-    if st.form_submit_button("பரிமாற்றத்தைச் சேமி"):
-        supabase.table("branch_fund_transfers").insert({
+        st.subheader("🏦 தலைமையக பணப் பரிமாற்றம் (HO ⇄ Branch)")
+        with st.form("adm_fund_form"):
+            ft_b = st.selectbox("கிளை:", list(branch_options.keys()))
+            ft_type = st.selectbox("வகை:", ["HO_TO_BRANCH", "BRANCH_TO_HO"])
+            ft_amt = st.number_input("தொகை (₹):", min_value=0.0, step=1000.0)
+        if st.form_submit_button("பரிமாற்றத்தைச் சேமி"):
+            supabase.table("branch_fund_transfers").insert({
             "branch_id": branch_options[ft_b], "transfer_date": str(date.today()),
             "transfer_type": ft_type, "amount": ft_amt, "payment_mode": "Cash", "created_by": st.session_state.username,
             "status": "Approved"
