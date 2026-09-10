@@ -859,22 +859,87 @@ else:
         )
 
         with tab1:
-            st.subheader("➕ புதிய கிளை சேர்த்தல்")
-            with st.form("admin_add_branch_form", clear_on_submit=True):
-                b_name = st.text_input("கிளையின் பெயர்", placeholder="எ.கா: திங்கள்நகர் கிளை")
-                b_code = st.text_input("கிளை குறியீடு", placeholder="எ.கா: TGL")
-                if st.form_submit_button("கிளையைச் சேர்"):
-                    if b_name.strip() and b_code.strip():
-                        try:
-                            supabase.table("branches").insert({"branch_name": b_name.strip(), "branch_code": b_code.strip().upper()}).execute()
-                            st.success(f"'{b_name}' வெற்றிகரமாகச் சேர்க்கப்பட்டது!")
-                            st.rerun()
-                        except Exception as err:
-                            st.error(f"பிழை: {err}")
+            st.subheader("🏢 கிளைகள் மேலாண்மை (Branches Management)")
+            
+            # உள்-டேப்கள் (Add & Edit)
+            b_sub_tab1, b_sub_tab2 = st.tabs(["➕ புதிய கிளை சேர்த்தல்", "✏️ கிளை விவரங்களைத் திருத்துதல் (Edit)"])
 
-            b_list_res = supabase.table("branches").select("id, branch_name, branch_code").order("id").execute()
-            if b_list_res.data:
-                st.dataframe(pd.DataFrame(b_list_res.data), use_container_width=True)
+            with b_sub_tab1:
+                st.markdown("##### புதிய கிளை பதிவுப் படிவம்")
+                with st.form("admin_add_branch_form", clear_on_submit=True):
+                    bc1, bc2 = st.columns(2)
+                    with bc1:
+                        b_name = st.text_input("கிளையின் பெயர் *", placeholder="எ.கா: திங்கள்நகர் கிளை")
+                        b_code = st.text_input("கிளை குறியீடு *", placeholder="எ.கா: TGL")
+                        b_phone = st.text_input("தொடர்பு எண் (Contact No)", placeholder="எ.கா: 9876543210")
+                    with bc2:
+                        b_email = st.text_input("இமெயில் ஐடி (Email ID)", placeholder="branch@muthusise.com")
+                        b_manager = st.text_input("Office Manager பெயர்", placeholder="மேனேஜர் பெயர்")
+                    
+                    b_address = st.text_area("கிளை முகவரி (Branch Address)", placeholder="முழு முகவரி...")
+
+                    if st.form_submit_button("கிளையைச் சேர்", type="primary"):
+                        if b_name.strip() and b_code.strip():
+                            try:
+                                supabase.table("branches").insert({
+                                    "branch_name": b_name.strip(),
+                                    "branch_code": b_code.strip().upper(),
+                                    "address": b_address.strip(),
+                                    "email": b_email.strip(),
+                                    "phone": b_phone.strip(),
+                                    "office_manager": b_manager.strip()
+                                }).execute()
+                                st.success(f"'{b_name}' வெற்றிகரமாகச் சேர்க்கப்பட்டது!")
+                                st.rerun()
+                            except Exception as err:
+                                st.error(f"பிழை: {err}")
+                        else:
+                            st.warning("தயவுசெய்து கிளையின் பெயர் மற்றும் குறியீட்டை உள்ளிடவும்.")
+
+            with b_sub_tab2:
+                st.markdown("##### ஏற்கனவே உள்ள கிளை விவரங்களைத் திருத்துதல்")
+                b_list_res = supabase.table("branches").select("*").order("id").execute()
+                all_branches = b_list_res.data or []
+
+                if all_branches:
+                    branch_choices = {f"{b['branch_name']} ({b['branch_code']})": b for b in all_branches}
+                    selected_b_key = st.selectbox("திருத்த வேண்டிய கிளையைத் தேர்ந்தெடுக்கவும்:", list(branch_choices.keys()), key="edit_branch_dropdown")
+                    curr_branch = branch_choices[selected_b_key]
+
+                    with st.form(f"admin_edit_branch_form_{curr_branch['id']}"):
+                        ec1, ec2 = st.columns(2)
+                        with ec1:
+                            edit_name = st.text_input("கிளையின் பெயர்", value=curr_branch.get("branch_name", ""))
+                            edit_code = st.text_input("கிளை குறியீடு", value=curr_branch.get("branch_code", ""))
+                            edit_phone = st.text_input("தொடர்பு எண்", value=curr_branch.get("phone", "") or "")
+                        with ec2:
+                            edit_email = st.text_input("இமெயில் ஐடி", value=curr_branch.get("email", "") or "")
+                            edit_manager = st.text_input("Office Manager", value=curr_branch.get("office_manager", "") or "")
+                        
+                        edit_address = st.text_area("கிளை முகவரி", value=curr_branch.get("address", "") or "")
+
+                        if st.form_submit_button("கிளை விவரங்களைப் புதுப்பி", type="primary"):
+                            try:
+                                supabase.table("branches").update({
+                                    "branch_name": edit_name.strip(),
+                                    "branch_code": edit_code.strip().upper(),
+                                    "address": edit_address.strip(),
+                                    "email": edit_email.strip(),
+                                    "phone": edit_phone.strip(),
+                                    "office_manager": edit_manager.strip()
+                                }).eq("id", curr_branch["id"]).execute()
+                                st.success("கிளை விவரங்கள் வெற்றிகரமாகப் புதுப்பிக்கப்பட்டன!")
+                                st.rerun()
+                            except Exception as err:
+                                st.error(f"பிழை: {err}")
+                else:
+                    st.info("கிளைகள் எதுவும் பதிவு செய்யப்படவில்லை.")
+
+            st.markdown("---")
+            st.markdown("##### 📋 அனைத்து கிளைகளின் பட்டியல்")
+            b_display_res = supabase.table("branches").select("*").order("id").execute()
+            if b_display_res.data:
+                st.dataframe(pd.DataFrame(b_display_res.data), use_container_width=True)
 
         with tab2:
             st.subheader("👥 பணியாளர்கள் பட்டியல் & சேர்த்தல்")
