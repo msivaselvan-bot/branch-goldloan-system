@@ -1724,6 +1724,7 @@ else:
 
                     st.markdown("---")
                     paid_amt, received_amt, detail_summary = 0.0, 0.0, []
+                    extra_meta_data = {}
 
                     if txn_category == "Pledge (புதிய நகைக் கடன்)":
                         p_col1, p_col2, p_col3 = st.columns(3)
@@ -1756,13 +1757,25 @@ else:
                         received_amt = principal_amt + interest_amt + other_charges
                         detail_summary = [f"GL: {rel_gl_no}", f"அசல்: ₹{principal_amt}", f"வட்டி: ₹{interest_amt}"]
 
-                    elif txn_category in ["Interest Payment (வட்டி வரவு)", "Part Payment (அசல் வரவு)"]:
+                    elif txn_category == "Interest Payment (வட்டி வரவு)":
                         i_col1, i_col2 = st.columns(2)
                         with i_col1:
                             part_gl_no = st.text_input("கடன் எண் *")
                         with i_col2:
-                            received_amt = st.number_input("செலுத்திய தொகை (₹) *", min_value=0.0, step=100.0)
-                        detail_summary = [f"GL: {part_gl_no}", f"அசல்: ₹{received_amt}" if "Part Payment" in txn_category else f"வட்டி: ₹{received_amt}"]
+                            received_amt = st.number_input("வட்டித் தொகை (₹) *", min_value=0.0, step=100.0)
+                        detail_summary = [f"GL: {part_gl_no}", f"வட்டி: ₹{received_amt}"]
+
+                    elif txn_category == "Part Payment (அசல் வரவு)":
+                        pp_c1, pp_c2, pp_c3 = st.columns(3)
+                        with pp_c1:
+                            part_gl_no = st.text_input("கடன் எண் *")
+                        with pp_c2:
+                            part_principal = st.number_input("அசல் வரவு (₹) *", min_value=0.0, step=100.0)
+                        with pp_c3:
+                            part_interest = st.number_input("வட்டி வரவு (₹)", min_value=0.0, step=50.0)
+                        received_amt = part_principal + part_interest
+                        detail_summary = [f"GL: {part_gl_no}", f"அசல்: ₹{part_principal}", f"வட்டி: ₹{part_interest}"]
+                        extra_meta_data = {"principal": part_principal, "interest": part_interest}
 
                     elif txn_category == "Take Over (பிற நிறுவன கடன் மீட்டல்)":
                         to_col1, to_col2 = st.columns(2)
@@ -1774,22 +1787,34 @@ else:
                         detail_summary = [f"வங்கி: {bank_source}", f"கடன் எண்: {prev_loan_no}"]
 
                     elif txn_category == "FD Open (புதிய வைப்பு நிதி)":
-                        f_col1, f_col2 = st.columns(2)
-                        with f_col1:
-                            fd_acc_no = st.text_input("புதிய FD கணக்கு எண் *")
+                        st.markdown("##### 📑 புதிய FD கணக்கு விவரங்கள் & நாமினி")
+                        fd_c1, fd_c2 = st.columns(2)
+                        with fd_c1:
+                            fd_acc_no = st.text_input("FD கணக்கு எண் *")
                             fd_sel_scheme = st.selectbox("அட்மின் FD திட்டம் (Scheme) *", fd_scheme_options)
-                        with f_col2:
                             received_amt = st.number_input("வைப்புத் தொகை (Deposit ₹) *", min_value=0.0, step=1000.0)
-                        detail_summary = [f"FD No: {fd_acc_no}", f"Scheme: {fd_sel_scheme}"]
+                            fd_nominee = st.text_input("நாமினி பெயர் *")
+                        with fd_c2:
+                            fd_relation = st.text_input("உறவுமுறை *")
+                            fd_age = st.number_input("வயது *", min_value=1, max_value=120, value=30)
+                            fd_address = st.text_area("நாமினி முகவரி *", height=82)
+                        detail_summary = [f"FD No: {fd_acc_no}", f"Scheme: {fd_sel_scheme}", f"Dep: ₹{received_amt}", f"Nominee: {fd_nominee}"]
+                        extra_meta_data = {"account_no": fd_acc_no, "deposit_amount": received_amt, "nominee": fd_nominee, "relation": fd_relation, "age": fd_age, "address": fd_address}
 
                     elif txn_category == "RD Open (புதிய RD சேமிப்பு)":
-                        rd_col1, rd_col2 = st.columns(2)
-                        with rd_col1:
-                            rd_acc_no = st.text_input("புதிய RD கணக்கு எண் *")
+                        st.markdown("##### 📈 புதிய RD கணக்கு விவரங்கள் & நாமினி")
+                        rd_c1, rd_c2 = st.columns(2)
+                        with rd_c1:
+                            rd_acc_no = st.text_input("RD கணக்கு எண் *")
                             rd_sel_scheme = st.selectbox("அட்மின் RD திட்டம் (Scheme) *", rd_scheme_options)
-                        with rd_col2:
                             received_amt = st.number_input("முதல் தவணைத் தொகை (Installment ₹) *", min_value=0.0, step=500.0)
-                        detail_summary = [f"RD No: {rd_acc_no}", f"Scheme: {rd_sel_scheme}"]
+                            rd_nominee = st.text_input("நாமினி பெயர் *")
+                        with rd_c2:
+                            rd_relation = st.text_input("உறவுமுறை *")
+                            rd_age = st.number_input("வயது *", min_value=1, max_value=120, value=30, key="rd_age_in")
+                            rd_address = st.text_area("நாமினி முகவரி *", height=82, key="rd_addr_in")
+                        detail_summary = [f"RD No: {rd_acc_no}", f"Scheme: {rd_sel_scheme}", f"Inst: ₹{received_amt}", f"Nominee: {rd_nominee}"]
+                        extra_meta_data = {"account_no": rd_acc_no, "installment_amount": received_amt, "nominee": rd_nominee, "relation": rd_relation, "age": rd_age, "address": rd_address}
 
                     elif "RD" in txn_category or "FD" in txn_category:
                         d_col1, d_col2 = st.columns(2)
@@ -1803,13 +1828,37 @@ else:
                         detail_summary = [f"A/c: {acc_no}"]
 
                     elif txn_category == "GP (Gold Purchase)":
-                        gp_col1, gp_col2 = st.columns(2)
-                        with gp_col1:
-                            gp_wt = st.number_input("நகை எடை (Grams) *", min_value=0.0, step=0.1)
-                            gp_purity = st.selectbox("தரம்", ["916 (22K)", "KDM", "999 (24K)", "750 (18K)"])
-                        with gp_col2:
-                            paid_amt = st.number_input("வழங்கிய தொகை (Paid ₹) *", min_value=0.0, step=500.0)
-                        detail_summary = [f"எடை: {gp_wt}g", f"தரம்: {gp_purity}"]
+                        st.markdown("##### 🪙 தங்கம் வாங்குதல் (Gold Purchase) & சாட்சிகள் விவரம்")
+                        gp_c1, gp_c2, gp_c3 = st.columns(3)
+                        with gp_c1:
+                            gp_no = st.text_input("GP எண் *")
+                            gp_item = st.text_input("நகை விபரம் *")
+                            gross_wt = st.number_input("மொத்த எடை (Grams) *", min_value=0.0, step=0.1)
+                        with gp_c2:
+                            net_wt = st.number_input("நிகர எடை (Grams) *", min_value=0.0, step=0.1)
+                            paid_amt = st.number_input("மொத்த தொகை (Paid ₹) *", min_value=0.0, step=500.0)
+                        with gp_c3:
+                            st.write("")
+                        
+                        st.markdown("###### 👥 தெரிந்த நபர்கள் (Witnesses / Known Persons):")
+                        w_c1, w_c2 = st.columns(2)
+                        with w_c1:
+                            st.markdown("**தெரிந்த நபர் 1:**")
+                            w1_name = st.text_input("பெயர் 1 *")
+                            w1_addr = st.text_area("முகவரி 1 *", height=68, key="w1_a")
+                            w1_mob = st.text_input("தொலைபேசி எண் 1 *", key="w1_m")
+                        with w_c2:
+                            st.markdown("**தெரிந்த நபர் 2:**")
+                            w2_name = st.text_input("பெயர் 2 *")
+                            w2_addr = st.text_area("முகவரி 2 *", height=68, key="w2_a")
+                            w2_mob = st.text_input("தொலைபேசி எண் 2 *", key="w2_m")
+
+                        detail_summary = [f"GP No: {gp_no}", f"Item: {gp_item}", f"Wt: {net_wt}g", f"Amt: ₹{paid_amt}"]
+                        extra_meta_data = {
+                            "gp_no": gp_no, "item_details": gp_item, "gross_weight": gross_wt, "net_weight": net_wt,
+                            "witness_1": {"name": w1_name, "address": w1_addr, "mobile": w1_mob},
+                            "witness_2": {"name": w2_name, "address": w2_addr, "mobile": w2_mob}
+                        }
 
                     elif txn_category == "GS (Gold Sale)":
                         gs_col1, gs_col2 = st.columns(2)
@@ -1832,6 +1881,7 @@ else:
                                 "paid_amount": float(paid_amt),
                                 "received_amount": float(received_amt),
                                 "remarks": all_remarks,
+                                "transaction_details": extra_meta_data
                             })
                             st.success(f"'{txn_category}' சேர்க்கப்பட்டது!")
                             st.rerun()
