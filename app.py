@@ -769,17 +769,17 @@ if not st.session_state.logged_in:
 
             if submitted:
                 if username.strip() and password.strip():
-    try:
-        user_query = (
-        supabase.table("users")
-        .select("id, name, username, role, branch_id, is_active, branches(branch_name)")
-        .eq("username", username.strip())
-        .eq("password_hash", password.strip())
-        .eq("is_active", True)
-        .execute()
-    )
-except Exception as e:
-        user_query = supabase.table("users").select("*").eq("username", username.strip()).eq("password_hash", password.strip()).eq("is_active", True).execute()
+                    try:
+                        user_query = (
+                            supabase.table("users")
+                            .select("id, name, username, role, branch_id, is_active, branches(branch_name)")
+                            .eq("username", username.strip())
+                            .eq("password_hash", password.strip())
+                            .eq("is_active", True)
+                            .execute()
+                        )
+                    except Exception as e:
+                        user_query = supabase.table("users").select("*").eq("username", username.strip()).eq("password_hash", password.strip()).eq("is_active", True).execute()
 
                     if user_query.data:
                         user_info = user_query.data[0]
