@@ -191,6 +191,125 @@ except Exception as e:
     st.error(f"டேட்டாபேஸ் இணைப்பு பிழை: {e}")
     st.stop()
 
+    from reportlab.lib.pagesizes import A4
+from reportlab.pdfgen import canvas
+import io
+
+def generate_fd_bond_pdf(data):
+    buffer = io.BytesIO()
+    c = canvas.Canvas(buffer, pagesize=A4)
+    width, height = A4
+    
+    c.setLineWidth(1.5)
+    c.rect(25, 25, width - 50, height - 50)
+    
+    c.setFont("Helvetica-Bold", 16)
+    c.drawCentredString(width / 2, height - 50, "MUTHUSISE GOLD PRODUCT PRIVATE LIMITED")
+    c.setFont("Helvetica-Bold", 10)
+    c.drawCentredString(width / 2, height - 65, "CIN: U47912TN2024PTC171143 | (Indian Gold Finance)")[cite: 1]
+    c.setFont("Helvetica", 9)
+    c.drawCentredString(width / 2, height - 80, "435, 2nd Floor, KP Road, Chettikulam Junction, Nagercoil-629001")[cite: 1]
+    
+    c.setLineWidth(0.75)
+    c.line(40, height - 92, width - 40, height - 92)
+    
+    c.setFont("Helvetica-Bold", 13)
+    c.drawCentredString(width / 2, height - 115, "PROMISSORY NOTE & FIXED DEPOSIT RECEIPT")
+    
+    c.setFont("Helvetica", 10)
+    y = height - 150
+    gap = 22
+    
+    details = [
+        ("Managing Director:", "M SIVASELVAN - DIN10673471"),[cite: 1]
+        ("FD Account / Ref No:", data.get("account_no", "-")),
+        ("Customer Name:", data.get("customer_name", "-")),
+        ("Principal Amount:", f"Rs. {float(data.get('deposit_amount', 0)):,.2f} (INR)"),
+        ("Interest Rate / Terms:", "15.6% p.a. (1.3% pm) monthly basis"),[cite: 1]
+        ("Nominee Name:", data.get("nominee", "-")),
+        ("Relationship / Details:", f"Relationship: {data.get('relation', '-')}, Age: {data.get('age', '-')}, Address: {data.get('address', '-')}")
+    ]
+    
+    for label, val in details:
+        c.drawString(50, y, label)
+        c.drawString(190, y, f": {val}")
+        y -= gap
+        
+    y -= 30
+    c.drawString(50, y, "Nagercoil")[cite: 1]
+    c.drawString(50, y - 15, f"Date: {str(date.today())}")[cite: 1]
+    
+    c.drawString(width - 220, y, "For Muthusise Gold Product Private Limited")[cite: 1]
+    c.drawString(width - 180, y - 45, "M SIVASELVAN")[cite: 1]
+    c.drawString(width - 190, y - 60, "DIN10673471 (Managing Director)")[cite: 1]
+    
+    c.showPage()
+    c.save()
+    buffer.seek(0)
+    return buffer
+
+
+def generate_rd_certificate_pdf(data):
+    buffer = io.BytesIO()
+    c = canvas.Canvas(buffer, pagesize=A4)
+    width, height = A4
+    
+    c.setLineWidth(1.5)
+    c.rect(25, 25, width - 50, height - 50)
+    
+    c.setFont("Helvetica-Bold", 16)
+    c.drawCentredString(width / 2, height - 50, "MUTHUSISE GOLD PRODUCT PRIVATE LIMITED")
+    c.setFont("Helvetica-Bold", 10)
+    c.drawCentredString(width / 2, height - 65, "RECURRING DEPOSIT BOND / CERTIFICATE")[cite: 2]
+    
+    c.setLineWidth(0.75)
+    c.line(40, height - 78, width - 40, height - 78)
+    
+    y = height - 110
+    c.setFont("Helvetica-Bold", 10)
+    c.drawString(50, y, f"RECEIPT NO.: {data.get('account_no', '0013')}")[cite: 2]
+    
+    y -= 25
+    c.setFont("Helvetica-Bold", 10)
+    c.drawString(50, y, "NAME AND FULL ADDRESS OF CUSTOMER:")[cite: 2]
+    c.setFont("Helvetica", 10)
+    c.drawString(50, y - 15, str(data.get('customer_name', '-')))[cite: 2]
+    c.drawString(50, y - 30, str(data.get('address', '-')))[cite: 2]
+    
+    y -= 65
+    c.setFont("Helvetica-Bold", 9)
+    c.drawString(50, y, "ACCOUNT NUMBER")[cite: 2]
+    c.drawString(200, y, "INSTALLMENT AMOUNT")[cite: 2]
+    c.drawString(380, y, "DURATION")[cite: 2]
+    
+    c.setFont("Helvetica", 9)
+    c.drawString(50, y - 15, str(data.get('account_no', '-')))[cite: 2]
+    c.drawString(200, y - 15, f"Rs. {float(data.get('installment_amount', 0)):,.2f}")[cite: 2]
+    c.drawString(380, y - 15, str(data.get('duration', '48 Months')))[cite: 2]
+    
+    y -= 55
+    c.setFont("Helvetica-Bold", 10)
+    c.drawString(50, y, "NOMINEE DETAILS:")[cite: 2]
+    
+    c.setFont("Helvetica-Bold", 9)
+    c.drawString(50, y - 20, "NOMINEE NAME")[cite: 2]
+    c.drawString(250, y - 20, "AGE")[cite: 2]
+    c.drawString(350, y - 20, "RELATIONSHIP")[cite: 2]
+    
+    c.setFont("Helvetica", 9)
+    c.drawString(50, y - 35, str(data.get('nominee', '-')))[cite: 2]
+    c.drawString(250, y - 35, str(data.get('age', '-')))[cite: 2]
+    c.drawString(350, y - 35, str(data.get('relation', '-')))[cite: 2]
+    
+    c.setFont("Helvetica-Bold", 10)
+    c.drawString(50, 100, "Branch Head")[cite: 2]
+    c.drawString(width - 180, 100, "Signature of Director")[cite: 2]
+    
+    c.showPage()
+    c.save()
+    buffer.seek(0)
+    return buffer
+
 # ==========================================
 # 3. ஆவணப் பதிவேற்றம், SMS & கல்லா செயல்பாடுகள்
 # ==========================================
