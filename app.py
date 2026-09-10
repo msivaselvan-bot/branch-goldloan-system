@@ -810,6 +810,7 @@ if not st.session_state.logged_in:
                             st.session_state.branch = b_name
                             st.session_state.branch_id = b_id
                             st.session_state.username = user_info["name"]
+                            st.session_state.profile_image = user_info.get("profile_image_url")
                             st.rerun()
                     else:
                         st.error("தவறான பயனர் பெயர் அல்லது கடவுச்சொல்!")
@@ -820,20 +821,27 @@ if not st.session_state.logged_in:
 # 6. முதன்மை திரை
 # ==========================================
 else:
-    top_col1, top_col2, top_col3, top_col4 = st.columns([2.5, 2, 1, 1])
+    top_col1, top_col2, top_col3, top_col4, top_col5 = st.columns([1, 2.5, 2, 1, 1])
     with top_col1:
-        st.write(f"🏢 **கிளை:** {st.session_state.branch}")
+        img_url = st.session_state.get("profile_image")
+        if img_url:
+            st.image(img_url, width=50)
+        else:
+            st.markdown("👤")
     with top_col2:
-        st.write(f"👤 **பயனர்:** {st.session_state.username} ({st.session_state.user_role})")
+        st.write(f"🏢 **கிளை:** {st.session_state.branch}")
     with top_col3:
-        if st.button("🔄 Refresh", use_container_width=True, help="பக்கத்தை முழுமையாகப் புதுப்பிக்க"):
-            st.rerun()
+        st.write(f"👤 **பயனர்:** {st.session_state.username} ({st.session_state.user_role})")
     with top_col4:
+        if st.button("🔄 Refresh", use_container_width=True):
+            st.rerun()
+    with top_col5:
         if st.button("வெளியேறு", use_container_width=True):
             st.session_state.logged_in = False
             st.session_state.current_visit = None
             st.session_state.transactions_cart = []
             st.session_state.generated_otp = None
+            st.session_state.profile_image = None
             st.rerun()
 
     st.markdown("---")
@@ -942,32 +950,107 @@ else:
                 st.dataframe(pd.DataFrame(b_display_res.data), use_container_width=True)
 
         with tab2:
-            st.subheader("👥 பணியாளர்கள் பட்டியல் & சேர்த்தல்")
-            users_res = supabase.table("users").select("id, name, username, role, branch_id, is_active").order("id").execute()
-            if users_res.data:
+            st.subheader("👥 பணியாளர்கள் பட்டியல், கிளை & புகைப்படம் மேலாண்மை")
+            
+            # ஏற்கனவே உள்ள பணியாளர்களின் பட்டியல்
+            users_res = supabase.table("users").select("id, name, username, role, branch_id, is_active, profile_image_url, branches(branch_name)").order("id").execute()
+            users_data = users_res.data if users_res.data else []
+            
+            if users_data:
                 st.dataframe(pd.DataFrame([{
-                    "ID": u["id"], "பெயர்": u["name"], "Username": u["username"], "பணி நிலை": u["role"],
-                    "கிளை": branch_id_to_name.get(u.get("branch_id"), "HO / Special"),
+                    "ID": u["id"], 
+                    "பெயர்": u["name"], 
+                    "Username": u["username"], 
+                    "பணி நிலை": u["role"],
+                    "கிளை": u.get("branches", {}).get("branch_name", "Head Office / பொது") if isinstance(u.get("branches"), dict) else "பொது",
                     "நிலை": "🟢 Active" if u.get("is_active", True) else "🔴 Inactive"
-                } for u in users_res.data]), use_container_width=True)
+                } for u in users_data]), use_container_width=True)
 
             st.markdown("---")
             sub_col1, sub_col2 = st.columns(2)
+            
             with sub_col1:
+                st.markdown("##### ➕ புதிய பணியாளர் சேர்த்தல்")
                 with st.form("admin_add_user_form", clear_on_submit=True):
-                    u_name = st.text_input("முழுப் பெயர்")
-                    u_username = st.text_input("உள்நுழைவு பெயர்")
-                    u_pass = st.text_input("கடவுச்சொல்", type="password")
+                    u_name = st.text_input("முழுப் பெயர் *")
+                    u_username = st.text_input("உள்நுழைவு பெயர் (Username) *")
+                    u_pass = st.text_input("கடவுச்சொல் *", type="password")
                     u_role = st.selectbox("பணி நிலை", ["Branch Head / Cashier", "Staff", "Operations", "Auditor", "Admin"])
-                    b_selection = st.selectbox("கிளை", options=list(branch_options.keys()))
-                    if st.form_submit_button("உருவாக்கு"):
+                    
+                    # கிளைத் தெரிவு (Branch Selection)
+                    branch_keys = list(branch_options.keys())
+                    b_selection = st.selectbox("கிளை ஒதுக்கீடு", options=["Head Office / None"] + branch_keys)
+                    
+                    u_photo = st.file_uploader("பணியாளர் புகைப்படம் (Profile Photo)", type=["jpg", "png", "jpeg"])
+
+                    if st.form_submit_button("பணியாளரை உருவாக்கு", type="primary"):
                         if u_name.strip() and u_username.strip() and u_pass.strip():
-                            b_id = branch_options.get(b_selection) if u_role not in ["Admin", "Auditor", "Operations"] else None
+                            b_id = branch_options.get(b_selection) if b_selection != "HeadOffice / None" and u_role not in ["Admin", "Auditor", "Operations"] else None
+                            
+                            # போட்டோ அப்லோட் செய்யும் முறை
+                            photo_url = None
+                            if u_photo:
+                                photo_url = upload_single_file(u_photo, "staff_profiles")
+
                             supabase.table("users").insert({
-                                "name": u_name.strip(), "username": u_username.strip(),
-                                "password_hash": u_pass.strip(), "role": u_role, "branch_id": b_id, "is_active": True
+                                "name": u_name.strip(), 
+                                "username": u_username.strip(),
+                                "password_hash": u_pass.strip(), 
+                                "role": u_role, 
+                                "branch_id": b_id, 
+                                "is_active": True,
+                                "profile_image_url": photo_url
                             }).execute()
-                            st.success("பயனர் உருவாக்கப்பட்டுவிட்டார்!")
+                            st.success("✅ புதிய பணியாளர் வெற்றிகரமாக உருவாக்கப்பட்டுவிட்டார்!")
+                            st.rerun()
+                        else:
+                            st.warning("அவசியமான விபரங்களை உள்ளிடவும்.")
+
+            with sub_col2:
+                st.markdown("##### ✏️ பணியாளர் விவரம் & கிளை திருத்துதல்")
+                if users_data:
+                    user_choices = {f"{u['name']} (@{u['username']})": u for u in users_data}
+                    selected_user_key = st.selectbox("எடிட் செய்ய வேண்டிய பணியாளர்", list(user_choices.keys()))
+                    curr_user = user_choices[selected_user_key]
+
+                    with st.form("admin_edit_user_form"):
+                        edit_name = st.text_input("பெயர்", value=curr_user["name"])
+                        edit_pass = st.text_input("புதிய கடவுச்சொல் (தேவைப்பட்டால் மட்டும்)", type="password")
+                        
+                        roles_list = ["Branch Head / Cashier", "Staff", "Operations", "Auditor", "Admin"]
+                        edit_role = st.selectbox("பணி நிலை", roles_list, index=roles_list.index(curr_user["role"]) if curr_user["role"] in roles_list else 0)
+                        
+                        # தற்போதைய கிளையைக் கண்டறிதல்
+                        curr_b_name = "Head Office / None"
+                        for b_name, b_id in branch_options.items():
+                            if b_id == curr_user.get("branch_id"):
+                                curr_b_name = b_name
+                                break
+                        
+                        branch_keys_edit = ["Head Office / None"] + list(branch_options.keys())
+                        default_b_idx = branch_keys_edit.index(curr_b_name) if curr_b_name in branch_keys_edit else 0
+                        edit_branch_sel = st.selectbox("கிளை மாற்றம்", options=branch_keys_edit, index=default_b_idx)
+
+                        edit_status = st.radio("நிலை", ["Active", "Inactive"], index=0 if curr_user.get("is_active", True) else 1)
+                        edit_photo = st.file_uploader("புதிய புகைப்படம் மாற்ற (விரும்பினால்)", type=["jpg", "png", "jpeg"], key="edit_staff_ph")
+
+                        if st.form_submit_button("பணியாளர் விவரங்களைப் புதுப்பி", type="primary"):
+                            up_data = {
+                                "name": edit_name.strip(), 
+                                "role": edit_role, 
+                                "branch_id": branch_options.get(edit_branch_sel) if edit_branch_sel != "Head Office / None" else None,
+                                "is_active": edit_status == "Active"
+                            }
+                            if edit_pass.strip():
+                                up_data["password_hash"] = edit_pass.strip()
+                            
+                            if edit_photo:
+                                new_p_url = upload_single_file(edit_photo, "staff_profiles")
+                                if new_p_url:
+                                    up_data["profile_image_url"] = new_p_url
+
+                            supabase.table("users").update(up_data).eq("id", curr_user["id"]).execute()
+                            st.success("✅ பணியாளர் விவரங்கள் புதுப்பிக்கப்பட்டன!")
                             st.rerun()
 
             with sub_col2:
