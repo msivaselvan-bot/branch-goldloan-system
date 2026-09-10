@@ -1061,24 +1061,55 @@ else:
                             st.rerun()
 
             with sub_col2:
-                if users_res.data:
-                    user_choices = {f"{u['name']} (@{u['username']})": u for u in users_res.data}
-                    selected_user_key = st.selectbox("திருத்த வேண்டிய பணியாளர்", list(user_choices.keys()))
+                st.markdown("##### ✏️ பணியாளர் விவரம் & கிளை திருத்துதல்")
+                if users_data:
+                    user_choices = {f"{u['name']} (@{u['username']})": u for u in users_data}
+                    selected_user_key = st.selectbox("எடிட் செய்ய வேண்டிய பணியாளர்", list(user_choices.keys()), key="select_user_to_edit_unique")
                     curr_user = user_choices[selected_user_key]
-                    with st.form("admin_edit_user_form"):
-                        edit_name = st.text_input("பெயர்", value=curr_user["name"])
-                        edit_pass = st.text_input("புதிய கடவுச்சொல் (விரும்பினால் மட்டும்)", type="password")
+
+                    # ஃபார்ம் பெயருக்கு ஒரு தனித்துவமான ஐடி சேர்த்தல்
+                    with st.form(f"admin_edit_user_form_{curr_user['id']}"):
+                        edit_name = st.text_input("பெயர்", value=curr_user["name"], key=f"edit_name_{curr_user['id']}")
+                        edit_pass = st.text_input("புதிய கடவுச்சொல் (தேவைப்பட்டால் மட்டும்)", type="password", key=f"edit_pass_{curr_user['id']}")
+                        
                         roles_list = ["Branch Head / Cashier", "Staff", "Operations", "Auditor", "Admin"]
-                        edit_role = st.selectbox("பணி நிலை", roles_list, index=roles_list.index(curr_user["role"]))
-                        edit_status = st.radio("நிலை", ["Active", "Inactive"], index=0 if curr_user.get("is_active", True) else 1)
-                        if st.form_submit_button("புதுப்பி"):
-                            up_data = {"name": edit_name.strip(), "role": edit_role, "is_active": edit_status == "Active"}
+                        default_role_idx = roles_list.index(curr_user["role"]) if curr_user["role"] in roles_list else 0
+                        edit_role = st.selectbox("பணி நிலை", roles_list, index=default_role_idx, key=f"edit_role_{curr_user['id']}")
+                        
+                        # தற்போதைய கிளையைக் கண்டறிதல்
+                        curr_b_name = "Head Office / None"
+                        for b_name, b_id in branch_options.items():
+                            if b_id == curr_user.get("branch_id"):
+                                curr_b_name = b_name
+                                break
+                        
+                        branch_keys_edit = ["Head Office / None"] + list(branch_options.keys())
+                        default_b_idx = branch_keys_edit.index(curr_b_name) if curr_b_name in branch_keys_edit else 0
+                        edit_branch_sel = st.selectbox("கிளை மாற்றம்", options=branch_keys_edit, index=default_b_idx, key=f"edit_branch_{curr_user['id']}")
+
+                        edit_status = st.radio("நிலை", ["Active", "Inactive"], index=0 if curr_user.get("is_active", True) else 1, key=f"edit_status_{curr_user['id']}")
+                        
+                        # தனித்துவமான key கொடுக்கப்பட்டுள்ளது
+                        edit_photo = st.file_uploader("புதிய புகைப்படம் மாற்ற (விரும்பினால்)", type=["jpg", "png", "jpeg"], key=f"edit_staff_ph_{curr_user['id']}")
+
+                        if st.form_submit_button("பணியாளர் விவரங்களைப் புதுப்பி", type="primary"):
+                            up_data = {
+                                "name": edit_name.strip(), 
+                                "role": edit_role, 
+                                "branch_id": branch_options.get(edit_branch_sel) if edit_branch_sel != "Head Office / None" else None,
+                                "is_active": edit_status == "Active"
+                            }
                             if edit_pass.strip():
                                 up_data["password_hash"] = edit_pass.strip()
-                            supabase.table("users").update(up_data).eq("id", curr_user["id"]).execute()
-                            st.success("புதுப்பிக்கப்பட்டது!")
-                            st.rerun()
+                            
+                            if edit_photo:
+                                new_p_url = upload_single_file(edit_photo, "staff_profiles")
+                                if new_p_url:
+                                    up_data["profile_image_url"] = new_p_url
 
+                            supabase.table("users").update(up_data).eq("id", curr_user["id"]).execute()
+                            st.success("✅ பணியாளர் விவரங்கள் புதுப்பிக்கப்பட்டன!")
+                            st.rerun()
         # -----------------------------------------------------------------
         # tab3: ஸ்கீம்கள் மேலாண்மை (Pledge RPG, FD, RD)
         # -----------------------------------------------------------------
