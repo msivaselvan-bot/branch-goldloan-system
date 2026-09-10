@@ -2277,28 +2277,28 @@ else:
                                 received_amt = st.number_input("பெற்ற தொகை (Received ₹) *", min_value=0.0, step=500.0)
                             detail_summary = [f"பில்: {gs_bill_no}", f"பொருள்: {gs_item_name}", f"எடை: {gs_wt}g"]
     
-                        if st.form_submit_button("➕ பட்டியலில் சேர் (Add to Cart)", type="primary"):
-                            if paid_amt > 0 or received_amt > 0:
-                                all_remarks = " | ".join(detail_summary)
-                                if custom_remarks.strip():
-                                    all_remarks += f" ({custom_remarks.strip()})"
-                                st.session_state.transactions_cart.append({
-                                    "transaction_type": txn_category,
-                                    "staff_name": staff,
-                                    "paid_amount": float(paid_amt),
-                                    "received_amount": float(received_amt),
-                                    "remarks": all_remarks,
-                                    "transaction_details": extra_meta_data
-                                })
-                                st.success(f"'{txn_category}' சேர்க்கப்பட்டது!")
-                                st.rerun()
-                            else:
-                            st.error("தொகையை உள்ளிடவும்.")
-    
-    if st.session_state.transactions_cart:
-        st.markdown("### 🛒 நடவடிக்கைகள் பட்டியல்:")
-        df_cart = pd.DataFrame(st.session_state.transactions_cart)
-        st.dataframe(df_cart, use_container_width=True)
+if st.form_submit_button("➕ பட்டியலில் சேர் (Add to Cart)", type="primary"):
+        if paid_amt > 0 or received_amt > 0:
+            all_remarks = " | ".join(detail_summary)
+        if custom_remarks.strip():
+            all_remarks += f" ({custom_remarks.strip()})"
+        st.session_state.transactions_cart.append({
+            "transaction_type": txn_category,
+            "staff_name": staff,
+            "paid_amount": float(paid_amt),
+            "received_amount": float(received_amt),
+            "remarks": all_remarks,
+            "transaction_details": extra_meta_data
+        })
+        st.success(f"'{txn_category}' சேர்க்கப்பட்டது!")
+        st.rerun()
+    else:
+        st.error("தொகையை உள்ளிடவும்.")
+
+if st.session_state.transactions_cart:
+    st.markdown("### 🛒 நடவடிக்கைகள் பட்டியல்:")
+    df_cart = pd.DataFrame(st.session_state.transactions_cart)
+    st.dataframe(df_cart, use_container_width=True)e)
     
         total_paid = df_cart["paid_amount"].sum()
         total_received = df_cart["received_amount"].sum()
