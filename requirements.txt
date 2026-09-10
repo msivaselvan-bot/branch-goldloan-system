@@ -3,3 +3,4 @@ pandas
 supabase
 xlrd>=2.0.1
 openpyxl
+reportlab
