@@ -499,12 +499,12 @@ def get_current_branch_cash_drawer(branch_id: int):
 # ==============================================================================
 # காரணப் பணியாளர் அறிக்கை (திருத்தப்பட்ட நெகட்டிவ் புள்ளிகள் & பங்கீட்டு விதிகளுடன்)
 # ==============================================================================
-def render_staff_attribution_report(selected_branch_id=None):
+def render_staff_attribution_report(selected_branch_id=None, key_suffix="default"):
     st.markdown("### 📊 காரணப் பணியாளர் அறிக்கை & ஸ்கீம் வாரியான ஊக்கத்தொகை (Scheme-wise Incentive & Points Report)")
 
     f_col1, f_col2, f_col3 = st.columns([1.5, 1.5, 2])
-    start_date = f_col1.date_input("தொடக்கத் தேதி (From):", value=date.today().replace(day=1), key=f"rep_s_{selected_branch_id}")
-    end_date = f_col2.date_input("முடிவுத் தேதி (To):", value=date.today(), key=f"rep_e_{selected_branch_id}")
+    start_date = f_col1.date_input("தொடக்கத் தேதி (From):", value=date.today().replace(day=1), key=f"rep_s_{selected_branch_id}_{key_suffix}")
+    end_date = f_col2.date_input("முடிவுத் தேதி (To):", value=date.today(), key=f"rep_e_{selected_branch_id}_{key_suffix}")
 
     if start_date > end_date:
         st.error("தொடக்கத் தேதி முடிவுத் தேதியை விட அதிகமாக இருக்கக்கூடாது!")
@@ -550,7 +550,6 @@ def render_staff_attribution_report(selected_branch_id=None):
         res = query.execute()
         visits = res.data or []
     except Exception:
-        # ரிலேஷன்ஷிப் வேலை செய்யவில்லை எனில், தனித்தனியாக தரவுகளை எடுத்தல்
         try:
             q_fallback = supabase.table("customer_visits").select("*").gte("created_at", start_dt_str).lte("created_at", end_dt_str)
             if selected_branch_id:
@@ -682,7 +681,7 @@ def render_staff_attribution_report(selected_branch_id=None):
 
     staff_filter_options = ["அனைத்து பணியாளர்களும் (All Staff & Walk-in)"] + sorted(list(staff_points_map.keys()))
     with f_col3:
-        selected_staff_filter = st.selectbox("காரணப் பணியாளரைத் தேர்ந்தெடுக்கவும்:", staff_filter_options, key=f"staff_flt_{selected_branch_id}")
+        selected_staff_filter = st.selectbox("காரணப் பணியாளரைத் தேர்ந்தெடுக்கவும்:", staff_filter_options, key=f"staff_flt_{selected_branch_id}_{key_suffix}")
 
     if selected_staff_filter != "அனைத்து பணியாளர்களும் (All Staff & Walk-in)":
         df_filtered = df_txns[df_txns["பணியாளர்"] == selected_staff_filter].copy()
@@ -730,7 +729,7 @@ def render_staff_attribution_report(selected_branch_id=None):
         data=csv,
         file_name=f"Staff_Scheme_Incentive_Report_{start_date}_to_{end_date}.csv",
         mime="text/csv",
-        key=f"dl_csv_{selected_branch_id}"
+        key=f"dl_csv_{selected_branch_id}_{key_suffix}"
     )
 
 # ==========================================
