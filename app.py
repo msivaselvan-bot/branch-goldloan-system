@@ -2287,23 +2287,17 @@ if "branch_id" in st.session_state and st.session_state.branch_id is not None:
                                 received_amt = st.number_input("பெற்ற தொகை (Received ₹) *", min_value=0.0, step=500.0)
                             detail_summary = [f"பில்: {gs_bill_no}", f"பொருள்: {gs_item_name}", f"எடை: {gs_wt}g"]
     
-if st.form_submit_button("➕ பட்டியலில் சேர் (Add to Cart)", type="primary"):
+with st.form("dynamic_txn_form", clear_on_submit=True):
+    # இதர இன்புட் ஃபீல்டுகள்...
+    
+    # form_submit_button எப்போதுமே இந்த indented block-க்குள் இருக்க வேண்டும்:
+    if st.form_submit_button("➕ பட்டியலில் சேர் (Add to Cart)", type="primary"):
         if paid_amt > 0 or received_amt > 0:
-            all_remarks = " | ".join(detail_summary)
-        if custom_remarks.strip():
-            all_remarks += f" ({custom_remarks.strip()})"
-        st.session_state.transactions_cart.append({
-            "transaction_type": txn_category,
-            "staff_name": staff,
-            "paid_amount": float(paid_amt),
-            "received_amount": float(received_amt),
-            "remarks": all_remarks,
-            "transaction_details": extra_meta_data
-        })
-        st.success(f"'{txn_category}' சேர்க்கப்பட்டது!")
-        st.rerun()
-else:
-        st.error("தொகையை உள்ளிடவும்.")
+            # லாஜிக் கோடுகள்...
+            st.success("சேர்க்கப்பட்டது!")
+            st.rerun()
+        else:
+            st.error("தொகையை உள்ளிடவும்.")
 
 if st.session_state.transactions_cart:
         st.markdown("### 🛒 நடவடிக்கைகள் பட்டியல்:")
