@@ -1272,17 +1272,17 @@ if st.session_state.get("logged_in", False):
                         st.success("விதி நீக்கப்பட்டது!")
                         st.rerun()
 
-            with tab5:
-                    st.subheader("📥 பழைய வாடிக்கையாளர் இறக்குமதி (Bulk Import)")
-                    uploaded_cust_file = st.file_uploader(
-                    "கோப்பைத் தேர்வு செய்யவும்", 
-                    type=["xls", "xlsx", "csv"], 
-                    key="unique_tab5_bulk_import_cust_file_uploader"
-                )
-                if uploaded_cust_file and st.button("பதிவேற்றத்தைத் தொடங்கு", type="primary", key="unique_tab5_start_bulk_import_btn"):
-                    df_raw = pd.read_csv(uploaded_cust_file, skiprows=2) if uploaded_cust_file.name.endswith(".csv") else pd.read_excel(uploaded_cust_file, skiprows=2)
-                    df_cust = df_raw.dropna(subset=["Full Name", "Mobile No"]).copy()
-                    st.success(f"{len(df_cust)} வாடிக்கையாளர்கள் பதிவு செய்யப்படுகிறார்கள்...")
+with tab5:
+    st.subheader("📥 பழைய வாடிக்கையாளர் இறக்குமதி (Bulk Import)")
+    uploaded_cust_file = st.file_uploader(
+        "கோப்பைத் தேர்வு செய்யவும்", 
+        type=["xls", "xlsx", "csv"], 
+        key="unique_tab5_bulk_import_cust_file_uploader"
+    )
+    if uploaded_cust_file and st.button("பதிவேற்றத்தைத் தொடங்கு", type="primary", key="unique_tab5_start_bulk_import_btn"):
+        df_raw = pd.read_csv(uploaded_cust_file, skiprows=2) if uploaded_cust_file.name.endswith(".csv") else pd.read_excel(uploaded_cust_file, skiprows=2)
+        df_cust = df_raw.dropna(subset=["Full Name", "Mobile No"]).copy()
+        st.success(f"{len(df_cust)} வாடிக்கையாளர்கள் பதிவு செய்யப்படுகிறார்கள்...")
             
             with tab6:
                     st.subheader("🗂️ வாடிக்கையாளர் பட்டியல் & திருத்தம்")
