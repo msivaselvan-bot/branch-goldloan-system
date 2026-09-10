@@ -1895,7 +1895,7 @@ else:
                         "பதிவு செய்தவர்": e.get("created_by", "-")
                     } for e in b_exp_logs]), use_container_width=True)
     
-            with branch_tab3:
+        with branch_tab3:
                 st.subheader("⚠️ தலைமை அலுவலக விளக்கங்கள் & மறுப்புகள்")
                 clarification_visits = supabase.table("customer_visits").select("*, customers(name, mobile), transactions(*)").eq("branch_id", st.session_state.branch_id).eq("status", "Needs_Clarification").execute().data or []
                 if not clarification_visits:
@@ -1911,7 +1911,7 @@ else:
                                 st.success("அனுப்பப்பட்டது!")
                                 st.rerun()
     
-            with branch_tab2:
+        with branch_tab2:
                 st.subheader("📁 கிளை ஆவணங்கள் பதிவேற்றம் (Upload Docs Desk)")
                 st.caption("தணிக்கைக்கு அனுப்ப வேண்டிய வாடிக்கையாளர் வருகைகள் மற்றும் அவர்களின் வணிக நடவடிக்கைகள்.")
     
@@ -1960,7 +1960,7 @@ else:
                                 else:
                                     st.warning("⚠️ தயவுசெய்து ஆவணங்களைப் பதிவேற்றம் செய்யவும்.")
     
-            with branch_tab1:
+        with branch_tab1:
                 staff_res = supabase.table("users").select("name").eq("branch_id", st.session_state.branch_id).eq("is_active", True).execute()
                 current_staff_list = ["Walk-in (நேரடி வருகை)"] + [s["name"] for s in staff_res.data] if staff_res.data else ["Walk-in (நேரடி வருகை)"]
     
