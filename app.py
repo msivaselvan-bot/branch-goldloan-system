@@ -2329,9 +2329,10 @@ if st.session_state.transactions_cart:
 # -----------------------------------------------------------------
 # Step 3: பணப் பரிமாற்றம், ரூபாய் நோட்டுகள் & OTP சரிபார்ப்பு
 # -----------------------------------------------------------------
-elif st.session_state.current_visit["step"] == "CASH_OTP":
+# வரி 2332-ல் உள்ள பழைய வரியை முழுமையாக நீக்கிவிட்டு இதற்குப் பதிலாக இதை மாற்றவும்:
+elif st.session_state.current_visit is not None and st.session_state.current_visit.get("step") == "CASH_OTP":
     visit = st.session_state.current_visit
-    net_target = visit["net_amount"]
+    net_target = visit.get("net_amount", 0.0)
     total_needed_abs = abs(net_target)
     current_drawer = get_current_branch_cash_drawer(st.session_state.branch_id)
     otp_already_sent = "generated_otp" in st.session_state and st.session_state.generated_otp is not None
