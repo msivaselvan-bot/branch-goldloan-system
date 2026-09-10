@@ -1308,30 +1308,30 @@ with tab6:
     st.subheader("📊 வருகை & பரிவர்த்தனை மேலாண்மை")
     v_records = supabase.table("customer_visits").select("*, customers(name, mobile), transactions(*)").order("id", desc=True).limit(20).execute().data or []
     for vr in v_records:
-    c_name = vr.get("customers", {}).get("name", "-")
-    with st.expander(f"{vr['visit_no']} | {c_name} | ₹{vr['net_cash_amount']:,.2f} | {vr['status']}"):
-        if vr.get("transactions"):
-            st.dataframe(pd.DataFrame(vr["transactions"]))
+        c_name = vr.get("customers", {}).get("name", "-") if isinstance(vr.get("customers"), dict) else "-"
+        with st.expander(f"{vr.get('visit_no', '-')} | {c_name} | ₹{vr.get('net_cash_amount', 0):,.2f} | {vr.get('status', '-')}"):
+            if vr.get("transactions"):
+                st.dataframe(pd.DataFrame(vr["transactions"]), use_container_width=True)
 
-    with tab8:
+with tab8:
     st.subheader("💰 கிளை துவக்க இருப்பு நிர்ணயம்")
     sel_op_branch = st.selectbox("கிளை:", list(branch_options.keys()), key="sel_op_b")
     with st.form("admin_op_form"):
-    op_500 = st.number_input("₹500", min_value=0, step=1)
-    op_200 = st.number_input("₹200", min_value=0, step=1)
-    op_100 = st.number_input("₹100", min_value=0, step=1)
-    op_50 = st.number_input("₹50", min_value=0, step=1)
-    calc_total = (op_500 * 500) + (op_200 * 200) + (op_100 * 100) + (op_50 * 50)
-    if st.form_submit_button("சேமி", type="primary"):
-        supabase.table("branch_cash_box").upsert({
-            "branch_id": branch_options[sel_op_branch],
-            "entry_date": str(date.today()),
-            "opening_balance": calc_total,
-            "opening_denomination": {"500": op_500, "200": op_200, "100": op_100, "50": op_50}
-        }, on_conflict="branch_id,entry_date").execute()
-        st.success("சேமிக்கப்பட்டது!")
-        st.rerun()
-
+        op_500 = st.number_input("₹500", min_value=0, step=1, key="op_500_key")
+        op_200 = st.number_input("₹200", min_value=0, step=1, key="op_200_key")
+        op_100 = st.number_input("₹100", min_value=0, step=1, key="op_100_key")
+        op_50 = st.number_input("₹50", min_value=0, step=1, key="op_50_key")
+        calc_total = (op_500 * 500) + (op_200 * 200) + (op_100 * 100) + (op_50 * 50)
+        st.write(f"**மொத்தத் தொகை:** ₹{calc_total:,.2f}")
+        if st.form_submit_button("சேமி", type="primary"):
+            supabase.table("branch_cash_box").upsert({
+                "branch_id": branch_options[sel_op_branch],
+                "entry_date": str(date.today()),
+                "opening_balance": calc_total,
+                "opening_denomination": {"500": op_500, "200": op_200, "100": op_100, "50": op_50}
+            }, on_conflict="branch_id,entry_date").execute()
+            st.success("சேமிக்கப்பட்டது!")
+            st.rerun()
     with tab9:
     st.subheader("🏦 தலைமையக பணப் பரிமாற்றம் (HO ⇄ Branch)")
     with st.form("adm_fund_form"):
