@@ -1310,7 +1310,13 @@ else:
 
         with ops_tab3:
             st.subheader("📝 வாடிக்கையாளர் விவரத் திருத்தக் கோரிக்கைகள் (Profile Update Requests)")
-            pending_reqs = supabase.table("customer_update_requests").select("*, customers(*), branches(branch_name)").eq("status", "Pending_Approval").order("id", desc=True).execute().data or []
+            try:
+                pending_reqs = supabase.table("customer_update_requests").select("*, customers(*), branches(branch_name)").eq("status", "Pending_Approval").order("id", desc=True).execute().data or []
+            except Exception:
+                try:
+                    pending_reqs = supabase.table("customer_update_requests").select("*").eq("status", "Pending_Approval").order("id", desc=True).execute().data or []
+                except Exception:
+                    pending_reqs = []
             if not pending_reqs:
                 st.info("✅ எந்த கோரிக்கைகளும் இல்லை.")
             else:
