@@ -2296,9 +2296,9 @@ else:
         st.error("தொகையை உள்ளிடவும்.")
 
 if st.session_state.transactions_cart:
-    st.markdown("### 🛒 நடவடிக்கைகள் பட்டியல்:")
-    df_cart = pd.DataFrame(st.session_state.transactions_cart)
-    st.dataframe(df_cart, use_container_width=True)e)
+        st.markdown("### 🛒 நடவடிக்கைகள் பட்டியல்:")
+        df_cart = pd.DataFrame(st.session_state.transactions_cart)
+        st.dataframe(df_cart, use_container_width=True)e)
     
         total_paid = df_cart["paid_amount"].sum()
         total_received = df_cart["received_amount"].sum()
