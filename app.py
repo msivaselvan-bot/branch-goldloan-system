@@ -1175,9 +1175,10 @@ else:
     # ----------------------------------------------------
     elif st.session_state.user_role == "Operations":
         st.header("📞 ஆப்பரேஷன்ஸ் மேசை (Operations Desk)")
-        ops_tab1, ops_tab2, ops_tab3, ops_tab4 = st.tabs([
+        ops_tab1, ops_tab2, ops_tab3, ops_tab4, ops_tab5 = st.tabs([
             "🏦 நிதிப் பரிமாற்ற ஒப்புதல்", "👤 புதிய வாடிக்கையாளர் KYC",
-            "📝 விவரத் திருத்தக் கோரிக்கைகள்", "🔔 பரிவர்த்தனை அழைப்பு சரிபார்ப்பு"
+            "📝 விவரத் திருத்தக் கோரிக்கைகள்", "🔔 பரிவர்த்தனை அழைப்பு சரிபார்ப்பு", 
+            "📑 FD / RD பாண்ட் & சான்றிதழ்"
         ])
 
         with ops_tab1:
@@ -1337,6 +1338,62 @@ else:
                                 st.rerun()
                             except Exception as e:
                                 st.error(f"பிழை: {e}")
+
+        with ops_tab5:
+            st.subheader("📑 FD பாண்ட் மற்றும் RD சான்றிதழ் ஜெனரேட்டர்")
+            st.caption("கிளைகளில் திறக்கப்பட்ட புதிய Fixed Deposit மற்றும் Recurring Deposit கணக்குகளுக்கான பாண்ட் மற்றும் சான்றிதழ்களைப் பதிவிறக்கம் செய்க.")
+            
+            # டேட்டாபேஸில் உள்ள FD மற்றும் RD பதிவுகளை எடுத்தல்
+            fd_rd_txns = supabase.table("transactions").select("*, customer_visits(visit_no, customers(name, customer_code))").in_("transaction_type", ["FD Open (புதிய வைப்பு நிதி)", "RD Open (புதிய RD சேமிப்பு)"]).order("id", desc=True).execute().data or []
+            
+            if not fd_rd_txns:
+                st.info("✅ பாண்ட் அல்லது சான்றிதழ் வழங்க வேண்டிய புதிய கணக்குகள் எதுவும் இல்லை.")
+            else:
+                for txn in fd_rd_txns:
+                    t_type = txn.get("transaction_type")
+                    t_det = txn.get("transaction_details", {}) or {}
+                    visit_info = txn.get("customer_visits", {}) or {}
+                    cust_info = visit_info.get("customers", {}) or {}
+                    
+                    doc_title = "FD பாண்ட் (Fixed Deposit Bond)" if "FD" in t_type else "RD சான்றிதழ் (Recurring Deposit Certificate)"
+                    
+                    with st.expander(f"📌 {t_type} | கணக்கு எண்: {t_det.get('account_no', '-')} | வாடிக்கையாளர்: {cust_info.get('name', '-')}"):
+                        c_d1, c_d2 = st.columns(2)
+                        with c_d1:
+                            st.write(f"• **வாடிக்கையாளர் பெயர்:** {cust_info.get('name', '-')}")
+                            st.write(f"• **கணக்கு எண்:** `{t_det.get('account_no', '-')}`")
+                            st.write(f"• **தொகை:** ₹{float(t_det.get('deposit_amount') or t_det.get('installment_amount') or 0):,.2f}")
+                        with c_d2:
+                            st.write(f"• **நாமினி:** {t_det.get('nominee', '-')}")
+                            st.write(f"• **உறவுமுறை & வயது:** {t_det.get('relation', '-')}, வயது: {t_det.get('age', '-')}")
+                            st.write(f"• **முகவரி:** {t_det.get('address', '-')}")
+                            
+                        print_data = {
+                            "account_no": t_det.get('account_no'),
+                            "customer_name": cust_info.get('name'),
+                            "customer_code": cust_info.get('customer_code'),
+                            "deposit_amount": t_det.get('deposit_amount'),
+                            "installment_amount": t_det.get('installment_amount'),
+                            "nominee": t_det.get('nominee'),
+                            "relation": t_det.get('relation'),
+                            "age": t_det.get('age'),
+                            "address": t_det.get('address')
+                        }
+                        
+                        if "FD" in t_type:
+                            pdf_buffer = generate_fd_bond_pdf(print_data)
+                            file_name = f"FD_Bond_{t_det.get('account_no', 'Receipt')}.pdf"
+                        else:
+                            pdf_buffer = generate_rd_certificate_pdf(print_data)
+                            file_name = f"RD_Certificate_{t_det.get('account_no', 'Receipt')}.pdf"
+                            
+                        st.download_button(
+                            label=f"📥 {doc_title}-ஐப் பதிவிறக்குக (Download PDF)",
+                            data=pdf_buffer,
+                            file_name=file_name,
+                            mime="application/pdf",
+                            key=f"dl_pdf_{txn['id']}"
+                        )
 
     # ----------------------------------------------------
     # C. தணிக்கையர் திரை (AUDITOR DESK)
