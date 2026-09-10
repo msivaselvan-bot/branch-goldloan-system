@@ -859,19 +859,40 @@ else:
         )
 
         with tab1:
-            st.subheader("➕ புதிய கிளை சேர்த்தல்")
-            with st.form("admin_add_branch_form", clear_on_submit=True):
-                b_name = st.text_input("கிளையின் பெயர்", placeholder="எ.கா: திங்கள்நகர் கிளை")
-                b_code = st.text_input("கிளை குறியீடு", placeholder="எ.கா: TGL")
-                if st.form_submit_button("கிளையைச் சேர்"):
-                    if b_name.strip() and b_code.strip():
-                        try:
-                            supabase.table("branches").insert({"branch_name": b_name.strip(), "branch_code": b_code.strip().upper()}).execute()
-                            st.success(f"'{b_name}' வெற்றிகரமாகச் சேர்க்கப்பட்டது!")
-                            st.rerun()
-                        except Exception as err:
-                            st.error(f"பிழை: {err}")
             st.subheader("🏢 கிளைகள் மேலாண்மை (Branches Management)")
+            
+            # புதிய கிளை சேர்த்தல் படிவம்
+            with st.expander("➕ புதிய கிளை சேர்த்தல் (Add New Branch)", expanded=False):
+                with st.form("admin_add_branch_form", clear_on_submit=True):
+                    b_name = st.text_input("கிளையின் பெயர் *", placeholder="எ.கா: திங்கள்நகர் கிளை")
+                    b_code = st.text_input("கிளை குறியீடு *", placeholder="எ.கா: TGL")
+                    b_addr = st.text_area("கிளை முகவரி (Address)")
+                    
+                    bc1, bc2, bc3 = st.columns(3)
+                    with bc1:
+                        b_email = st.text_input("இமெயில் ஐடி (Email)")
+                    with bc2:
+                        b_phone = st.text_input("தொடர்பு எண் (Phone)")
+                    with bc3:
+                        b_manager = st.text_input("Office Manager பெயர்")
+
+                    if st.form_submit_button("கிளையைச் சேர்", type="primary"):
+                        if b_name.strip() and b_code.strip():
+                            try:
+                                supabase.table("branches").insert({
+                                    "branch_name": b_name.strip(),
+                                    "branch_code": b_code.strip().upper(),
+                                    "branch_address": b_addr.strip(),
+                                    "email": b_email.strip(),
+                                    "phone": b_phone.strip(),
+                                    "office_manager": b_manager.strip()
+                                }).execute()
+                                st.success(f"'{b_name}' வெற்றிகரமாகச் சேர்க்கப்பட்டது!")
+                                st.rerun()
+                            except Exception as err:
+                                st.error(f"பிழை: {err}")
+                        else:
+                            st.warning("கிளையின் பெயர் மற்றும் குறியீடு கட்டாயம் தேவை.")
             
             # உள்-டேப்கள் (Add & Edit)
             b_sub_tab1, b_sub_tab2 = st.tabs(["➕ புதிய கிளை சேர்த்தல்", "✏️ கிளை விவரங்களைத் திருத்துதல் (Edit)"])
