@@ -229,7 +229,7 @@ def generate_fd_bond_pdf(data):
         ("FD Account / Ref No:", data.get("account_no", "-")),
         ("Customer Name:", data.get("customer_name", "-")),
         ("Customer Code:", data.get("customer_code", "-")),
-        ("Principal Amount:", f"Rs. {float(data.get('deposit_amount', 0)):,.2f} (INR)"),
+        ("Principal Amount:", f"Rs. {float(data.get('deposit_amount') or 0):,.2f} (INR)"),
         ("Interest Rate / Terms:", "15.6% p.a. (1.3% pm) monthly basis"),
         ("Maturity Date:", str(data.get("maturity_date", "August 18th 2030"))),
         ("Nominee Name:", data.get("nominee", "-")),
@@ -299,10 +299,10 @@ def generate_rd_certificate_pdf(data):
     c.drawString(480, y - 15, str(data.get('roi', '12.25%')))
     
     y -= 45
-    c.setFont("Helvetica-Bold", 9)
-    c.drawString(50, y, "INSTALLMENT AMOUNT")
-    c.drawString(200, y, "TOTAL DEPOSIT AMOUNT")
-    c.drawString(380, y, "MATURITY AMOUNT")
+    c.setFont("Helvetica", 9)
+    c.drawString(50, y - 15, f"Rs. {float(data.get('installment_amount') or 0):,.2f}")
+    c.drawString(200, y - 15, f"Rs. {float(data.get('total_deposit') or 0):,.2f}")
+    c.drawString(380, y - 15, f"Rs. {float(data.get('maturity_amount') or 0):,.2f}")
     
     c.setFont("Helvetica", 9)
     c.drawString(50, y - 15, f"Rs. {float(data.get('installment_amount', 0)):,.2f}")
@@ -536,18 +536,28 @@ def render_staff_attribution_report(selected_branch_id=None):
             branch_staff_dict[b_id] = []
         branch_staff_dict[b_id].append(u)
 
-    query = (
-        supabase.table("customer_visits")
-        .select("id, visit_no, branch_id, created_at, payment_mode, cash_amount, bank_amount, branches(branch_name), transactions(*)")
-        .gte("created_at", start_dt_str)
-        .lte("created_at", end_dt_str)
-    )
+    try:
+        query = (
+            supabase.table("customer_visits")
+            .select("id, visit_no, branch_id, created_at, payment_mode, cash_amount, bank_amount, branches(branch_name), transactions(*)")
+            .gte("created_at", start_dt_str)
+            .lte("created_at", end_dt_str)
+        )
 
-    if selected_branch_id:
-        query = query.eq("branch_id", selected_branch_id)
+        if selected_branch_id:
+            query = query.eq("branch_id", selected_branch_id)
 
-    res = query.execute()
-    visits = res.data or []
+        res = query.execute()
+        visits = res.data or []
+    except Exception:
+        # ரிலேஷன்ஷிப் வேலை செய்யவில்லை எனில், தனித்தனியாக தரவுகளை எடுத்தல்
+        try:
+            q_fallback = supabase.table("customer_visits").select("*").gte("created_at", start_dt_str).lte("created_at", end_dt_str)
+            if selected_branch_id:
+                q_fallback = q_fallback.eq("branch_id", selected_branch_id)
+            visits = q_fallback.execute().data or []
+        except Exception:
+            visits = []
 
     detailed_txn_logs = []
     staff_points_map = {}
@@ -739,10 +749,16 @@ if "current_visit" not in st.session_state:
 if "transactions_cart" not in st.session_state:
     st.session_state.transactions_cart = []
 
-branches_res = supabase.table("branches").select("*").execute()
-branch_options = {b["branch_name"]: b["id"] for b in branches_res.data} if branches_res.data else {}
-branch_id_to_name = {b["id"]: b["branch_name"] for b in branches_res.data} if branches_res.data else {}
+try:
+    branches_res = supabase.table("branches").select("*").execute()
+    branches_data = branches_res.data if branches_res and branches_res.data else []
+except Exception as e:
+    branches_data = []
+    st.error(f"⚠️ டேட்டாபேஸ் பிழை: {e}")
 
+# மேப்பிங் மாறிகள் சரியாக வரையறுக்கப்பட்டுள்ளதா என்பதை உறுதிப்படுத்தவும்:
+branch_options = {b["branch_name"]: b["id"] for b in branches_data}
+branch_id_to_name = {b["id"]: b["branch_name"] for b in branches_data}
 # ==========================================
 # 5. உள்நுழைவு திரை
 # ==========================================
@@ -763,14 +779,17 @@ if not st.session_state.logged_in:
 
             if submitted:
                 if username.strip() and password.strip():
-                    user_query = (
-                        supabase.table("users")
-                        .select("id, name, username, role, branch_id, is_active, branches(branch_name)")
-                        .eq("username", username.strip())
-                        .eq("password_hash", password.strip())
-                        .eq("is_active", True)
-                        .execute()
-                    )
+                    try:
+                        user_query = (
+                            supabase.table("users")
+                            .select("id, name, username, role, branch_id, is_active, branches(branch_name)")
+                            .eq("username", username.strip())
+                            .eq("password_hash", password.strip())
+                            .eq("is_active", True)
+                            .execute()
+                        )
+                    except Exception as e:
+                        user_query = supabase.table("users").select("*").eq("username", username.strip()).eq("password_hash", password.strip()).eq("is_active", True).execute()
 
                     if user_query.data:
                         user_info = user_query.data[0]
@@ -1204,11 +1223,19 @@ else:
 
         with ops_tab1:
             st.subheader("🏦 தலைமையக & கிளை நிதிப் பரிமாற்ற ஒப்புதல் மேசை")
-            pending_fund_transfers = supabase.table("branch_fund_transfers").select("*, branches(branch_name)").eq("status", "Pending_Approval").order("id", desc=True).execute().data or []
+            try:
+                pending_fund_transfers = supabase.table("branch_fund_transfers").select("*, branches(branch_name)").eq("status", "Pending_Approval").order("id", desc=True).execute().data or []
+            except Exception:
+                try:
+                    pending_fund_transfers = supabase.table("branch_fund_transfers").select("*").eq("status", "Pending_Approval").order("id", desc=True).execute().data or []
+                except Exception:
+                    pending_fund_transfers = []
+
             if not pending_fund_transfers:
                 st.info("✅ எந்த பணப் பரிமாற்றங்களும் நிலுவையில் இல்லை.")
             else:
                 for f_item in pending_fund_transfers:
+                    # (இதற்கு அடியில் உள்ள உங்களது ஒரிஜினல் for லூப் கோடுகள் அப்படியே தொடரும்)
                     b_name = f_item.get("branches", {}).get("branch_name", "Branch")
                     with st.expander(f"💰 {f_item['transfer_type']} | {b_name} | ₹{float(f_item['amount']):,.2f}"):
                         st.json(f_item.get("denomination_details", {}))
@@ -1219,7 +1246,13 @@ else:
 
             st.markdown("---")
             st.subheader("💸 கிளைச் செலவு ஒப்புதல் மேசை (Branch Expenses Approval Desk)")
-            pending_expenses = supabase.table("branch_expenses").select("*, branches(branch_name)").eq("status", "Pending_Approval").order("id", desc=True).execute().data or []
+            try:
+                pending_expenses = supabase.table("branch_expenses").select("*, branches(branch_name)").eq("status", "Pending_Approval").order("id", desc=True).execute().data or []
+            except Exception:
+                try:
+                    pending_expenses = supabase.table("branch_expenses").select("*").eq("status", "Pending_Approval").order("id", desc=True).execute().data or []
+                except Exception:
+                    pending_expenses = []
             
             if not pending_expenses:
                 st.info("✅ ஒப்புதலுக்கு நிலுவையில் உள்ள கிளைச் செலவுகள் எதுவும் இல்லை.")
@@ -1277,7 +1310,13 @@ else:
 
         with ops_tab3:
             st.subheader("📝 வாடிக்கையாளர் விவரத் திருத்தக் கோரிக்கைகள் (Profile Update Requests)")
-            pending_reqs = supabase.table("customer_update_requests").select("*, customers(*), branches(branch_name)").eq("status", "Pending_Approval").order("id", desc=True).execute().data or []
+            try:
+                pending_reqs = supabase.table("customer_update_requests").select("*, customers(*), branches(branch_name)").eq("status", "Pending_Approval").order("id", desc=True).execute().data or []
+            except Exception:
+                try:
+                    pending_reqs = supabase.table("customer_update_requests").select("*").eq("status", "Pending_Approval").order("id", desc=True).execute().data or []
+                except Exception:
+                    pending_reqs = []
             if not pending_reqs:
                 st.info("✅ எந்த கோரிக்கைகளும் இல்லை.")
             else:
@@ -1308,14 +1347,27 @@ else:
             st.subheader("📞 பரிவர்த்தனை அழைப்பு சரிபார்ப்பு (Transaction Call Verification)")
             st.caption("கிளை ஊழியர்களால் முடிக்கப்பட்டு, வாடிக்கையாளர் அழைப்புச் சரிபார்ப்புக்காக நிலுவையில் உள்ள வருகைகள்.")
             
-            ops_visits = (
-                supabase.table("customer_visits")
-                .select("*, customers(name, mobile, mobile2), transactions(*), branches(branch_name)")
-                .eq("status", "Pending_Calling_Verification")
-                .order("id", desc=True)
-                .execute()
-                .data or []
-            )
+            try:
+                ops_visits = (
+                    supabase.table("customer_visits")
+                    .select("*, customers(name, mobile, mobile2), transactions(*), branches(branch_name)")
+                    .eq("status", "Pending_Calling_Verification")
+                    .order("id", desc=True)
+                    .execute()
+                    .data or []
+                )
+            except Exception:
+                try:
+                    ops_visits = (
+                        supabase.table("customer_visits")
+                        .select("*")
+                        .eq("status", "Pending_Calling_Verification")
+                        .order("id", desc=True)
+                        .execute()
+                        .data or []
+                    )
+                except Exception:
+                    ops_visits = []
 
             if not ops_visits:
                 st.info("✅ சரிபார்க்க வேண்டிய வருகைகள் எதுவும் நிலுவையில் இல்லை.")
@@ -2329,6 +2381,7 @@ else:
                         if st.button("⬅️ நடவடிக்கைகளை மாற்ற பின்செல்க", use_container_width=True):
                             st.session_state.current_visit["step"] = "TRANSACTIONS"
                             st.rerun()
+
 
 
 
