@@ -1185,7 +1185,7 @@ if st.session_state.get("logged_in", False):
         # -----------------------------------------------------------------
         # tab4: இன்சென்டிவ் & புள்ளி விதிகள் (Delete / Edit / Multi-Scheme)
         # -----------------------------------------------------------------
-        with tab4:
+    with tab4:
             st.subheader("🎯 பணியாளர் இன்சென்டிவ் & புள்ளிகள் விதிகள் (Staff Incentive Master)")
 
             set_res = supabase.table("incentive_settings").select("*").eq("id", 1).execute().data
