@@ -2500,7 +2500,3 @@ else:
                         if st.button("⬅️ நடவடிக்கைகளை மாற்ற பின்செல்க", use_container_width=True):
                             st.session_state.current_visit["step"] = "TRANSACTIONS"
                             st.rerun()
-
-
-
-~
