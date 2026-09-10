@@ -829,12 +829,12 @@ with st.form("login_form_final"):
 # ==========================================
 # 6. முதன்மை திரை
 # ==========================================
-else:
+if st.session_state.get("logged_in", False):
     top_col1, top_col2, top_col3, top_col4 = st.columns([2.5, 2, 1, 1])
     with top_col1:
-        st.write(f"🏢 **கிளை:** {st.session_state.branch}")
+        st.write(f"🏢 **கிளை:** {st.session_state.get('branch', 'General')}")
     with top_col2:
-        st.write(f"👤 **பயனர்:** {st.session_state.username} ({st.session_state.user_role})")
+        st.write(f"👤 **பயனர்:** {st.session_state.get('username', '')} ({st.session_state.get('user_role', '')})")
     with top_col3:
         if st.button("🔄 Refresh", use_container_width=True, help="பக்கத்தை முழுமையாகப் புதுப்பிக்க"):
             st.rerun()
