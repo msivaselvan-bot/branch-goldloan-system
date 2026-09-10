@@ -1735,19 +1735,30 @@ else:
 
         st.markdown("---")
         st.subheader("📋 உங்கள் கிளையின் சமீபத்திய பணப் பரிமாற்றங்கள் & ஒப்புதல் நிலை")
-        b_fund_logs = supabase.table("branch_fund_transfers").select("*").eq("branch_id", st.session_state.branch_id).order("id", desc=True).limit(20).execute().data or []
-        if b_fund_logs:
-            st.dataframe(pd.DataFrame([{
-                "தேதி": f["transfer_date"],
-                "பரிமாற்றம்": "📥 HO ➔ கிளைக்கு பணம் பெறுதல்" if f["transfer_type"] == "HO_TO_BRANCH" else "📤 கிளை ➔ HO-க்கு அனுப்புதல்",
-                "தொகை (₹)": f"₹{float(f['amount']):,.2f}",
-                "முறை": f["payment_mode"],
-                "நிலை (Status)": "🟢 Approved (ஏற்கப்பட்டது)" if f.get("status") == "Approved" else ("🔴 Rejected (மறுக்கப்பட்டது)" if f.get("status") == "Rejected" else "🟡 Pending (ஆப்பரேஷன்ஸ் ஒப்புதல் நிலுவை)"),
-                "குறிப்பு / UTR": f.get("reference_no", "-"),
-                "பதிவு செய்தவர்": f.get("created_by", "-")
-            } for f in b_fund_logs]), use_container_width=True)
-            
-            with branch_tab4:
+        try:
+        b_fund_logs = (
+            supabase.table("branch_fund_transfers")
+            .select("*")
+            .eq("branch_id", st.session_state.branch_id)
+            .order("id", desc=True)
+            .limit(20)
+            .execute()
+            .data or []
+        )
+    except Exception as e:
+        st.error(f"தரவுத்தள பிழை: {e}")
+        b_fund_logs = []
+
+    if b_fund_logs:
+        st.dataframe(pd.DataFrame([{
+            "தேதி": f.get("transfer_date", "-"),
+            "பரிமாற்றம்": "📥 HO ➔ கிளைக்கு பணம் பெறுதல்" if f.get("transfer_type") == "HO_TO_BRANCH" else "📤 கிளை ➔ HO-க்கு அனுப்புதல்",
+            "தொகை (₹)": f"₹{float(f.get('amount', 0)):,.2f}",
+            "முறை": f.get("payment_mode", "Cash"),
+            "நிலை (Status)": "🟢 Approved (ஏற்கப்பட்டது)" if f.get("status") == "Approved" else ("🔴 Rejected (மறுக்கப்பட்டது)" if f.get("status") == "Rejected" else "🟡 Pending (ஆப்பரேஷன்ஸ் ஒப்புதல் நிலுவை)"),
+            "குறிப்பு / UTR": f.get("reference_no", "-"),
+            "பதிவு செய்தவர்": f.get("created_by", "-")
+        } for f in b_fund_logs]), use_container_width=True)
                 st.subheader("💸 கிளை செலவுப் பதிவு & சில்லறை மேலாண்மை (Branch Expense Desk)")
                 st.caption("செலவுத் தொகைக்கு நாம் கொடுத்த நோட்டுகளையும், கடைக்காரர் திருப்பிக் கொடுத்த மீதி சில்லறையையும் (Cash Return) சரியாக உள்ளிடவும்.")
     
