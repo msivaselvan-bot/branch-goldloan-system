@@ -2325,15 +2325,15 @@ else:
                         # -----------------------------------------------------------------
                         # Step 3: பணப் பரிமாற்றம், 8 ரூபாய் நோட்டுகள் & OTP சரிபார்ப்பு
                         # -----------------------------------------------------------------
-        elif st.session_state.current_visit["step"] == "CASH_OTP":
+    elif st.session_state.current_visit["step"] == "CASH_OTP":
             visit = st.session_state.current_visit
             net_target = visit["net_amount"]
             total_needed_abs = abs(net_target)
-            current_drawer = get_current_branch_cash_drawer(st.session_state.branch_id)
-            otp_already_sent = "generated_otp" in st.session_state and st.session_state.generated_otp is not None
+                current_drawer = get_current_branch_cash_drawer(st.session_state.branch_id)
+                otp_already_sent = "generated_otp" in st.session_state and st.session_state.generated_otp is not None
 
-            st.subheader("படி 3: பணப் பரிமாற்ற முறை & நோட்டுகள் / மீதித் தொகை கணக்கீடு")
-            hdr_text = (
+                st.subheader("படி 3: பணப் பரிமாற்ற முறை & நோட்டுகள் / மீதித் தொகை கணக்கீடு")
+                hdr_text = (
                 f"💸 வாடிக்கையாளருக்கு வழங்க வேண்டிய நிகரத் தொகை (Pay-OUT): ₹{net_target:,.2f}"
                 if net_target > 0
                 else f"💰 வாடிக்கையாளரிடம் பெற வேண்டிய நிகரத் தொகை (Pay-IN): ₹{total_needed_abs:,.2f}"
