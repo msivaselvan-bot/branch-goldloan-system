@@ -229,7 +229,7 @@ def generate_fd_bond_pdf(data):
         ("FD Account / Ref No:", data.get("account_no", "-")),
         ("Customer Name:", data.get("customer_name", "-")),
         ("Customer Code:", data.get("customer_code", "-")),
-        ("Principal Amount:", f"Rs. {float(data.get('deposit_amount', 0)):,.2f} (INR)"),
+        ("Principal Amount:", f"Rs. {float(data.get('deposit_amount') or 0):,.2f} (INR)"),
         ("Interest Rate / Terms:", "15.6% p.a. (1.3% pm) monthly basis"),
         ("Maturity Date:", str(data.get("maturity_date", "August 18th 2030"))),
         ("Nominee Name:", data.get("nominee", "-")),
