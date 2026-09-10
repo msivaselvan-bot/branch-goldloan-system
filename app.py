@@ -1631,7 +1631,11 @@ else:
     ])
 
     with branch_tab6:
-        render_staff_attribution_report(selected_branch_id=st.session_state.branch_id)
+        # வரி 1634-ல் உள்ள பழைய வரியை இப்படி மாற்றவும்:
+        render_staff_attribution_report(
+    selected_branch_id=st.session_state.branch_id, 
+    key_suffix="branch_main_report"
+)
 
     with branch_tab5:
         st.subheader("🏦 தலைமையக பணப் பரிமாற்றம் (Head Office ⇄ Branch Fund Transfer Desk)")
