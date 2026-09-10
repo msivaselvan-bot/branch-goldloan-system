@@ -1020,6 +1020,7 @@ else:
                     selected_user_key = st.selectbox("எடிட் செய்ய வேண்டிய பணியாளர்", list(user_choices.keys()), key="select_user_to_edit_unique_tab2")
                     curr_user = user_choices[selected_user_key]
 
+                    # தனித்துவமான ஃபார்ம் கீ (Form Key)
                     with st.form(f"admin_edit_user_form_{curr_user['id']}"):
                         edit_name = st.text_input("பெயர்", value=curr_user["name"], key=f"edit_name_{curr_user['id']}")
                         edit_pass = st.text_input("புதிய கடவுச்சொல் (தேவைப்பட்டால் மட்டும்)", type="password", key=f"edit_pass_{curr_user['id']}")
@@ -1043,23 +1044,28 @@ else:
                         edit_photo = st.file_uploader("புதிய புகைப்படம் மாற்ற (விரும்பினால்)", type=["jpg", "png", "jpeg"], key=f"edit_staff_ph_{curr_user['id']}")
 
                         if st.form_submit_button("பணியாளர் விவரங்களைப் புதுப்பி", type="primary"):
-                            up_data = {
-                                "name": edit_name.strip(), 
-                                "role": edit_role, 
-                                "branch_id": branch_options.get(edit_branch_sel) if edit_branch_sel != "Head Office / None" else None,
-                                "is_active": edit_status == "Active"
-                            }
-                            if edit_pass.strip():
-                                up_data["password_hash"] = edit_pass.strip()
-                            
-                            if edit_photo:
-                                new_p_url = upload_single_file(edit_photo, "staff_profiles")
-                                if new_p_url:
-                                    up_data["profile_image_url"] = new_p_url
+                            try:
+                                up_data = {
+                                    "name": edit_name.strip(), 
+                                    "role": edit_role, 
+                                    "branch_id": branch_options.get(edit_branch_sel) if edit_branch_sel != "Head Office / None" else None,
+                                    "is_active": edit_status == "Active"
+                                }
+                                if edit_pass.strip():
+                                    up_data["password_hash"] = edit_pass.strip()
+                                
+                                if edit_photo:
+                                    new_p_url = upload_single_file(edit_photo, "staff_profiles")
+                                    if new_p_url:
+                                        up_data["profile_image_url"] = new_p_url
 
-                            supabase.table("users").update(up_data).eq("id", curr_user["id"]).execute()
-                            st.success("✅ பணியாளர் விவரங்கள் புதுப்பிக்கப்பட்டன!")
-                            st.rerun()
+                                # Supabase அப்டேட் கட்டளை
+                                update_res = supabase.table("users").update(up_data).eq("id", curr_user["id"]).execute()
+                                
+                                st.success("✅ பணியாளர் விவரங்கள் வெற்றிகரமாகப் புதுப்பிக்கப்பட்டன!")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"மாற்றம் செய்வதில் பிழை ஏற்பட்டது: {e}")
         # -----------------------------------------------------------------
         # tab3: ஸ்கீம்கள் மேலாண்மை (Pledge RPG, FD, RD)
         # -----------------------------------------------------------------
