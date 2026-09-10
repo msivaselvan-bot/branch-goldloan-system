@@ -1347,14 +1347,27 @@ else:
             st.subheader("📞 பரிவர்த்தனை அழைப்பு சரிபார்ப்பு (Transaction Call Verification)")
             st.caption("கிளை ஊழியர்களால் முடிக்கப்பட்டு, வாடிக்கையாளர் அழைப்புச் சரிபார்ப்புக்காக நிலுவையில் உள்ள வருகைகள்.")
             
-            ops_visits = (
-                supabase.table("customer_visits")
-                .select("*, customers(name, mobile, mobile2), transactions(*), branches(branch_name)")
-                .eq("status", "Pending_Calling_Verification")
-                .order("id", desc=True)
-                .execute()
-                .data or []
-            )
+            try:
+                ops_visits = (
+                    supabase.table("customer_visits")
+                    .select("*, customers(name, mobile, mobile2), transactions(*), branches(branch_name)")
+                    .eq("status", "Pending_Calling_Verification")
+                    .order("id", desc=True)
+                    .execute()
+                    .data or []
+                )
+            except Exception:
+                try:
+                    ops_visits = (
+                        supabase.table("customer_visits")
+                        .select("*")
+                        .eq("status", "Pending_Calling_Verification")
+                        .order("id", desc=True)
+                        .execute()
+                        .data or []
+                    )
+                except Exception:
+                    ops_visits = []
 
             if not ops_visits:
                 st.info("✅ சரிபார்க்க வேண்டிய வருகைகள் எதுவும் நிலுவையில் இல்லை.")
