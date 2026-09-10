@@ -988,71 +988,71 @@ if st.session_state.get("logged_in", False):
                             st.success("பயனர் உருவாக்கப்பட்டுவிட்டார்!")
                             st.rerun()
 
-            with sub_col2:
-    if users_res.data:
-        # கிளைகளின் விவரங்களை அகராதியாக (Dictionary) சேகரித்தல்
-        br_res = supabase.table("branches").select("id, branch_name, branch_code").execute()
-        branches_dict = {b["id"]: f"{b['branch_name']} ({b['branch_code']})" for b in br_res.data} if br_res.data else {}
-        branch_ids = list(branches_dict.keys())
+    with sub_col2:
+            if users_res.data:
+                # கிளைகளின் விவரங்களை அகராதியாக (Dictionary) சேகரித்தல்
+                br_res = supabase.table("branches").select("id, branch_name, branch_code").execute()
+                branches_dict = {b["id"]: f"{b['branch_name']} ({b['branch_code']})" for b in br_res.data} if br_res.data else {}
+                branch_ids = list(branches_dict.keys())
 
-        # பணியாளர் தேர்வுக்கு கிளைப் பெயரையும் சேர்த்து காட்டுதல்
-        user_choices = {}
-        for u in users_res.data:
-            b_id = u.get("branch_id")
-            b_name = branches_dict.get(b_id, "கிளை ஒதுக்கப்படவில்லை")
-            display_name = f"{u.get('name', 'No Name')} (@{u.get('username', '')}) - கிளை: {b_name}"
-            user_choices[display_name] = u
+                # பணியாளர் தேர்வுக்கு கிளைப் பெயரையும் சேர்த்து காட்டுதல்
+                user_choices = {}
+                for u in users_res.data:
+                    b_id = u.get("branch_id")
+                    b_name = branches_dict.get(b_id, "கிளை ஒதுக்கப்படவில்லை")
+                    display_name = f"{u.get('name', 'No Name')} (@{u.get('username', '')}) - கிளை: {b_name}"
+                    user_choices[display_name] = u
 
-        selected_user_key = st.selectbox("திருத்த வேண்டிய பணியாளர்", list(user_choices.keys()), key="edit_staff_select_box_unique")
-        curr_user = user_choices[selected_user_key]
+                selected_user_key = st.selectbox("திருத்த வேண்டிய பணியாளர்", list(user_choices.keys()), key="edit_staff_select_box_unique")
+                curr_user = user_choices[selected_user_key]
 
-        # ஒவ்வொரு பணியாளருக்கும் தனித்துவமான ஃபார்ம் கீ வழங்குவது எரரைத் தவிர்க்கும்
-        with st.form(key=f"admin_edit_user_form_{curr_user['id']}"):
-            edit_name = st.text_input("பெயர்", value=curr_user.get("name", ""), key=f"edit_name_{curr_user['id']}")
-            edit_pass = st.text_input("புதிய கடவுச்சொல் (விரும்பினால் மட்டும்)", type="password", key=f"edit_pass_{curr_user['id']}")
-            
-            # கிளை மாற்றம் செய்யும் பகுதி
-            current_branch_id = curr_user.get("branch_id")
-            default_idx = branch_ids.index(current_branch_id) if current_branch_id in branch_ids else 0
-            
-            selected_branch_name = st.selectbox(
-                "கிளையை மாற்றுக (Assign Branch)",
-                options=list(branches_dict.values()) if branches_dict else ["கிளைகள் இல்லை"],
-                index=default_idx if branches_dict else 0,
-                key=f"staff_branch_select_{curr_user['id']}"
-            )
-            
-            selected_branch_id = None
-            for b_id, b_label in branches_dict.items():
-                if b_label == selected_branch_name:
-                    selected_branch_id = b_id
-                    break
+                # ஒவ்வொரு பணியாளருக்கும் தனித்துவமான ஃபார்ம் கீ வழங்குவது எரரைத் தவிர்க்கும்
+                with st.form(key=f"admin_edit_user_form_{curr_user['id']}"):
+                    edit_name = st.text_input("பெயர்", value=curr_user.get("name", ""), key=f"edit_name_{curr_user['id']}")
+                    edit_pass = st.text_input("புதிய கடவுச்சொல் (விரும்பினால் மட்டும்)", type="password", key=f"edit_pass_{curr_user['id']}")
+                    
+                    # கிளை மாற்றம் செய்யும் பகுதி
+                    current_branch_id = curr_user.get("branch_id")
+                    default_idx = branch_ids.index(current_branch_id) if current_branch_id in branch_ids else 0
+                    
+                    selected_branch_name = st.selectbox(
+                        "கிளையை மாற்றுக (Assign Branch)",
+                        options=list(branches_dict.values()) if branches_dict else ["கிளைகள் இல்லை"],
+                        index=default_idx if branches_dict else 0,
+                        key=f"staff_branch_select_{curr_user['id']}"
+                    )
+                    
+                    selected_branch_id = None
+                    for b_id, b_label in branches_dict.items():
+                        if b_label == selected_branch_name:
+                            selected_branch_id = b_id
+                            break
 
-            roles_list = ["Branch Head / Cashier", "Staff", "Operations", "Auditor", "Admin"]
-            current_role = curr_user.get("role", "Staff")
-            role_idx = roles_list.index(current_role) if current_role in roles_list else 0
-            edit_role = st.selectbox("பணி நிலை", roles_list, index=role_idx, key=f"edit_role_{curr_user['id']}")
-            
-            edit_status = st.radio("நிலை", ["Active", "Inactive"], index=0 if curr_user.get("is_active", True) else 1, key=f"edit_status_{curr_user['id']}")
+                    roles_list = ["Branch Head / Cashier", "Staff", "Operations", "Auditor", "Admin"]
+                    current_role = curr_user.get("role", "Staff")
+                    role_idx = roles_list.index(current_role) if current_role in roles_list else 0
+                    edit_role = st.selectbox("பணி நிலை", roles_list, index=role_idx, key=f"edit_role_{curr_user['id']}")
+                    
+                    edit_status = st.radio("நிலை", ["Active", "Inactive"], index=0 if curr_user.get("is_active", True) else 1, key=f"edit_status_{curr_user['id']}")
 
-            if st.form_submit_button("புதுப்பி", type="primary"):
-                try:
-                    up_data = {
-                        "name": edit_name.strip(), 
-                        "role": edit_role, 
-                        "branch_id": selected_branch_id,
-                        "is_active": edit_status == "Active"
-                    }
-                    if edit_pass.strip():
-                        up_data["password_hash"] = edit_pass.strip()
-                        
-                    supabase.table("users").update(up_data).eq("id", curr_user["id"]).execute()
-                    st.success("✅ பணியாளர் விவரங்கள் மற்றும் கிளை வெற்றிகரமாகப் புதுப்பிக்கப்பட்டன!")
-                    st.rerun()
-                except Exception as err:
-                    st.error(f"பிழை: {err}")
-    else:
-        st.info("திருத்துவதற்கு பணியாளர்கள் யாரும் இல்லை.")
+                    if st.form_submit_button("புதுப்பி", type="primary"):
+                        try:
+                            up_data = {
+                                "name": edit_name.strip(), 
+                                "role": edit_role, 
+                                "branch_id": selected_branch_id,
+                                "is_active": edit_status == "Active"
+                            }
+                            if edit_pass.strip():
+                                up_data["password_hash"] = edit_pass.strip()
+                                
+                            supabase.table("users").update(up_data).eq("id", curr_user["id"]).execute()
+                            st.success("✅ பணியாளர் விவரங்கள் மற்றும் கிளை வெற்றிகரமாகப் புதுப்பிக்கப்பட்டன!")
+                            st.rerun()
+                        except Exception as err:
+                            st.error(f"பிழை: {err}")
+            else:
+                st.info("திருத்துவதற்கு பணியாளர்கள் யாரும் இல்லை.")
         # -----------------------------------------------------------------
         # tab3: ஸ்கீம்கள் மேலாண்மை (Pledge RPG, FD, RD)
         # -----------------------------------------------------------------
