@@ -851,7 +851,7 @@ if st.session_state.get("logged_in", False):
     # ----------------------------------------------------
     # A. நிர்வாக மேலாண்மை திரை (ADMIN PANEL WITH 10 FULL TABS)
     # ----------------------------------------------------
- if st.session_state.user_role == "Admin":
+if st.session_state.user_role == "Admin":
         st.header("⚙️ நிர்வாக மேலாண்மை (Admin Control Panel)")
         tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10 = st.tabs(
             [
