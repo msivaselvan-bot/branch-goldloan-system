@@ -1153,12 +1153,21 @@ else:
 
         with tab6:
             st.subheader("🗂️ வாடிக்கையாளர் பட்டியல் & திருத்தம்")
-            cq = supabase.table("customers").select("*, branches(branch_name)").order("id", desc=True).limit(100)
-            cust_list_data = cq.execute().data or []
+            try:
+                cq = supabase.table("customers").select("*, branches(branch_name)").order("id", desc=True).limit(100)
+                cust_list_data = cq.execute().data or []
+            except Exception:
+                try:
+                    cq = supabase.table("customers").select("*").order("id", desc=True).limit(100)
+                    cust_list_data = cq.execute().data or []
+                except Exception:
+                    cust_list_data = []
+
             if cust_list_data:
                 st.dataframe(pd.DataFrame([{
                     "ID": c["id"], "Code": c.get("customer_code", "-"), "பெயர்": c["name"], "மொபைல்": c["mobile"],
-                    "கிளை": c.get("branches", {}).get("branch_name", "பொது"), "KYC நிலை": c.get("kyc_status", "Approved")
+                    "கிளை": c.get("branches", {}).get("branch_name", "பொது") if isinstance(c.get("branches"), dict) else "பொது",
+                    "KYC நிலை": c.get("kyc_status", "Approved")
                 } for c in cust_list_data]), use_container_width=True)
 
         with tab7:
