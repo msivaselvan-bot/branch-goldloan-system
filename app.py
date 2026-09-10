@@ -1352,35 +1352,10 @@ if st.session_state.get("logged_in", False):
                 # ----------------------------------------------------
                 # B. ஆப்பரேஷன்ஸ் திரை (OPERATIONS DESK)
                 # ----------------------------------------------------
-        elif st.session_state.user_role == "Operations":
-    st.header("📞 ஆப்பரேஷன்ஸ் மேசை (Operations Desk)")
-    ops_tab1, ops_tab2, ops_tab3, ops_tab4, ops_tab5 = st.tabs([
-        "🏦 நிதிப் பரிமாற்ற ஒப்புதல்", "👤 புதிய வாடிக்கையாளர் KYC",
-        "📝 விவரத் திருத்தக் கோரிக்கைகள்", "🔔 பரிவர்த்தனை அழைப்பு சரிபார்ப்பு", 
-        "📑 FD / RD பாண்ட் & சான்றிதழ்"
-    ])
-
-    with ops_tab1:
-        st.subheader("🏦 தலைமையக & கிளை நிதிப் பரிமாற்ற ஒப்புதல் மேசை")
-        try:
-            pending_fund_transfers = supabase.table("branch_fund_transfers").select("*, branches(branch_name)").eq("status", "Pending_Approval").order("id", desc=True).execute().data or []
-        except Exception:
-            try:
-                pending_fund_transfers = supabase.table("branch_fund_transfers").select("*").eq("status", "Pending_Approval").order("id", desc=True).execute().data or []
-            except Exception:
-                pending_fund_transfers = []
-
-        if not pending_fund_transfers:
-            st.info("✅ எந்த பணப் பரிமாற்றங்களும் நிலுவையில் இல்லை.")
-        else:
-            for f_item in pending_fund_transfers:
-                b_name = f_item.get("branches", {}).get("branch_name", "Branch")
-                with st.expander(f"💰 {f_item['transfer_type']} | {b_name} | ₹{float(f_item['amount']):,.2f}"):
-                    st.json(f_item.get("denomination_details", {}))
-                    if st.button("✅ அங்கீகரி", key=f"app_f_{f_item['id']}", type="primary"):
-                        supabase.table("branch_fund_transfers").update({"status": "Approved", "approved_by": st.session_state.username}).eq("id", f_item["id"]).execute()
-                        st.success("அங்கீகரிக்கப்பட்டது!")
-                        st.rerun()
+        File "/mount/src/branch-goldloan-system/app.py", line 1355
+          elif st.session_state.user_role == "Operations":
+                                                          ^
+IndentationError: unindent does not match any outer indentation level
 
         st.markdown("---")
         st.subheader("💸 கிளைச் செலவு ஒப்புதல் மேசை (Branch Expenses Approval Desk)")
