@@ -1285,7 +1285,7 @@ with tab5:
         st.success(f"{len(df_cust)} வாடிக்கையாளர்கள் பதிவு செய்யப்படுகிறார்கள்...")
             
             with tab6:
-                    st.subheader("🗂️ வாடிக்கையாளர் பட்டியல் & திருத்தம்")
+                st.subheader("🗂️ வாடிக்கையாளர் பட்டியல் & திருத்தம்")
                     try:
                         cq = supabase.table("customers").select("*, branches(branch_name)").order("id", desc=True).limit(100)
                         cust_list_data = cq.execute().data or []
