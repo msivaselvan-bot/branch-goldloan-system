@@ -1284,17 +1284,17 @@ with tab5:
         df_cust = df_raw.dropna(subset=["Full Name", "Mobile No"]).copy()
         st.success(f"{len(df_cust)} வாடிக்கையாளர்கள் பதிவு செய்யப்படுகிறார்கள்...")
             
-        with tab6:
+with tab6:
                 st.subheader("🗂️ வாடிக்கையாளர் பட்டியல் & திருத்தம்")
-                    try:
+        try:
                         cq = supabase.table("customers").select("*, branches(branch_name)").order("id", desc=True).limit(100)
                         cust_list_data = cq.execute().data or []
-                    except Exception:
-                        try:
-                            cq = supabase.table("customers").select("*").order("id", desc=True).limit(100)
-                            cust_list_data = cq.execute().data or []
-                        except Exception:
-                            cust_list_data = []
+        except Exception:
+        try:
+            cq = supabase.table("customers").select("*").order("id", desc=True).limit(100)
+            cust_list_data = cq.execute().data or []
+        except Exception:
+            cust_list_data = []
         
                     if cust_list_data:
                         st.dataframe(pd.DataFrame([{
