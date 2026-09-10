@@ -739,9 +739,12 @@ if "current_visit" not in st.session_state:
 if "transactions_cart" not in st.session_state:
     st.session_state.transactions_cart = []
 
-branches_res = supabase.table("branches").select("*").execute()
-branch_options = {b["branch_name"]: b["id"] for b in branches_res.data} if branches_res.data else {}
-branch_id_to_name = {b["id"]: b["branch_name"] for b in branches_res.data} if branches_res.data else {}
+try:
+    branches_res = supabase.table("branches").select("*").execute()
+    branches_data = branches_res.data if branches_res and branches_res.data else []
+except Exception as e:
+    branches_data = []
+    st.error(f"கிளை விவரங்களை எடுப்பதில் சிக்கல்: {e}")
 
 # ==========================================
 # 5. உள்நுழைவு திரை
