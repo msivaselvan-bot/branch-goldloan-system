@@ -2292,7 +2292,7 @@ if st.form_submit_button("➕ பட்டியலில் சேர் (Add t
         })
         st.success(f"'{txn_category}' சேர்க்கப்பட்டது!")
         st.rerun()
-    else:
+else:
         st.error("தொகையை உள்ளிடவும்.")
 
 if st.session_state.transactions_cart:
