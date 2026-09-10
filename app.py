@@ -1883,17 +1883,27 @@ else:
     
                 st.markdown("---")
                 st.subheader("📋 கிளை செலவுகளின் சமீபத்திய நிலை (Expense Logs)")
-                b_exp_logs = supabase.table("branch_expenses").select("*").eq("branch_id", st.session_state.branch_id).order("id", desc=True).limit(15).execute().data or []
-                if b_exp_logs:
-                    st.dataframe(pd.DataFrame([{
-                        "தேதி": e["expense_date"],
-                        "தலைப்பு": e["expense_head"],
-                        "தொகை (₹)": f"₹{float(e['amount']):,.2f}",
-                        "வவுச்சர் எண்": e.get("voucher_no", "-"),
-                        "விவரம்": e.get("description", "-"),
-                        "நிலை (Status)": "🟢 Approved (ஏற்கப்பட்டது)" if e.get("status") == "Approved" else ("🔴 Rejected (மறுக்கப்பட்டது)" if e.get("status") == "Rejected" else "🟡 Pending (ஒப்புதல் நிலுவை)"),
-                        "பதிவு செய்தவர்": e.get("created_by", "-")
-                    } for e in b_exp_logs]), use_container_width=True)
+
+b_exp_logs = []
+if "branch_id" in st.session_state and st.session_state.branch_id is not None:
+        try:
+            # ஒருவேளை branch_id இன்டிஜர் அல்லது யுயுஐடி ஆக இருந்தால் அதற்கு ஏற்ப மாற்றிக் கொள்ளலாம்
+            b_branch_id = int(st.session_state.branch_id) if str(st.session_state.branch_id).isdigit() else st.session_state.branch_id
+            
+            b_exp_logs = (
+                supabase.table("branch_expenses")
+                .select("*")
+                .eq("branch_id", b_branch_id)
+                .order("id", desc=True)
+                .limit(15)
+                .execute()
+                .data or []
+            )
+        except Exception as e:
+            st.error(f"Supabase API பிழை விவரம்: {e}")
+            b_exp_logs = []
+        else:
+            st.warning("⚠️ கிளை ID (Branch ID) காலியாக உள்ளது.")
     
         with branch_tab3:
                 st.subheader("⚠️ தலைமை அலுவலக விளக்கங்கள் & மறுப்புகள்")
@@ -2298,7 +2308,7 @@ else:
 if st.session_state.transactions_cart:
         st.markdown("### 🛒 நடவடிக்கைகள் பட்டியல்:")
         df_cart = pd.DataFrame(st.session_state.transactions_cart)
-        st.dataframe(df_cart, use_container_width=True)
+        st.dataframe(df_cart, use_container_width=True)e
     
         total_paid = df_cart["paid_amount"].sum()
         total_received = df_cart["received_amount"].sum()
