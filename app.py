@@ -953,8 +953,15 @@ else:
             st.subheader("👥 பணியாளர்கள் பட்டியல், கிளை & புகைப்படம் மேலாண்மை")
             
             # ஏற்கனவே உள்ள பணியாளர்களின் பட்டியல்
-            users_res = supabase.table("users").select("id, name, username, role, branch_id, is_active, profile_image_url, branches(branch_name)").order("id").execute()
-            users_data = users_res.data if users_res.data else []
+            try:
+                users_res = supabase.table("users").select("id, name, username, role, branch_id, is_active, profile_image_url, branches(branch_name)").order("id").execute()
+                users_data = users_res.data if users_res.data else []
+            except Exception:
+                try:
+                    users_res = supabase.table("users").select("*").order("id").execute()
+                    users_data = users_res.data if users_res.data else []
+                except Exception:
+                    users_data = []
             
             if users_data:
                 st.dataframe(pd.DataFrame([{
