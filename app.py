@@ -2293,38 +2293,38 @@ else:
                                 st.success(f"'{txn_category}' சேர்க்கப்பட்டது!")
                                 st.rerun()
                             else:
-                                st.error("தொகையை உள்ளிடவும்.")
+                            st.error("தொகையை உள்ளிடவும்.")
     
-                    if st.session_state.transactions_cart:
-                        st.markdown("### 🛒 நடவடிக்கைகள் பட்டியல்:")
-                        df_cart = pd.DataFrame(st.session_state.transactions_cart)
-                        st.dataframe(df_cart, use_container_width=True)
+    if st.session_state.transactions_cart:
+        st.markdown("### 🛒 நடவடிக்கைகள் பட்டியல்:")
+        df_cart = pd.DataFrame(st.session_state.transactions_cart)
+        st.dataframe(df_cart, use_container_width=True)
     
-                        total_paid = df_cart["paid_amount"].sum()
-                        total_received = df_cart["received_amount"].sum()
-                        net_amount = total_paid - total_received
+        total_paid = df_cart["paid_amount"].sum()
+        total_received = df_cart["received_amount"].sum()
+        net_amount = total_paid - total_received
     
-                        c1, c2, c3 = st.columns(3)
-                        c1.metric("மொத்த பட்டுவாடா", f"₹{total_paid:,.2f}")
-                        c2.metric("மொத்த வரவு", f"₹{total_received:,.2f}")
-                        c3.metric("நிகரத் தொகை", f"₹{abs(net_amount):,.2f}")
+        c1, c2, c3 = st.columns(3)
+        c1.metric("மொத்த பட்டுவாடா", f"₹{total_paid:,.2f}")
+        c2.metric("மொத்த வரவு", f"₹{total_received:,.2f}")
+        c3.metric("நிகரத் தொகை", f"₹{abs(net_amount):,.2f}")
     
-                        cart_b1, cart_b2 = st.columns([4, 1])
-                        with cart_b1:
-                            if st.button("பணம் செலுத்தும் முறை மற்றும் OTP பிரிவிற்குச் செல் ➔", type="primary"):
-                                st.session_state.current_visit["net_amount"] = net_amount
-                                st.session_state.current_visit["total_paid"] = total_paid
-                                st.session_state.current_visit["total_received"] = total_received
-                                st.session_state.current_visit["step"] = "CASH_OTP"
-                                st.rerun()
-                        with cart_b2:
-                            if st.button("பட்டியலை அழி"):
-                                st.session_state.transactions_cart = []
-                                st.rerun()
+        cart_b1, cart_b2 = st.columns([4, 1])
+        with cart_b1:
+            if st.button("பணம் செலுத்தும் முறை மற்றும் OTP பிரிவிற்குச் செல் ➔", type="primary"):
+                st.session_state.current_visit["net_amount"] = net_amount
+                st.session_state.current_visit["total_paid"] = total_paid
+                st.session_state.current_visit["total_received"] = total_received
+                st.session_state.current_visit["step"] = "CASH_OTP"
+                st.rerun()
+        with cart_b2:
+            if st.button("பட்டியலை அழி"):
+                st.session_state.transactions_cart = []
+                st.rerun()
     
-                        # -----------------------------------------------------------------
-                        # Step 3: பணப் பரிமாற்றம், 8 ரூபாய் நோட்டுகள் & OTP சரிபார்ப்பு
-                        # -----------------------------------------------------------------
+# -----------------------------------------------------------------
+# Step 3: பணப் பரிமாற்றம், ரூபாய் நோட்டுகள் & OTP சரிபார்ப்பு
+# -----------------------------------------------------------------
 elif st.session_state.current_visit["step"] == "CASH_OTP":
     visit = st.session_state.current_visit
     net_target = visit["net_amount"]
