@@ -916,23 +916,24 @@ if st.session_state.get("logged_in", False):
                 else:
                     st.info("கிளைகள் எதுவும் பதிவு செய்யப்படவில்லை.")
 
-            with b_sub_tab2:
+           with b_sub_tab2:
                 st.markdown("##### ✏️ கிளை விவரங்களைத் திருத்துதல்")
                 b_edit_res = supabase.table("branches").select("*").order("id").execute()
                 branches_data = b_edit_res.data if b_edit_res.data else []
 
                 if branches_data:
-                    branch_choices = {f"{b['branch_name']} ({b['branch_code']})": b for b in branches_data}
-                    selected_choice = st.selectbox("எடிட் செய்ய வேண்டிய கிளையைத் தேர்ந்தெடுக்கவும்", list(branch_choices.keys()), key="select_branch_to_edit_tab")
+                    branch_choices = {f"{b['branch_name']} ({b['branch_code']}) - ID: {b['id']}": b for b in branches_data}
+                    selected_choice = st.selectbox("எடிட் செய்ய வேண்டிய கிளையைத் தேர்ந்தெடுக்கவும்", list(branch_choices.keys()), key="select_branch_to_edit_unique_tab2")
                     curr_b = branch_choices[selected_choice]
 
-                    with st.form(f"admin_edit_branch_form_{curr_b['id']}"):
-                        e_name = st.text_input("கிளையின் பெயர்", value=curr_b.get("branch_name", ""))
-                        e_code = st.text_input("கிளை குறியீடு", value=curr_b.get("branch_code", ""))
-                        e_phone = st.text_input("தொடர்பு எண்", value=curr_b.get("phone", ""))
-                        e_email = st.text_input("இமெயில் ஐடி", value=curr_b.get("email", ""))
-                        e_manager = st.text_input("Office Manager பெயர்", value=curr_b.get("office_manager", ""))
-                        e_address = st.text_area("கிளை முகவரி", value=curr_b.get("address", ""))
+                    # ஒவ்வொரு கிளைக்கும் முற்றிலும் தனித்துவமான ஃபார்ம் பெயர் வழங்கப்பட்டுள்ளது
+                    with st.form(key=f"unique_edit_branch_form_{curr_b['id']}_{curr_b['branch_code']}"):
+                        e_name = st.text_input("கிளையின் பெயர்", value=curr_b.get("branch_name", ""), key=f"e_name_{curr_b['id']}")
+                        e_code = st.text_input("கிளை குறியீடு", value=curr_b.get("branch_code", ""), key=f"e_code_{curr_b['id']}")
+                        e_phone = st.text_input("தொடர்பு எண்", value=curr_b.get("phone", ""), key=f"e_phone_{curr_b['id']}")
+                        e_email = st.text_input("இமெயில் ஐடி", value=curr_b.get("email", ""), key=f"e_email_{curr_b['id']}")
+                        e_manager = st.text_input("Office Manager பெயர்", value=curr_b.get("office_manager", ""), key=f"e_manager_{curr_b['id']}")
+                        e_address = st.text_area("கிளை முகவரி", value=curr_b.get("address", "") or curr_b.get("branch_address", ""), key=f"e_address_{curr_b['id']}")
 
                         if st.form_submit_button("கிளை விவரங்களைப் புதுப்பி", type="primary"):
                             try:
@@ -940,6 +941,7 @@ if st.session_state.get("logged_in", False):
                                     "branch_name": e_name.strip(),
                                     "branch_code": e_code.strip().upper(),
                                     "address": e_address.strip(),
+                                    "branch_address": e_address.strip(), # இரண்டிலும் சேமிக்க பாதுகாப்பானது
                                     "email": e_email.strip(),
                                     "phone": e_phone.strip(),
                                     "office_manager": e_manager.strip()
@@ -950,45 +952,6 @@ if st.session_state.get("logged_in", False):
                                 st.error(f"பிழை: {err}")
                 else:
                     st.info("திருத்துவதற்கு கிளைகள் எதுவும் இல்லை.")
-
-            with b_sub_tab2:
-                st.markdown("##### ஏற்கனவே உள்ள கிளை விவரங்களைத் திருத்துதல்")
-                b_list_res = supabase.table("branches").select("*").order("id").execute()
-                all_branches = b_list_res.data or []
-
-                if all_branches:
-                    branch_choices = {f"{b['branch_name']} ({b['branch_code']})": b for b in all_branches}
-                    selected_b_key = st.selectbox("திருத்த வேண்டிய கிளையைத் தேர்ந்தெடுக்கவும்:", list(branch_choices.keys()), key="edit_branch_dropdown")
-                    curr_branch = branch_choices[selected_b_key]
-
-                    with st.form(f"admin_edit_branch_form_{curr_branch['id']}"):
-                        ec1, ec2 = st.columns(2)
-                        with ec1:
-                            edit_name = st.text_input("கிளையின் பெயர்", value=curr_branch.get("branch_name", ""))
-                            edit_code = st.text_input("கிளை குறியீடு", value=curr_branch.get("branch_code", ""))
-                            edit_phone = st.text_input("தொடர்பு எண்", value=curr_branch.get("phone", "") or "")
-                        with ec2:
-                            edit_email = st.text_input("இமெயில் ஐடி", value=curr_branch.get("email", "") or "")
-                            edit_manager = st.text_input("Office Manager", value=curr_branch.get("office_manager", "") or "")
-                        
-                        edit_address = st.text_area("கிளை முகவரி", value=curr_branch.get("address", "") or "")
-
-                        if st.form_submit_button("கிளை விவரங்களைப் புதுப்பி", type="primary"):
-                            try:
-                                supabase.table("branches").update({
-                                    "branch_name": edit_name.strip(),
-                                    "branch_code": edit_code.strip().upper(),
-                                    "address": edit_address.strip(),
-                                    "email": edit_email.strip(),
-                                    "phone": edit_phone.strip(),
-                                    "office_manager": edit_manager.strip()
-                                }).eq("id", curr_branch["id"]).execute()
-                                st.success("கிளை விவரங்கள் வெற்றிகரமாகப் புதுப்பிக்கப்பட்டன!")
-                                st.rerun()
-                            except Exception as err:
-                                st.error(f"பிழை: {err}")
-                else:
-                    st.info("கிளைகள் எதுவும் பதிவு செய்யப்படவில்லை.")
 
             st.markdown("---")
             st.markdown("##### 📋 அனைத்து கிளைகளின் பட்டியல்")
