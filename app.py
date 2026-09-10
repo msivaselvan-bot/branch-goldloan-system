@@ -861,39 +861,6 @@ else:
         with tab1:
             st.subheader("🏢 கிளைகள் மேலாண்மை (Branches Management)")
             
-            # புதிய கிளை சேர்த்தல் படிவம்
-            with st.expander("➕ புதிய கிளை சேர்த்தல் (Add New Branch)", expanded=False):
-                with st.form("admin_add_branch_form", clear_on_submit=True):
-                    b_name = st.text_input("கிளையின் பெயர் *", placeholder="எ.கா: திங்கள்நகர் கிளை")
-                    b_code = st.text_input("கிளை குறியீடு *", placeholder="எ.கா: TGL")
-                    b_addr = st.text_area("கிளை முகவரி (Address)")
-                    
-                    bc1, bc2, bc3 = st.columns(3)
-                    with bc1:
-                        b_email = st.text_input("இமெயில் ஐடி (Email)")
-                    with bc2:
-                        b_phone = st.text_input("தொடர்பு எண் (Phone)")
-                    with bc3:
-                        b_manager = st.text_input("Office Manager பெயர்")
-
-                    if st.form_submit_button("கிளையைச் சேர்", type="primary"):
-                        if b_name.strip() and b_code.strip():
-                            try:
-                                supabase.table("branches").insert({
-                                    "branch_name": b_name.strip(),
-                                    "branch_code": b_code.strip().upper(),
-                                    "branch_address": b_addr.strip(),
-                                    "email": b_email.strip(),
-                                    "phone": b_phone.strip(),
-                                    "office_manager": b_manager.strip()
-                                }).execute()
-                                st.success(f"'{b_name}' வெற்றிகரமாகச் சேர்க்கப்பட்டது!")
-                                st.rerun()
-                            except Exception as err:
-                                st.error(f"பிழை: {err}")
-                        else:
-                            st.warning("கிளையின் பெயர் மற்றும் குறியீடு கட்டாயம் தேவை.")
-            
             # உள்-டேப்கள் (Add & Edit)
             b_sub_tab1, b_sub_tab2 = st.tabs(["➕ புதிய கிளை சேர்த்தல்", "✏️ கிளை விவரங்களைத் திருத்துதல் (Edit)"])
 
@@ -911,10 +878,9 @@ else:
                     
                     b_address = st.text_area("கிளை முகவரி (Branch Address)", placeholder="முழு முகவரி...")
 
-            b_list_res = supabase.table("branches").select("id, branch_name, branch_code").order("id").execute()
-            if b_list_res.data:
-                st.dataframe(pd.DataFrame(b_list_res.data), use_container_width=True)
-                    if st.form_submit_button("கிளையைச் சேர்", type="primary"):
+                    submit_branch = st.form_submit_button("கிளையைச் சேர்", type="primary")
+
+                    if submit_branch:
                         if b_name.strip() and b_code.strip():
                             try:
                                 supabase.table("branches").insert({
@@ -931,6 +897,49 @@ else:
                                 st.error(f"பிழை: {err}")
                         else:
                             st.warning("தயவுசெய்து கிளையின் பெயர் மற்றும் குறியீட்டை உள்ளிடவும்.")
+
+                st.markdown("---")
+                st.markdown("##### 📋 ஏற்கனவே உள்ள கிளைகள் பட்டியல்")
+                b_list_res = supabase.table("branches").select("id, branch_name, branch_code, address, phone, email, office_manager").order("id").execute()
+                if b_list_res.data:
+                    st.dataframe(pd.DataFrame(b_list_res.data), use_container_width=True)
+                else:
+                    st.info("கிளைகள் எதுவும் பதிவு செய்யப்படவில்லை.")
+
+            with b_sub_tab2:
+                st.markdown("##### ✏️ கிளை விவரங்களைத் திருத்துதல்")
+                b_edit_res = supabase.table("branches").select("*").order("id").execute()
+                branches_data = b_edit_res.data if b_edit_res.data else []
+
+                if branches_data:
+                    branch_choices = {f"{b['branch_name']} ({b['branch_code']})": b for b in branches_data}
+                    selected_choice = st.selectbox("எடிட் செய்ய வேண்டிய கிளையைத் தேர்ந்தெடுக்கவும்", list(branch_choices.keys()), key="select_branch_to_edit_tab")
+                    curr_b = branch_choices[selected_choice]
+
+                    with st.form(f"admin_edit_branch_form_{curr_b['id']}"):
+                        e_name = st.text_input("கிளையின் பெயர்", value=curr_b.get("branch_name", ""))
+                        e_code = st.text_input("கிளை குறியீடு", value=curr_b.get("branch_code", ""))
+                        e_phone = st.text_input("தொடர்பு எண்", value=curr_b.get("phone", ""))
+                        e_email = st.text_input("இமெயில் ஐடி", value=curr_b.get("email", ""))
+                        e_manager = st.text_input("Office Manager பெயர்", value=curr_b.get("office_manager", ""))
+                        e_address = st.text_area("கிளை முகவரி", value=curr_b.get("address", ""))
+
+                        if st.form_submit_button("கிளை விவரங்களைப் புதுப்பி", type="primary"):
+                            try:
+                                supabase.table("branches").update({
+                                    "branch_name": e_name.strip(),
+                                    "branch_code": e_code.strip().upper(),
+                                    "address": e_address.strip(),
+                                    "email": e_email.strip(),
+                                    "phone": e_phone.strip(),
+                                    "office_manager": e_manager.strip()
+                                }).eq("id", curr_b["id"]).execute()
+                                st.success("✅ கிளை விவரங்கள் வெற்றிகரமாகப் புதுப்பிக்கப்பட்டன!")
+                                st.rerun()
+                            except Exception as err:
+                                st.error(f"பிழை: {err}")
+                else:
+                    st.info("திருத்துவதற்கு கிளைகள் எதுவும் இல்லை.")
 
             with b_sub_tab2:
                 st.markdown("##### ஏற்கனவே உள்ள கிளை விவரங்களைத் திருத்துதல்")
