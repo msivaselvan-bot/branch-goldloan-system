@@ -1360,15 +1360,15 @@ with tab8:
     # B. ஆப்பரேஷன்ஸ் மேசை (OPERATIONS DESK)
     # ----------------------------------------------------
     elif st.session_state.user_role == "Operations":
-    st.header("📞 ஆப்பரேஷன்ஸ் மேசை (Operations Desk)")
-    ops_tab1, ops_tab2, ops_tab3, ops_tab4, ops_tab5 = st.tabs([
-    "🏦 நிதிப் பரிமாற்ற ஒப்புதல்", "👤 புதிய வாடிக்கையாளர் KYC",
-    "📝 விவரத் திருத்தக் கோரிக்கைகள்", "🔔 பரிவர்த்தனை அழைப்பு சரிபார்ப்பு", 
-    "📑 FD / RD பாண்ட் & சான்றிதழ்"
-    ])
+            st.header("📞 ஆப்பரேஷன்ஸ் மேசை (Operations Desk)")
+            ops_tab1, ops_tab2, ops_tab3, ops_tab4, ops_tab5 = st.tabs([
+            "🏦 நிதிப் பரிமாற்ற ஒப்புதல்", "👤 புதிய வாடிக்கையாளர் KYC",
+            "📝 விவரத் திருத்தக் கோரிக்கைகள்", "🔔 பரிவர்த்தனை அழைப்பு சரிபார்ப்பு", 
+            "📑 FD / RD பாண்ட் & சான்றிதழ்"
+            ])
 
     with ops_tab1:
-    st.subheader("🏦 தலைமையக & கிளை நிதிப் பரிமாற்ற ஒப்புதல் மேசை")
+            st.subheader("🏦 தலைமையக & கிளை நிதிப் பரிமாற்ற ஒப்புதல் மேசை")
     try:
         pending_fund_transfers = supabase.table("branch_fund_transfers").select("*, branches(branch_name)").eq("status", "Pending_Approval").order("id", desc=True).execute().data or []
     except Exception:
@@ -1378,7 +1378,7 @@ with tab8:
             pending_fund_transfers = []
 
     if not pending_fund_transfers:
-        st.info("✅ எந்த பணப் பரிமாற்றங்களும் நிலுவையில் இல்லை.")
+         st.info("✅ எந்த பணப் பரிமாற்றங்களும் நிலுவையில் இல்லை.")
     else:
         for f_item in pending_fund_transfers:
             b_name = f_item.get("branches", {}).get("branch_name", "Branch")
