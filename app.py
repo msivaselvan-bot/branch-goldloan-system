@@ -744,8 +744,7 @@ try:
     branches_data = branches_res.data if branches_res and branches_res.data else []
 except Exception as e:
     branches_data = []
-    st.error(f"கிளை விவரங்களை எடுப்பதில் சிக்கல்: {e}")
-
+    st.error(f"⚠️ டேட்டாபேஸ் பிழை: {e}")
 # ==========================================
 # 5. உள்நுழைவு திரை
 # ==========================================
