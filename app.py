@@ -1359,6 +1359,7 @@ with tab10:
     # ----------------------------------------------------
     # B. ஆப்பரேஷன்ஸ் மேசை (OPERATIONS DESK)
     # ----------------------------------------------------
+    
 elif st.session_state.user_role == "Operations":
     st.header("📞 ஆப்பரேஷன்ஸ் மேசை (Operations Desk)")
     ops_tab1, ops_tab2, ops_tab3, ops_tab4, ops_tab5 = st.tabs([
