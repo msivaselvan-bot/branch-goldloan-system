@@ -1347,7 +1347,7 @@ with tab8:
         st.success("பதிவு செய்யப்பட்டது!")
         st.rerun()
 
-   with tab10:
+with tab10:
     rep_b_opts = ["அனைத்து கிளைகளும் (All Branches)"] + list(branch_options.keys())
     sel_rep_b = st.selectbox("கிளையை வடிகட்டவும்:", rep_b_opts, key="adm_rep_branch_sel")
     filter_b_id = branch_options.get(sel_rep_b) if sel_rep_b != "அனைத்து கிளைகளும் (All Branches)" else None
