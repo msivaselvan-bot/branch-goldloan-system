@@ -1356,7 +1356,7 @@ with tab10:
 # ----------------------------------------------------
 # B. ஆப்பரேஷன்ஸ் திரை (OPERATIONS DESK)
 # -------------------------------------------------
-elif st.session_state.user_role == "Operations":
+if st.session_state.user_role == "Operations":
     st.header("📞 ஆப்பரேஷன்ஸ் மேசை (Operations Desk)")
     ops_tab1, ops_tab2, ops_tab3, ops_tab4, ops_tab5 = st.tabs([
         "🏦 நிதிப் பரிமாற்ற ஒப்புதல்", "👤 புதிய வாடிக்கையாளர் KYC",
