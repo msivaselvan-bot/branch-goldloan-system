@@ -1403,11 +1403,13 @@ if st.session_state.user_role == "Admin":
                     st.success("பதிவு செய்யப்பட்டது!")
                     st.rerun()
 
-        with tab10:
-            rep_b_opts = ["அனைத்து கிளைகளும் (All Branches)"] + list(branch_options.keys())
-            sel_rep_b = st.selectbox("கிளையை வடிகட்டவும்:", rep_b_opts, key="adm_rep_branch_sel")
-            filter_b_id = branch_options.get(sel_rep_b) if sel_rep_b != "அனைத்து கிளைகளும் (All Branches)" else None
-            render_staff_attribution_report(selected_branch_id=filter_b_id)
+with tab10:
+    rep_b_opts = ["அனைத்து கிளைகளும் (All Branches)"] + list(branch_options.keys())
+    sel_rep_b = st.selectbox("கிளையை வடிகட்டவும்:", rep_b_opts, key="adm_rep_branch_sel")
+    filter_b_id = branch_options.get(sel_rep_b) if sel_rep_b != "அனைத்து கிளைகளும் (All Branches)" else None
+    
+    # tab10-க்கான தனித்துவமான key_suffix கொடுக்கப்பட்டுள்ளது
+    render_staff_attribution_report(selected_branch_id=filter_b_id, key_suffix="tab10_report")
 
 # ----------------------------------------------------
 # B. ஆப்பரேஷன்ஸ் திரை (OPERATIONS DESK)
