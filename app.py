@@ -897,6 +897,7 @@ if st.session_state.get("logged_in", False):
                                     "branch_name": b_name.strip(),
                                     "branch_code": b_code.strip().upper(),
                                     "address": b_address.strip(),
+                                    "branch_address": b_address.strip(),
                                     "email": b_email.strip(),
                                     "phone": b_phone.strip(),
                                     "office_manager": b_manager.strip()
@@ -916,7 +917,7 @@ if st.session_state.get("logged_in", False):
                 else:
                     st.info("கிளைகள் எதுவும் பதிவு செய்யப்படவில்லை.")
 
-           with b_sub_tab2:
+            with b_sub_tab2:
                 st.markdown("##### ✏️ கிளை விவரங்களைத் திருத்துதல்")
                 b_edit_res = supabase.table("branches").select("*").order("id").execute()
                 branches_data = b_edit_res.data if b_edit_res.data else []
@@ -926,7 +927,6 @@ if st.session_state.get("logged_in", False):
                     selected_choice = st.selectbox("எடிட் செய்ய வேண்டிய கிளையைத் தேர்ந்தெடுக்கவும்", list(branch_choices.keys()), key="select_branch_to_edit_unique_tab2")
                     curr_b = branch_choices[selected_choice]
 
-                    # ஒவ்வொரு கிளைக்கும் முற்றிலும் தனித்துவமான ஃபார்ம் பெயர் வழங்கப்பட்டுள்ளது
                     with st.form(key=f"unique_edit_branch_form_{curr_b['id']}_{curr_b['branch_code']}"):
                         e_name = st.text_input("கிளையின் பெயர்", value=curr_b.get("branch_name", ""), key=f"e_name_{curr_b['id']}")
                         e_code = st.text_input("கிளை குறியீடு", value=curr_b.get("branch_code", ""), key=f"e_code_{curr_b['id']}")
@@ -941,7 +941,7 @@ if st.session_state.get("logged_in", False):
                                     "branch_name": e_name.strip(),
                                     "branch_code": e_code.strip().upper(),
                                     "address": e_address.strip(),
-                                    "branch_address": e_address.strip(), # இரண்டிலும் சேமிக்க பாதுகாப்பானது
+                                    "branch_address": e_address.strip(),
                                     "email": e_email.strip(),
                                     "phone": e_phone.strip(),
                                     "office_manager": e_manager.strip()
