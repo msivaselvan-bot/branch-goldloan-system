@@ -978,7 +978,7 @@ else:
             
             with sub_col1:
                 st.markdown("##### ➕ புதிய பணியாளர் சேர்த்தல்")
-                with st.form("admin_add_user_form", clear_on_submit=True):
+                with st.form("admin_add_user_form_unique", clear_on_submit=True):
                     u_name = st.text_input("முழுப் பெயர் *")
                     u_username = st.text_input("உள்நுழைவு பெயர் (Username) *")
                     u_pass = st.text_input("கடவுச்சொல் *", type="password")
@@ -988,11 +988,11 @@ else:
                     branch_keys = list(branch_options.keys())
                     b_selection = st.selectbox("கிளை ஒதுக்கீடு", options=["Head Office / None"] + branch_keys)
                     
-                    u_photo = st.file_uploader("பணியாளர் புகைப்படம் (Profile Photo)", type=["jpg", "png", "jpeg"])
+                    u_photo = st.file_uploader("பணியாளர் புகைப்படம் (Profile Photo)", type=["jpg", "png", "jpeg"], key="new_staff_photo_upload")
 
                     if st.form_submit_button("பணியாளரை உருவாக்கு", type="primary"):
                         if u_name.strip() and u_username.strip() and u_pass.strip():
-                            b_id = branch_options.get(b_selection) if b_selection != "HeadOffice / None" and u_role not in ["Admin", "Auditor", "Operations"] else None
+                            b_id = branch_options.get(b_selection) if b_selection != "Head Office / None" and u_role not in ["Admin", "Auditor", "Operations"] else None
                             
                             # போட்டோ அப்லோட் செய்யும் முறை
                             photo_url = None
@@ -1017,57 +1017,9 @@ else:
                 st.markdown("##### ✏️ பணியாளர் விவரம் & கிளை திருத்துதல்")
                 if users_data:
                     user_choices = {f"{u['name']} (@{u['username']})": u for u in users_data}
-                    selected_user_key = st.selectbox("எடிட் செய்ய வேண்டிய பணியாளர்", list(user_choices.keys()))
+                    selected_user_key = st.selectbox("எடிட் செய்ய வேண்டிய பணியாளர்", list(user_choices.keys()), key="select_user_to_edit_unique_tab2")
                     curr_user = user_choices[selected_user_key]
 
-                    with st.form("admin_edit_user_form"):
-                        edit_name = st.text_input("பெயர்", value=curr_user["name"])
-                        edit_pass = st.text_input("புதிய கடவுச்சொல் (தேவைப்பட்டால் மட்டும்)", type="password")
-                        
-                        roles_list = ["Branch Head / Cashier", "Staff", "Operations", "Auditor", "Admin"]
-                        edit_role = st.selectbox("பணி நிலை", roles_list, index=roles_list.index(curr_user["role"]) if curr_user["role"] in roles_list else 0)
-                        
-                        # தற்போதைய கிளையைக் கண்டறிதல்
-                        curr_b_name = "Head Office / None"
-                        for b_name, b_id in branch_options.items():
-                            if b_id == curr_user.get("branch_id"):
-                                curr_b_name = b_name
-                                break
-                        
-                        branch_keys_edit = ["Head Office / None"] + list(branch_options.keys())
-                        default_b_idx = branch_keys_edit.index(curr_b_name) if curr_b_name in branch_keys_edit else 0
-                        edit_branch_sel = st.selectbox("கிளை மாற்றம்", options=branch_keys_edit, index=default_b_idx)
-
-                        edit_status = st.radio("நிலை", ["Active", "Inactive"], index=0 if curr_user.get("is_active", True) else 1)
-                        edit_photo = st.file_uploader("புதிய புகைப்படம் மாற்ற (விரும்பினால்)", type=["jpg", "png", "jpeg"], key="edit_staff_ph")
-
-                        if st.form_submit_button("பணியாளர் விவரங்களைப் புதுப்பி", type="primary"):
-                            up_data = {
-                                "name": edit_name.strip(), 
-                                "role": edit_role, 
-                                "branch_id": branch_options.get(edit_branch_sel) if edit_branch_sel != "Head Office / None" else None,
-                                "is_active": edit_status == "Active"
-                            }
-                            if edit_pass.strip():
-                                up_data["password_hash"] = edit_pass.strip()
-                            
-                            if edit_photo:
-                                new_p_url = upload_single_file(edit_photo, "staff_profiles")
-                                if new_p_url:
-                                    up_data["profile_image_url"] = new_p_url
-
-                            supabase.table("users").update(up_data).eq("id", curr_user["id"]).execute()
-                            st.success("✅ பணியாளர் விவரங்கள் புதுப்பிக்கப்பட்டன!")
-                            st.rerun()
-
-            with sub_col2:
-                st.markdown("##### ✏️ பணியாளர் விவரம் & கிளை திருத்துதல்")
-                if users_data:
-                    user_choices = {f"{u['name']} (@{u['username']})": u for u in users_data}
-                    selected_user_key = st.selectbox("எடிட் செய்ய வேண்டிய பணியாளர்", list(user_choices.keys()), key="select_user_to_edit_unique")
-                    curr_user = user_choices[selected_user_key]
-
-                    # ஃபார்ம் பெயருக்கு ஒரு தனித்துவமான ஐடி சேர்த்தல்
                     with st.form(f"admin_edit_user_form_{curr_user['id']}"):
                         edit_name = st.text_input("பெயர்", value=curr_user["name"], key=f"edit_name_{curr_user['id']}")
                         edit_pass = st.text_input("புதிய கடவுச்சொல் (தேவைப்பட்டால் மட்டும்)", type="password", key=f"edit_pass_{curr_user['id']}")
@@ -1088,8 +1040,6 @@ else:
                         edit_branch_sel = st.selectbox("கிளை மாற்றம்", options=branch_keys_edit, index=default_b_idx, key=f"edit_branch_{curr_user['id']}")
 
                         edit_status = st.radio("நிலை", ["Active", "Inactive"], index=0 if curr_user.get("is_active", True) else 1, key=f"edit_status_{curr_user['id']}")
-                        
-                        # தனித்துவமான key கொடுக்கப்பட்டுள்ளது
                         edit_photo = st.file_uploader("புதிய புகைப்படம் மாற்ற (விரும்பினால்)", type=["jpg", "png", "jpeg"], key=f"edit_staff_ph_{curr_user['id']}")
 
                         if st.form_submit_button("பணியாளர் விவரங்களைப் புதுப்பி", type="primary"):
