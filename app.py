@@ -822,64 +822,29 @@ if not st.session_state.get("logged_in", False):
                 else:
                     st.warning("தயவுசெய்து Username மற்றும் Password இரண்டையும் உள்ளிடவும்.")
 
-else:
-    # லாகின் ஆன பிறகு டேஷ்போர்டு பகுதி மட்டும் இயங்கும்
-    top_col1, top_col2, top_col3, top_col4 = st.columns([2.5, 2, 1, 1])
-    with top_col1:
-        st.write(f"🏢 **கிளை:** {st.session_state.get('branch', 'General')}")
-    with top_col2:
-        st.write(f"👤 **பயனர்:** {st.session_state.get('username', '')} ({st.session_state.get('user_role', '')})")
-    with top_col3:
-        if st.button("🔄 Refresh", use_container_width=True, help="பக்கத்தை முழுமையாகப் புதுப்பிக்க"):
-            st.rerun()
-    with top_col4:
-        if st.button("வெளியேறு", use_container_width=True):
-            st.session_state.logged_in = False
-            st.session_state.current_visit = None
-            st.session_state.transactions_cart = []
-            st.session_state.generated_otp = None
-            st.rerun()
-
-    st.markdown("---")
-    # 🛑 மிக முக்கியமானது: பயனர் லாகின் செய்யும் வரை கீழே உள்ள மெயின் ஆப் (டேஷ்போர்டு/டேப்கள்) ரன் ஆகாமல் இருக்க இதைச் சேர்க்கவும்
-if not st.session_state.get("logged_in", False):
+    # 🛑 மிக முக்கியமானது: லாகின் செய்யும் வரை கீழே உள்ள மெயின் ஆப் பகுதிகள் ரன் ஆகாமல் இருக்க இங்கே நிறுத்த வேண்டும்
     st.stop()
-    # ==========================================
-# 1. லாகின் சரிபார்ப்புப் பகுதி
-# ==========================================
-if not st.session_state.get("logged_in", False):
-    col_left, col_center, col_right = st.columns([1.2, 1.4, 1.2])
-    with col_center:
-        st.markdown("""
-        <div class="login-box" style="text-align: center; padding: 20px; background-color: #3b1443; color: white; border-radius: 10px;">
-            <h3>🏦 முத்துசிஸ் கோல்டு கம்பெனி</h3>
-            <p>பணியாளர் பாதுகாப்பான உள்நுழைவு</p>
-        </div>
-        """, unsafe_allow_html=True)
-
-        st.subheader("🔐 அமைப்புக்குள் உள்நுழைதல் (Login)")
-
-        with st.form("login_form_unique_final"):
-            entered_username = st.text_input("Username").strip()
-            entered_password = st.text_input("Password", type="password").strip()
-            submit_login = st.form_submit_button("உள்நுழை (Login)", type="primary")
-
-            if submit_login:
-                # லாகின் சரிபார்ப்பு மற்றும் session_state செட் செய்யும் கோடுகள்...
-                pass
-                
-    # 🛑 மிக முக்கியமானது: லாகின் செய்யும் வரை கீழே உள்ள எந்தவொரு கிளை அல்லது அட்மின் கோடும் லோட் ஆகக் கூடாது
-    st.stop() 
 
 # ==========================================
-# 2. லாகின் செய்த பிறகு மட்டுமே இயங்கும் மெயின் ஆப் / கிளைப் பகுதிகள்
+# 6. லாகின் செய்த பிறகு மட்டுமே இயங்கும் மெயின் ஆப் பகுதி
 # ==========================================
 top_col1, top_col2, top_col3, top_col4 = st.columns([2.5, 2, 1, 1])
 with top_col1:
     st.write(f"🏢 **கிளை:** {st.session_state.get('branch', 'General')}")
 with top_col2:
     st.write(f"👤 **பயனர்:** {st.session_state.get('username', '')} ({st.session_state.get('user_role', '')})")
-# ... (இதன் தொடர்ச்சியாக உங்களது டேப்கள், கிளை ஆப்ஷன்கள் மற்றும் அட்மின் பேனல் கோடுகள் வர வேண்டும்)
+with top_col3:
+    if st.button("🔄 Refresh", use_container_width=True, help="பக்கத்தை முழுமையாகப் புதுப்பிக்க"):
+        st.rerun()
+with top_col4:
+    if st.button("வெளியேறு", use_container_width=True):
+        st.session_state.logged_in = False
+        st.session_state.current_visit = None
+        st.session_state.transactions_cart = []
+        st.session_state.generated_otp = None
+        st.rerun()
+
+st.markdown("---")
     # ----------------------------------------------------
     # A. நிர்வாக மேலாண்மை திரை (ADMIN PANEL WITH 10 FULL TABS)
     # ----------------------------------------------------
