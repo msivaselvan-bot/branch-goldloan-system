@@ -769,54 +769,54 @@ if not st.session_state.logged_in:
         st.subheader("🔐 அமைப்புக்குள் உள்நுழைதல் (Login)")
 
         with st.form("login_form_final"):
-            entered_username = st.text_input("Username").strip()
-            entered_password = st.text_input("Password", type="password").strip()
-            submit_login = st.form_submit_button("உள்நுழை (Login)", type="primary")
+    entered_username = st.text_input("Username").strip().lower()
+    entered_password = st.text_input("Password", type="password").strip()
+    submit_login = st.form_submit_button("உள்நுழை (Login)", type="primary")
 
-if submit_login:
-    if entered_username and entered_password:
-        try:
-            res = supabase.table("users").select("*eq", "username", entered_username).execute()
-            # நேரடியான தேடலுக்கு:
-            res = supabase.table("users").select("*").eq("username", entered_username).execute()
-            user_list = res.data if res.data else []
+    if submit_login:
+        if entered_username and entered_password:
+            try:
+                # எழுத்து மாறுபாடுகளைத் தவிர்க்க ilike ಬಳக்ப்படுகிறது
+                res = supabase.table("users").select("*").ilike("username", entered_username).execute()
+                user_list = res.data if res.data else []
 
-            if user_list:
-                user_info = user_list[0]
-                db_pass = str(user_info.get("password_hash") or user_info.get("password") or "").strip()
-                is_active = user_info.get("is_active", True)
+                if user_list:
+                    user_info = user_list[0]
+                    db_pass = str(user_info.get("password_hash") or user_info.get("password") or "").strip()
+                    is_active = user_info.get("is_active", True)
 
-                if db_pass == entered_password:
-                    if is_active:
-                        st.session_state.logged_in = True
-                        st.session_state.user_role = user_info.get("role", "Staff")
-                        
-                        b_id = user_info.get("branch_id")
-                        b_name = "Head Office / பொது"
-                        if b_id:
-                            try:
-                                b_res = supabase.table("branches").select("branch_name").eq("id", b_id).execute()
-                                if b_res.data:
-                                    b_name = b_res.data[0].get("branch_name", "Head Office")
-                            except Exception:
-                                pass
-                        
-                        st.session_state.branch = b_name
-                        st.session_state.branch_id = b_id
-                        st.session_state.username = user_info.get("name", entered_username)
-                        
-                        st.success("வெற்றிகரமாக உள்நுழைந்துவிட்டீர்கள்!")
-                        st.rerun()
+                    if db_pass == entered_password:
+                        if is_active:
+                            st.session_state.logged_in = True
+                            st.session_state.user_role = user_info.get("role", "Staff")
+                            
+                            b_id = user_info.get("branch_id")
+                            b_name = "Head Office / பொது"
+                            if b_id:
+                                try:
+                                    b_res = supabase.table("branches").select("branch_name").eq("id", b_id).execute()
+                                    if b_res.data:
+                                        b_name = b_res.data[0].get("branch_name", "Head Office")
+                                except Exception:
+                                    pass
+                            
+                            st.session_state.branch = b_name
+                            st.session_state.branch_id = b_id
+                            st.session_state.username = user_info.get("name", entered_username)
+                            st.session_state.profile_image = user_info.get("profile_image_url")
+                            
+                            st.success("வெற்றிகரமாக உள்நுழைந்துவிட்டீர்கள்!")
+                            st.rerun()
+                        else:
+                            st.error("❌ இந்தக் கணக்கு முடக்கப்பட்டுள்ளது.")
                     else:
-                        st.error("❌ இந்தக் கணக்கு முடக்கப்பட்டுள்ளது.")
+                        st.error("❌ தவறான கடவுச்சொல்!")
                 else:
-                    st.error(f"❌ தவறான கடவுச்சொல்! (நீங்கள் உள்ளிட்டது: {entered_password}, டேட்டாபேஸில் இருப்பது: {db_pass})")
-            else:
-                st.error("❌ இந்தப் பெயரில் பயனர் இல்லை.")
-        except Exception as err:
-            st.error(f"பிழை: {err}")
-    else:
-        st.warning("தயவுசெய்து Username மற்றும் Password இரண்டையும் உள்ளிடவும்.")
+                    st.error("❌ இந்தப் பெயரில் பயனர் இல்லை.")
+            except Exception as err:
+                st.error(f"பிழை: {err}")
+        else:
+            st.warning("தயவுசெய்து Username மற்றும் Password இரண்டையும் உள்ளிடவும்.")
 
     st.stop()
 
