@@ -828,6 +828,9 @@ with st.form("login_form_final"):
 # ==========================================
 # 5. உள்நுழைவு / முதன்மை திரை கட்டுப்பாடு
 # ==========================================
+# ==========================================
+# 5. உள்நுழைவு / முதன்மை திரை கட்டுப்பாடு
+# ==========================================
 if not st.session_state.get("logged_in", False):
     col_left, col_center, col_right = st.columns([1.2, 1.4, 1.2])
     with col_center:
@@ -840,6 +843,7 @@ if not st.session_state.get("logged_in", False):
 
         st.subheader("🔐 அமைப்புக்குள் உள்நுழைதல் (Login)")
 
+        # இந்த ஃபார்ம் லாகின் ஆகாத போது மட்டுமே ரன் ஆகும்
         with st.form("login_form_final"):
             entered_username = st.text_input("Username").strip()
             entered_password = st.text_input("Password", type="password").strip()
@@ -890,7 +894,7 @@ if not st.session_state.get("logged_in", False):
                     st.warning("தயவுசெய்து Username மற்றும் Password இரண்டையும் உள்ளிடவும்.")
 
 else:
-    # பயனர் லாகின் செய்திருந்தால் மட்டுமே இந்தத் திரை முழுமையாகத் தெரியும் (Login Form வராது)
+    # லாகின் ஆன பிறகு இந்த பிளாக் மட்டுமே இயங்கும் (Form இங்கே இருக்காது)
     top_col1, top_col2, top_col3, top_col4 = st.columns([2.5, 2, 1, 1])
     with top_col1:
         st.write(f"🏢 **கிளை:** {st.session_state.get('branch', 'General')}")
