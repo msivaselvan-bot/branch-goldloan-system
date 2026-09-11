@@ -1297,7 +1297,7 @@ if st.session_state.get("logged_in", False):
     if not branch_id_to_use:
         banch_id_to_use = 1  # Head Office அல்லது இயல்புநிலை ID
 
-    try:
+try:
     staff_res = supabase.table("users").select("name").execute()
     current_staff_list = ["Walk-in (நேரடி வருகை)"] + [s["name"] for s in staff_res.data] if staff_res.data else ["Walk-in (நேரடி வருகை)"]
 except Exception:
