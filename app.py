@@ -1103,19 +1103,18 @@ if st.session_state.get("logged_in", False):
 
         with tab5:
             st.subheader("📥 பழைய வாடிக்கையாளர் இறக்குமதி (Bulk Import)")
-            st.info("💡 உங்களது Excel கோப்பில் தலைப்புகள் 3-வது வரியில் உள்ளதால், அது தானாகவே சரிசெய்யப்படும்.")
+            st.info("💡 கோப்பு வெற்றிகரமாகப் படிக்கப்பட்டது. விவரங்கள் கீழே உள்ளவாறு பதிவு செய்யப்படுகின்றன.")
             
             uploaded_cust_file = st.file_uploader("கோப்பைத் தேர்வு செய்யவும்", type=["xls", "xlsx", "csv"], key="unique_tab5_uploader")
             
             if uploaded_cust_file:
                 try:
                     if uploaded_cust_file.name.endswith('.csv'):
-                        df_import = pd.read_csv(uploaded_cust_file, header=2) # 3வது வரி தலைப்பு எனில் index 2
+                        df_import = pd.read_csv(uploaded_cust_file, header=2)
                     else:
                         df_import = pd.read_excel(uploaded_cust_file, header=2)
                     
-                    # தேவையற்ற காலியிடங்களை நீக்குதல்
-                    df_import = df_import.dropna(subset=[df_import.columns[1]]) # பெயர் உள்ள வரி மட்டும்
+                    df_import = df_import.dropna(subset=[df_import.columns[1]])
                     
                     st.markdown("##### 📄 கோப்பின் மாதிரிக் காட்சி (Preview):")
                     st.dataframe(df_import.head(5), use_container_width=True)
@@ -1123,6 +1122,7 @@ if st.session_state.get("logged_in", False):
                     if st.button("பதிவேற்றத்தைத் தொடங்கு", type="primary", key="unique_tab5_btn"):
                         success_count = 0
                         error_count = 0
+                        last_error_msg = ""
                         
                         progress_bar = st.progress(0)
                         total_rows = len(df_import)
@@ -1130,35 +1130,43 @@ if st.session_state.get("logged_in", False):
                         with st.spinner("வாடிக்கையாளர்கள் டேட்டாபேஸில் பதிவு செய்யப்படுகிறார்கள்..."):
                             for index, row in df_import.iterrows():
                                 try:
-                                    # உங்களது Excel கோப்பில் உள்ள தலைப்புகளின் பெயர்கள்
                                     c_code = str(row.get("Customer No") or row.get("customer_code") or f"CUST-{random.randint(1000, 9999)}").strip()
                                     c_name = str(row.get("Full Name") or row.get("name") or "Unknown").strip()
-                                    c_mobile = str(row.get("Mobile No") or row.get("mobile") or "0000000000").strip()
+                                    
+                                    # மொபைல் நம்பரைச் சரியாக எடுத்தல்
+                                    raw_mob = row.get("Mobile No") or row.get("mobile") or "0000000000"
+                                    c_mobile = str(raw_mob).split('.')[0].strip()
+                                    if c_mobile == "nan" or not c_mobile:
+                                        c_mobile = "0000000000"
+                                        
                                     c_address = str(row.get("Comm Address") or row.get("address") or "Nagercoil").strip()
                                     
-                                    # நன்மதிப்பற்ற எழுத்துக்களைத் தவிர்த்தல்
                                     if c_name == "nan" or not c_name:
                                         continue
 
                                     cust_data = {
                                         "customer_code": c_code,
                                         "name": c_name,
-                                        "mobile": c_mobile.split('.')[0], # டெசிமல் வராமல் இருக்க
+                                        "mobile": c_mobile,
                                         "address": c_address,
-                                        "branch_id": st.session_state.branch_id if st.session_state.branch_id else 1,
+                                        "branch_id": int(st.session_state.branch_id) if st.session_state.branch_id else 1,
                                         "kyc_status": "Approved",
                                         "is_active": True
                                     }
                                     
-                                    supabase.table("customers").insert(cust_data).execute()
+                                    # Supabase-ல் இன்செர்ட் செய்தல்
+                                    response = supabase.table("customers").insert(cust_data).execute()
                                     success_count += 1
                                 except Exception as ex:
                                     error_count += 1
+                                    last_error_msg = str(ex)
                                 
                                 if total_rows > 0:
                                     progress_bar.progress(min(1.0, (index + 1) / total_rows))
                         
-                        st.success(f"🎉 பதிவேற்றம் நிறைவடைந்தது! வெற்றிகரமாகச் சேர்க்கப்பட்டவை: {success_count} | பிழைகள்/விடுபட்டவை: {error_count}")
+                        st.success(f"🎉 பதிவேற்றம் நிறைவடைந்தது! வெற்றிகரமாகச் சேர்க்கப்பட்டவை: {success_count} | பிழைகள்: {error_count}")
+                        if error_count > 0:
+                            st.warning(f"⚠️ கடைசிப் பிழை விவரம்: {last_error_msg}")
                 except Exception as e:
                     st.error(f"கோப்பைப் படிப்பதில் பிழை: {e}")
 
