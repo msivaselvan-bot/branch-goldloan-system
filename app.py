@@ -768,7 +768,7 @@ if not st.session_state.logged_in:
 
         st.subheader("🔐 அமைப்புக்குள் உள்நுழைதல் (Login)")
 
-        with st.form("login_form_final"):
+with st.form("login_form_final"):
     entered_username = st.text_input("Username").strip().lower()
     entered_password = st.text_input("Password", type="password").strip()
     submit_login = st.form_submit_button("உள்நுழை (Login)", type="primary")
