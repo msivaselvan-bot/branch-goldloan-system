@@ -776,9 +776,13 @@ with st.form("login_form_final"):
     if submit_login:
         if entered_username and entered_password:
             try:
-                # எழுத்து மாறுபாடுகளைத் தவிர்க்க ilike ಬಳக்ப்படுகிறது
+                # டேட்டாபேஸில் உள்ள யூசரைத் தேடுதல்
                 res = supabase.table("users").select("*").ilike("username", entered_username).execute()
                 user_list = res.data if res.data else []
+
+                # டெபக் செய்வதற்காக டேட்டாபேஸ் நிலையைத் திரையில் காட்டுவது
+                st.write(f"🔍 தேடிய பெயர்: {entered_username}")
+                st.write(f"📦 டேட்டாபேஸ் ரிசல்ட்: {user_list}")
 
                 if user_list:
                     user_info = user_list[0]
@@ -803,16 +807,15 @@ with st.form("login_form_final"):
                             st.session_state.branch = b_name
                             st.session_state.branch_id = b_id
                             st.session_state.username = user_info.get("name", entered_username)
-                            st.session_state.profile_image = user_info.get("profile_image_url")
                             
                             st.success("வெற்றிகரமாக உள்நுழைந்துவிட்டீர்கள்!")
                             st.rerun()
                         else:
-                            st.error("❌ இந்தக் கணக்கு முடக்கப்பட்டுள்ளது.")
+                            st.error("❌ இந்தக் கணக்கு முடக்கப்பட்டுள்ளது (Inactive).")
                     else:
-                        st.error("❌ தவறான கடவுச்சொல்!")
+                        st.error(f"❌ தவறான கடவுச்சொல்! (நீங்கள் கொடுத்தது: '{entered_password}', டேட்டாபேஸில் இருப்பது: '{db_pass}')")
                 else:
-                    st.error("❌ இந்தப் பெயரில் பயனர் இல்லை.")
+                    st.error("❌ இந்தப் பெயரில் பயனர் டேட்டாபேஸில் இல்லை.")
             except Exception as err:
                 st.error(f"பிழை: {err}")
         else:
