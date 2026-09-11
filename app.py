@@ -1266,24 +1266,24 @@ else:
     with branch_tab6:
         render_staff_attribution_report(selected_branch_id=st.session_state.branch_id, key_suffix="branch_main_report")
     
-# -----------------------------------------------------------------
-# Step 3: பணப் பரிமாற்றம், ரூபாய் நோட்டுகள் & OTP சரிபார்ப்பு
-# -----------------------------------------------------------------
-# வரி 2332-ல் உள்ள பழைய வரியை முழுமையாக நீக்கிவிட்டு இதற்குப் பதிலாக இதை மாற்றவும்:
-elif st.session_state.current_visit is not None and st.session_state.current_visit.get("step") == "CASH_OTP":
-    visit = st.session_state.current_visit
-    net_target = visit.get("net_amount", 0.0)
-    total_needed_abs = abs(net_target)
-    current_drawer = get_current_branch_cash_drawer(st.session_state.branch_id)
-    otp_already_sent = "generated_otp" in st.session_state and st.session_state.generated_otp is not None
-
-    st.subheader("படி 3: பணப் பரிமாற்ற முறை & நோட்டுகள் / மீதித் தொகை கணக்கீடு")
-    hdr_text = (
-        f"💸 வாடிக்கையாளருக்கு வழங்க வேண்டிய நிகரத் தொகை (Pay-OUT): ₹{net_target:,.2f}"
-        if net_target > 0
-        else f"💰 வாடிக்கையாளரிடம் பெற வேண்டிய நிகரத் தொகை (Pay-IN): ₹{total_needed_abs:,.2f}"
-    )
-    st.info(f"**{hdr_text}** (வாடிக்கையாளர்: {visit['customer_name']})")
+    # -----------------------------------------------------------------
+    # Step 3: பணப் பரிமாற்றம், ரூபாய் நோட்டுகள் & OTP சரிபார்ப்பு
+    # -----------------------------------------------------------------
+    # வரி 2332-ல் உள்ள பழைய வரியை முழுமையாக நீக்கிவிட்டு இதற்குப் பதிலாக இதை மாற்றவும்:
+elif st.session_state.get("current_visit") is not None and st.session_state.current_visit.get("step") == "CASH_OTP":
+            visit = st.session_state.current_visit
+            net_target = visit.get("net_amount", 0.0)
+            total_needed_abs = abs(net_target)
+            current_drawer = get_current_branch_cash_drawer(st.session_state.branch_id)
+            otp_already_sent = "generated_otp" in st.session_state and st.session_state.generated_otp is not None
+            
+            st.subheader("படி 3: பணப் பரிமாற்றம் முறை & நோட்டுகள் / மீதித் தொகை கணக்கீடு")
+            hdr_text = (
+                f"📤 வாடிக்கையாளருக்கு வழங்க வேண்டிய நிகரத் தொகை (Pay-OUT): ₹{net_target:,.2f}"
+                if net_target > 0
+                else f"📥 வாடிக்கையாளரிடம் பெற வேண்டிய நிகரத் தொகை (Pay-IN): ₹{total_needed_abs:,.2f}"
+            )
+            st.info(f"**{hdr_text}** (வாடிக்கையாளர்: {visit['customer_name']})")
 
     with st.container(border=True):
         st.markdown("#### 💳 பணம் செலுத்தும் / பெறும் வழிகள் (Payment Split)")
