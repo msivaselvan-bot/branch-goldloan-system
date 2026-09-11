@@ -761,14 +761,81 @@ branch_id_to_name = {b["id"]: b["branch_name"] for b in branches_data}
 # ==========================================
 # 5. உள்நுழைவு திரை
 # ==========================================
+if not st.session_state.logged_in:
+    col_left, col_center, col_right = st.columns([1.2, 1.4, 1.2])
+    with col_center:
+        st.markdown("""
+        <div class="login-box">
+            <h3>🏦 கிளை சிஸ்டம்</h3>
+            <p>பணியாளர் பாதுகாப்பான உள்நுழைவு</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+        st.subheader("🔐 அமைப்புக்குள் உள்நுழைதல் (Login)")
+
+with st.form("login_form_final"):
+    entered_username = st.text_input("Username").strip()
+    entered_password = st.text_input("Password", type="password").strip()
+    submit_login = st.form_submit_button("உள்நுழை (Login)", type="primary")
+
+    if submit_login:
+        if entered_username and entered_password:
+            try:
+                # பயனரைத் தேடுதல்
+                res = supabase.table("users").select("*").eq("username", entered_username).execute()
+                user_list = res.data if res.data else []
+
+                if user_list:
+                    user_info = user_list[0]
+                    db_pass = str(user_info.get("password_hash") or user_info.get("password") or "").strip()
+                    is_active = user_info.get("is_active", True)
+
+                    # கடவுச்சொல் பொருந்துதா எனச் சோதித்தல்
+                    if db_pass == entered_password:
+                        if is_active:
+                            st.session_state.logged_in = True
+                            st.session_state.user_role = user_info.get("role", "Staff")
+                            
+                            # கிளை விவரங்களை எடுப்பது
+                            b_id = user_info.get("branch_id")
+                            b_name = "Head Office / பொது"
+                            if b_id:
+                                try:
+                                    b_res = supabase.table("branches").select("branch_name").eq("id", b_id).execute()
+                                    if b_res.data:
+                                        b_name = b_res.data[0].get("branch_name", "Head Office")
+                                except Exception:
+                                    pass
+                            
+                            st.session_state.branch = b_name
+                            st.session_state.branch_id = b_id
+                            st.session_state.username = user_info.get("name", entered_username)
+                            st.session_state.profile_image = user_info.get("profile_image_url")
+                            
+                            st.success("வெற்றிகரமாக உள்நுழைந்துவிட்டீர்கள்!")
+                            st.rerun()
+                        else:
+                            st.error("❌ இந்தக் கணக்கு முடக்கப்பட்டுள்ளது.")
+                    else:
+                        st.error(f"❌ தவறான கடவுச்சொல்! (நீங்கள் உள்ளிட்டது: {entered_password}, டேட்டாபேஸில் இருப்பது: {db_pass})")
+                else:
+                    st.error("❌ இந்தப் பெயரில் பயனர் இல்லை.")
+            except Exception as err:
+                st.error(f"பிழை: {err}")
+        else:
+            st.warning("தயவுசெய்து Username மற்றும் Password இரண்டையும் உள்ளிடவும்.")
+
 # ==========================================
-# 5. லாகின் மற்றும் முதன்மை திரை கட்டுப்பாடு
+# 5. உள்நுழைவு / முதன்மை திரை கட்டுப்பாடு
+# ==========================================
+# ==========================================
+# 5. உள்நுழைவு / முதன்மை திரை கட்டுப்பாடு
 # ==========================================
 if not st.session_state.get("logged_in", False):
     col_left, col_center, col_right = st.columns([1.2, 1.4, 1.2])
     with col_center:
         st.markdown("""
-        <div class="login-box" style="text-align: center; padding: 20px; background-color: #3b1443; color: white; border-radius: 10px;">
+        <div class="login-box">
             <h3>🏦 முத்துசிஸ் கோல்டு கம்பெனி</h3>
             <p>பணியாளர் பாதுகாப்பான உள்நுழைவு</p>
         </div>
@@ -776,7 +843,8 @@ if not st.session_state.get("logged_in", False):
 
         st.subheader("🔐 அமைப்புக்குள் உள்நுழைதல் (Login)")
 
-        with st.form("login_form_unique_final"):
+        # இந்த ஃபார்ம் லாகின் ஆகாத போது மட்டுமே ரன் ஆகும்
+        with st.form("login_form_final"):
             entered_username = st.text_input("Username").strip()
             entered_password = st.text_input("Password", type="password").strip()
             submit_login = st.form_submit_button("உள்நுழை (Login)", type="primary")
@@ -826,7 +894,7 @@ if not st.session_state.get("logged_in", False):
                     st.warning("தயவுசெய்து Username மற்றும் Password இரண்டையும் உள்ளிடவும்.")
 
 else:
-    # லாகின் ஆன பிறகு டேஷ்போர்டு பகுதி மட்டும் இயங்கும்
+    # லாகின் ஆன பிறகு இந்த பிளாக் மட்டுமே இயங்கும் (Form இங்கே இருக்காது)
     top_col1, top_col2, top_col3, top_col4 = st.columns([2.5, 2, 1, 1])
     with top_col1:
         st.write(f"🏢 **கிளை:** {st.session_state.get('branch', 'General')}")
@@ -1339,13 +1407,13 @@ if st.session_state.user_role == "Admin":
                     st.success("பதிவு செய்யப்பட்டது!")
                     st.rerun()
 
-with tab10:
-    rep_b_opts = ["அனைத்து கிளைகளும் (All Branches)"] + list(branch_options.keys())
-    sel_rep_b = st.selectbox("கிளையை வடிகட்டவும்:", rep_b_opts, key="adm_rep_branch_sel")
-    filter_b_id = branch_options.get(sel_rep_b) if sel_rep_b != "அனைத்து கிளைகளும் (All Branches)" else None
-    
-    # tab10-க்கான தனித்துவமான key_suffix கொடுக்கப்பட்டுள்ளது
-    render_staff_attribution_report(selected_branch_id=filter_b_id, key_suffix="tab10_report")
+        with tab10:
+            rep_b_opts = ["அனைத்து கிளைகளும் (All Branches)"] + list(branch_options.keys())
+            sel_rep_b = st.selectbox("கிளையை வடிகட்டவும்:", rep_b_opts, key="adm_rep_branch_sel")
+            filter_b_id = branch_options.get(sel_rep_b) if sel_rep_b != "அனைத்து கிளைகளும் (All Branches)" else None
+            
+            # tab10-க்கான தனித்துவமான key_suffix கொடுக்கப்பட்டுள்ளது
+            render_staff_attribution_report(selected_branch_id=filter_b_id, key_suffix="tab10_report")
 
 # ----------------------------------------------------
 # B. ஆப்பரேஷன்ஸ் திரை (OPERATIONS DESK)
