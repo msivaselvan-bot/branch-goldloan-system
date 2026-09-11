@@ -1340,13 +1340,19 @@ if st.session_state.user_role == "Admin":
                     st.success("பதிவு செய்யப்பட்டது!")
                     st.rerun()
 
-        with tab10:
-            rep_b_opts = ["அனைத்து கிளைகளும் (All Branches)"] + list(branch_options.keys())
-            sel_rep_b = st.selectbox("கிளையை வடிகட்டவும்:", rep_b_opts, key="adm_rep_branch_sel")
-            filter_b_id = branch_options.get(sel_rep_b) if sel_rep_b != "அனைத்து கிளைகளும் (All Branches)" else None
-            
-            # tab10-க்கான தனித்துவமான key_suffix கொடுக்கப்பட்டுள்ளது
-            render_staff_attribution_report(selected_branch_id=filter_b_id, key_suffix="tab10_report")
+with tab10:
+        rep_b_opts = ["அனைத்து கிளைகளும் (All Branches)"] + list(branch_options.keys())
+        sel_rep_b = st.selectbox("கிளையை வடிகட்டவும்:", rep_b_opts, key="adm_rep_branch_sel")
+        filter_b_id = branch_options.get(sel_rep_b) if sel_rep_b != "அனைத்து கிளைகளும் (All Branches)" else None
+    
+    # நீங்கள் உருவாக்கிய தனித்துவமான key_suffix உடன் கூடிய ஃபங்ஷன் அழைப்பு
+        render_staff_attribution_report(selected_branch_id=filter_b_id, key_suffix="tab10_report")
+
+else:
+         # சாதாரண ஊழியர்களுக்கு (Staff) அட்மின் பேனல் தெரியாமல் இருக்க வேண்டிய திரை
+st.info("👋 வணக்கம்! நீங்கள் கிளைப் பணியாளராக (Staff) உள்நுழைந்துள்ளீர்கள். கிளைக்கான கணக்கீட்டுப் பகுதிகள் கீழே உள்ளன.")
+    
+    # ஸ்டாஃப் பயன்படுத்த வேண்டிய மற்ற அம்சங்களை இங்கே கொடுக்கலாம்
 
 # ----------------------------------------------------
 # B. ஆப்பரேஷன்ஸ் திரை (OPERATIONS DESK)
