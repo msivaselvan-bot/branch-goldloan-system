@@ -1103,9 +1103,57 @@ if st.session_state.get("logged_in", False):
 
         with tab5:
             st.subheader("📥 பழைய வாடிக்கையாளர் இறக்குமதி (Bulk Import)")
+            st.info("💡 Excel அல்லது CSV கோப்பில் குறைந்தபட்சம் 'name', 'mobile', 'customer_code', 'address' ஆகிய தலைப்புகள் (Columns) இருக்க வேண்டும்.")
+            
             uploaded_cust_file = st.file_uploader("கோப்பைத் தேர்வு செய்யவும்", type=["xls", "xlsx", "csv"], key="unique_tab5_uploader")
-            if uploaded_cust_file and st.button("பதிவேற்றத்தைத் தொடங்கு", type="primary", key="unique_tab5_btn"):
-                st.success("வாடிக்கையாளர்கள் பதிவு செய்யப்படுகிறார்கள்...")
+            
+            if uploaded_cust_file:
+                try:
+                    if uploaded_cust_file.name.endswith('.csv'):
+                        df_import = pd.read_csv(uploaded_cust_file)
+                    else:
+                        df_import = pd.read_excel(uploaded_cust_file)
+                    
+                    st.markdown("##### 📄 கோப்பின் மாதிரிக் காட்சி (Preview):")
+                    st.dataframe(df_import.head(5), use_container_width=True)
+                    
+                    if st.button("பதிவேற்றத்தைத் தொடங்கு", type="primary", key="unique_tab5_btn"):
+                        success_count = 0
+                        error_count = 0
+                        
+                        progress_bar = st.progress(0)
+                        total_rows = len(df_import)
+                        
+                        with st.spinner("வாடிக்கையாளர்கள் டேட்டாபேஸில் பதிவு செய்யப்படுகிறார்கள்..."):
+                            for index, row in df_import.iterrows():
+                                try:
+                                    # கோப்பில் உள்ள காலம்களை எடுத்துக்கொள்ளுதல்
+                                    c_code = str(row.get("customer_code") or row.get("Code") or row.get("ID") or f"CUST-{random.randint(1000, 9999)}").strip()
+                                    c_name = str(row.get("name") or row.get("Name") or row.get("Customer Name") or "Unknown").strip()
+                                    c_mobile = str(row.get("mobile") or row.get("Mobile") or row.get("Phone") or "0000000000").strip()
+                                    c_address = str(row.get("address") or row.get("Address") or "Nagercoil").strip()
+                                    
+                                    cust_data = {
+                                        "customer_code": c_code,
+                                        "name": c_name,
+                                        "mobile": c_mobile,
+                                        "address": c_address,
+                                        "branch_id": st.session_state.branch_id if st.session_state.branch_id else 1,
+                                        "kyc_status": "Approved",
+                                        "is_active": True
+                                    }
+                                    
+                                    supabase.table("customers").insert(cust_data).execute()
+                                    success_count += 1
+                                except Exception as ex:
+                                    error_count += 1
+                                
+                                if total_rows > 0:
+                                    progress_bar.progress(min(1.0, (index + 1) / total_rows))
+                        
+                        st.success(f"🎉 பதிவேற்றம் நிறைவடைந்தது! வெற்றிகரமாகச் சேர்க்கப்பட்டவை: {success_count} | பிழைகள்/விடுபட்டவை: {error_count}")
+                except Exception as e:
+                    st.error(f"கோப்பைப் படிப்பதில் அல்லது திறப்பதில் பிழை: {e}")
 
         with tab6:
             st.subheader("🗂️ வாடிக்கையாளர் பட்டியல் & திருத்தம்")
