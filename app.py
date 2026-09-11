@@ -1400,7 +1400,7 @@ else:
                         st.rerun()
 
             # படி 3: ரொக்கம் மற்றும் OTP சரிபார்ப்பு நிலை
-            elif st.session_state.get("current_visit", {}).get("step") == "CASH_OTP":
+        elif st.session_state.get("current_visit", {}).get("step") == "CASH_OTP":
                 visit = st.session_state.current_visit
                 net_target = visit.get("net_amount", 0.0)
                 total_needed_abs = abs(net_target)
