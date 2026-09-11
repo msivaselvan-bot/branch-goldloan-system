@@ -1298,63 +1298,59 @@ if st.session_state.get("logged_in", False):
         banch_id_to_use = 1  # Head Office அல்லது இயல்புநிலை ID
 
     try:
-        staff_res = supabase.table("users").select("name").execute()
-        current_staff_list = ["Walk-in (நேரடி வருகை)"] + [s["name"] for s in staff_res.data] if staff_res.data else ["Walk-in (நேரடி வருகை)"]
-    except Exception:
-        current_staff_list = ["Walk-in (நேரடி வருகை)"]
-    
-        v_type = st.radio("வாடிக்கையாளர் வகை:", ["ஏற்கனவே உள்ள வாடிக்கையாளர் (Existing Customer)", "புதிய வாடிக்கையாளர் பதிவு (New Customer)"], horizontal=True)
+    staff_res = supabase.table("users").select("name").execute()
+    current_staff_list = ["Walk-in (நேரடி வருகை)"] + [s["name"] for s in staff_res.data] if staff_res.data else ["Walk-in (நேரடி வருகை)"]
+except Exception:
+    current_staff_list = ["Walk-in (நேரடி வருகை)"]
 
-    if "Existing" in v_type or "ஏற்கனவே" in v_type:
-        search_query = st.text_input("பெயர் / மொபைல் எண் / Customer ID:", placeholder="எ.கா: ராம் அல்லது 98765...", key="live_cust_search")
-        if len(search_query.strip()) >= 2:
-            q = search_query.strip()
-            cust_filter_query = supabase.table("customers").select("*").eq("is_active", True).eq("branch_id", st.session_state.branch_id)
-            matched_custs = cust_filter_query.or_(f"name.ilike.%{q}%,mobile.ilike.%{q}%,customer_code.ilike.%{q}%").limit(20).execute().data or []
-            
-            if matched_custs:
-                cust_dropdown_dict = {f"{c['name']} | {c.get('customer_code', '')} | 📞 {c.get('mobile', '')}": c for c in matched_custs}
-                selected_label = st.selectbox("வாடிக்கையாளர் பட்டியல்:", options=list(cust_dropdown_dict.keys()), key="dd_cust_sel")
-                selected_cust = cust_dropdown_dict[selected_label]
+# v_type-ஐ சரியாக வரையறுத்தல்
+v_type = st.radio("வாடிக்கையாளர் வகை:", ["ஏற்கனவே உள்ள வாடிக்கையாளர் (Existing Customer)", "புதிய வாடிக்கையாளர் பதிவு (New Customer)"], horizontal=True, key="cust_type_radio")
 
-                with st.container(border=True):
-                    # ஏற்கனவே உள்ள வாடிக்கையாளரைத் தேர்ந்தெடுத்த பின் செய்யும் செயல்கள் இங்கே இருக்கும்
-                    pass
+if "Existing" in str(v_type) or "ஏற்கனவே" in str(v_type):
+    search_query = st.text_input("பெயர் / மொபைல் எண் / Customer ID:", placeholder="எ.கா: ராம் அல்லது 98765...", key="live_cust_search")
+    if search_query and len(search_query.strip()) >= 2:
+        q = search_query.strip()
+        cust_filter_query = supabase.table("customers").select("*").eq("is_active", True)
+        matched_custs = cust_filter_query.or_(f"name.ilike.%{q}%,mobile.ilike.%{q}%,customer_code.ilike.%{q}%").limit(20).execute().data or []
+        
+        if matched_custs:
+            cust_dropdown_dict = {f"{c['name']} | {c.get('customer_code', '')} | 📞 {c.get('mobile', '')}": c for c in matched_custs}
+            selected_label = st.selectbox("வாடிக்கையாளர் பட்டியல்:", options=list(cust_dropdown_dict.keys()), key="dd_cust_sel")
+            selected_cust = cust_dropdown_dict[selected_label]
+        else:
+            st.warning("❌ இந்தப் பெயரில் அல்லது எண்களில் வாடிக்கையாளர் யாரும் இல்லை.")
+else:
+    st.markdown("##### 📝 புதிய வாடிக்கையாளர் விவரங்கள்")
+    with st.form("new_customer_counter_form"):
+        nc_name = st.text_input("வாடிக்கையாளர் பெயர் (Full Name)")
+        nc_mobile = st.text_input("தொலைபேசி எண் (Mobile Number)")
+        nc_address = st.text_input("முகவரி (Address)")
+        nc_code = st.text_input("வாடிக்கையாளர் குறியீடு (Customer Code)", value=f"CUST-{random.randint(1000, 9999)}")
+        
+        submit_new_cust = st.form_submit_button("வாடிக்கையாளரைப் பதிவு செய்", type="primary")
+        
+        if submit_new_cust:
+            if nc_name and nc_mobile:
+                try:
+                    new_cust_data = {
+                        "customer_code": nc_code,
+                        "name": nc_name,
+                        "mobile": nc_mobile.strip(),
+                        "address": nc_address,
+                        "branch_id": int(st.session_state.get("branch_id", 1)),
+                        "kyc_status": "Approved",
+                        "is_active": True
+                    }
+                    supabase.table("customers").insert(new_cust_data).execute()
+                    st.success(f"🎉 புதிய வாடிக்கையாளர் '{nc_name}' வெற்றிகரமாகப் பதிவு செய்யப்பட்டார்!")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"பதிவு செய்வதில் பிழை: {e}")
             else:
-                st.warning("❌ இந்தப் பெயரில் அல்லது எண்களில் வாடிக்கையாளர் யாரும் இல்லை.")
-    else:
-        # புதிய வாடிக்கையாளர் பதிவு செய்யும் பகுதி
-        st.markdown("##### 📝 புதிய வாடிக்கையாளர் விவரங்கள்")
-        with st.form("new_customer_counter_form"):
-            nc_name = st.text_input("வாடிக்கையாளர் பெயர் (Full Name)")
-            nc_mobile = st.text_input("தொலைபேசி எண் (Mobile Number)")
-            nc_address = st.text_input("முகவரி (Address)")
-            nc_code = st.text_input("வாடிக்கையாளர் குறியீடு (Customer Code)", value=f"CUST-{random.randint(1000, 9999)}")
-            
-            submit_new_cust = st.form_submit_button("வாடிக்கையாளரைப் பதிவு செய்", type="primary")
-            
-            if submit_new_cust:
-                if nc_name and nc_mobile:
-                    try:
-                        new_cust_data = {
-                            "customer_code": nc_code,
-                            "name": nc_name,
-                            "mobile": nc_mobile.strip(),
-                            "address": nc_address,
-                            "branch_id": int(st.session_state.branch_id) if st.session_state.branch_id else 1,
-                            "kyc_status": "Approved",
-                            "is_active": True
-                        }
-                        supabase.table("customers").insert(new_cust_data).execute()
-                        st.success(f"🎉 புதிய வாடிக்கையாளர் '{nc_name}' வெற்றிகரமாகப் பதிவு செய்யப்பட்டார்!")
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"பதிவு செய்வதில் பிழை: {e}")
-                else:
-                    st.warning("தயவுசெய்து பெயர் மற்றும் மொபைல் எண்களை உள்ளிடவும்.")
+                st.warning("தயவுசெய்து பெயர் மற்றும் மொபைல் எண்களை உள்ளிடவும்.")
 
             # படி 2: வணிக நடவடிக்கைகள் சேர்க்கும் நிலை
-            elif st.session_state.get("current_visit", {}).get("step") == "TRANSACTIONS":
+        elif st.session_state.get("current_visit", {}).get("step") == "TRANSACTIONS":
                 visit = st.session_state.current_visit
                 st.success(f"வாடிக்கையாளர்: **{visit['customer_name']}** (வருகை எண்: **{visit['visit_no']}**)")
                 st.subheader("படி 2: வணிக நடவடிக்கைகள் சேர்த்தல்")
