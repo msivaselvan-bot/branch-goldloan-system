@@ -1291,12 +1291,12 @@ if st.session_state.get("logged_in", False):
             st.subheader("🛒 கவுண்ட்டர் வருகை & OTP (Counter Visit)")
             
             # படி 1: வருகை தொடங்கப்படாத நிலை
-            if st.session_state.get("current_visit") is None:
-    st.info("புதிய வருகையைத் தொடங்க வாடிக்கையாளரைத் தேர்ந்தெடுக்கவும்.")
-    staff_res = supabase.table("users").select("name").eq("branch_id", st.session_state.branch_id).eq("is_active", True).execute()
-    current_staff_list = ["Walk-in (நேரடி வருகை)"] + [s["name"] for s in staff_res.data] if staff_res.data else ["Walk-in (நேரடி வருகை)"]
+    if st.session_state.get("current_visit") is None:
+        st.info("புதிய வருகையைத் தொடங்க வாடிக்கையாளரைத் தேர்ந்தெடுக்கவும்.")
+        staff_res = supabase.table("users").select("name").eq("branch_id", st.session_state.branch_id).eq("is_active", True).execute()
+        current_staff_list = ["Walk-in (நேரடி வருகை)"] + [s["name"] for s in staff_res.data] if staff_res.data else ["Walk-in (நேரடி வருகை)"]
     
-    v_type = st.radio("வாடிக்கையாளர் வகை:", ["ஏற்கனவே உள்ள வாடிக்கையாளர் (Existing Customer)", "புதிய வாடிக்கையாளர் பதிவு (New Customer)"], horizontal=True)
+        v_type = st.radio("வாடிக்கையாளர் வகை:", ["ஏற்கனவே உள்ள வாடிக்கையாளர் (Existing Customer)", "புதிய வாடிக்கையாளர் பதிவு (New Customer)"], horizontal=True)
 
     if "Existing" in v_type or "ஏற்கனவே" in v_type:
         search_query = st.text_input("பெயர் / மொபைல் எண் / Customer ID:", placeholder="எ.கா: ராம் அல்லது 98765...", key="live_cust_search")
