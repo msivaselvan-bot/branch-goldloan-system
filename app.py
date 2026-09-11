@@ -1103,16 +1103,19 @@ if st.session_state.get("logged_in", False):
 
         with tab5:
             st.subheader("📥 பழைய வாடிக்கையாளர் இறக்குமதி (Bulk Import)")
-            st.info("💡 Excel அல்லது CSV கோப்பில் குறைந்தபட்சம் 'name', 'mobile', 'customer_code', 'address' ஆகிய தலைப்புகள் (Columns) இருக்க வேண்டும்.")
+            st.info("💡 உங்களது Excel கோப்பில் தலைப்புகள் 3-வது வரியில் உள்ளதால், அது தானாகவே சரிசெய்யப்படும்.")
             
             uploaded_cust_file = st.file_uploader("கோப்பைத் தேர்வு செய்யவும்", type=["xls", "xlsx", "csv"], key="unique_tab5_uploader")
             
             if uploaded_cust_file:
                 try:
                     if uploaded_cust_file.name.endswith('.csv'):
-                        df_import = pd.read_csv(uploaded_cust_file)
+                        df_import = pd.read_csv(uploaded_cust_file, header=2) # 3வது வரி தலைப்பு எனில் index 2
                     else:
-                        df_import = pd.read_excel(uploaded_cust_file)
+                        df_import = pd.read_excel(uploaded_cust_file, header=2)
+                    
+                    # தேவையற்ற காலியிடங்களை நீக்குதல்
+                    df_import = df_import.dropna(subset=[df_import.columns[1]]) # பெயர் உள்ள வரி மட்டும்
                     
                     st.markdown("##### 📄 கோப்பின் மாதிரிக் காட்சி (Preview):")
                     st.dataframe(df_import.head(5), use_container_width=True)
@@ -1127,16 +1130,20 @@ if st.session_state.get("logged_in", False):
                         with st.spinner("வாடிக்கையாளர்கள் டேட்டாபேஸில் பதிவு செய்யப்படுகிறார்கள்..."):
                             for index, row in df_import.iterrows():
                                 try:
-                                    # கோப்பில் உள்ள காலம்களை எடுத்துக்கொள்ளுதல்
-                                    c_code = str(row.get("customer_code") or row.get("Code") or row.get("ID") or f"CUST-{random.randint(1000, 9999)}").strip()
-                                    c_name = str(row.get("name") or row.get("Name") or row.get("Customer Name") or "Unknown").strip()
-                                    c_mobile = str(row.get("mobile") or row.get("Mobile") or row.get("Phone") or "0000000000").strip()
-                                    c_address = str(row.get("address") or row.get("Address") or "Nagercoil").strip()
+                                    # உங்களது Excel கோப்பில் உள்ள தலைப்புகளின் பெயர்கள்
+                                    c_code = str(row.get("Customer No") or row.get("customer_code") or f"CUST-{random.randint(1000, 9999)}").strip()
+                                    c_name = str(row.get("Full Name") or row.get("name") or "Unknown").strip()
+                                    c_mobile = str(row.get("Mobile No") or row.get("mobile") or "0000000000").strip()
+                                    c_address = str(row.get("Comm Address") or row.get("address") or "Nagercoil").strip()
                                     
+                                    # நன்மதிப்பற்ற எழுத்துக்களைத் தவிர்த்தல்
+                                    if c_name == "nan" or not c_name:
+                                        continue
+
                                     cust_data = {
                                         "customer_code": c_code,
                                         "name": c_name,
-                                        "mobile": c_mobile,
+                                        "mobile": c_mobile.split('.')[0], # டெசிமல் வராமல் இருக்க
                                         "address": c_address,
                                         "branch_id": st.session_state.branch_id if st.session_state.branch_id else 1,
                                         "kyc_status": "Approved",
@@ -1153,7 +1160,7 @@ if st.session_state.get("logged_in", False):
                         
                         st.success(f"🎉 பதிவேற்றம் நிறைவடைந்தது! வெற்றிகரமாகச் சேர்க்கப்பட்டவை: {success_count} | பிழைகள்/விடுபட்டவை: {error_count}")
                 except Exception as e:
-                    st.error(f"கோப்பைப் படிப்பதில் அல்லது திறப்பதில் பிழை: {e}")
+                    st.error(f"கோப்பைப் படிப்பதில் பிழை: {e}")
 
         with tab6:
             st.subheader("🗂️ வாடிக்கையாளர் பட்டியல் & திருத்தம்")
