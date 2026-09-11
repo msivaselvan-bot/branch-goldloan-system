@@ -1297,8 +1297,11 @@ if st.session_state.get("logged_in", False):
     if not branch_id_to_use:
         banch_id_to_use = 1  # Head Office அல்லது இயல்புநிலை ID
 
-        staff_res = supabase.table("users").select("name").eq("branch_id", branch_id_to_use).eq("is_active", True).execute()
+    try:
+        staff_res = supabase.table("users").select("name").execute()
         current_staff_list = ["Walk-in (நேரடி வருகை)"] + [s["name"] for s in staff_res.data] if staff_res.data else ["Walk-in (நேரடி வருகை)"]
+    except Exception:
+        current_staff_list = ["Walk-in (நேரடி வருகை)"]
     
         v_type = st.radio("வாடிக்கையாளர் வகை:", ["ஏற்கனவே உள்ள வாடிக்கையாளர் (Existing Customer)", "புதிய வாடிக்கையாளர் பதிவு (New Customer)"], horizontal=True)
 
