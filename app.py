@@ -822,7 +822,6 @@ if not st.session_state.get("logged_in", False):
                 else:
                     st.warning("தயவுசெய்து Username மற்றும் Password இரண்டையும் உள்ளிடவும்.")
 
-    # 🛑 மிக முக்கியமானது: லாகின் செய்யும் வரை கீழே உள்ள மெயின் ஆப் பகுதிகள் ரன் ஆகாமல் இருக்க இங்கே நிறுத்த வேண்டும்
     st.stop()
 
 # ==========================================
@@ -845,705 +844,378 @@ with top_col4:
         st.rerun()
 
 st.markdown("---")
-    # ----------------------------------------------------
-    # A. நிர்வாக மேலாண்மை திரை (ADMIN PANEL WITH 10 FULL TABS)
-    # ----------------------------------------------------
-if st.session_state.user_role == "Admin":
-        st.header("⚙️ நிர்வாக மேலாண்மை (Admin Control Panel)")
-        tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10 = st.tabs(
-            [
-                "🏢 கிளைகள்",
-                "👥 பணியாளர்கள்",
-                "📋 ஸ்கீம்கள் மேலாண்மை (Pledge, FD, RD)",
-                "🎯 இன்சென்டிவ் & புள்ளி விதிகள்",
-                "📥 மொத்தப் பதிவேற்றம்",
-                "🗂️ வாடிக்கையாளர் மேலாண்மை",
-                "📊 வருகை & பரிவர்த்தனை திருத்தம்",
-                "💰 கிளை துவக்க இருப்பு & கல்லா",
-                "🏦 தலைமையக பணப் பரிமாற்றம்",
-                "📈 காரணப் பணியாளர் அறிக்கை"
-            ]
-        )
 
-        with tab1:
-            st.subheader("🏢 கிளைகள் மேலாண்மை (Branches Management)")
-            
-            # உள்-டேப்கள் (Add & Edit)
-            b_sub_tab1, b_sub_tab2 = st.tabs(["➕ புதிய கிளை சேர்த்தல்", "✏️ கிளை விவரங்களைத் திருத்துதல் (Edit)"])
-
-            with b_sub_tab1:
-                st.markdown("##### புதிய கிளை பதிவுப் படிவம்")
-                with st.form("admin_add_branch_form", clear_on_submit=True):
-                    bc1, bc2 = st.columns(2)
-                    with bc1:
-                        b_name = st.text_input("கிளையின் பெயர் *", placeholder="எ.கா: திங்கள்நகர் கிளை")
-                        b_code = st.text_input("கிளை குறியீடு *", placeholder="எ.கா: TGL")
-                        b_phone = st.text_input("தொடர்பு எண் (Contact No)", placeholder="எ.கா: 9876543210")
-                    with bc2:
-                        b_email = st.text_input("இமெயில் ஐடி (Email ID)", placeholder="branch@muthusise.com")
-                        b_manager = st.text_input("Office Manager பெயர்", placeholder="மேனேஜர் பெயர்")
-                    
-                    b_address = st.text_area("கிளை முகவரி (Branch Address)", placeholder="முழு முகவரி...")
-
-                    submit_branch = st.form_submit_button("கிளையைச் சேர்", type="primary")
-
-                    if submit_branch:
-                        if b_name.strip() and b_code.strip():
-                            try:
-                                supabase.table("branches").insert({
-                                    "branch_name": b_name.strip(),
-                                    "branch_code": b_code.strip().upper(),
-                                    "address": b_address.strip(),
-                                    "branch_address": b_address.strip(),
-                                    "email": b_email.strip(),
-                                    "phone": b_phone.strip(),
-                                    "office_manager": b_manager.strip()
-                                }).execute()
-                                st.success(f"'{b_name}' வெற்றிகரமாகச் சேர்க்கப்பட்டது!")
-                                st.rerun()
-                            except Exception as err:
-                                st.error(f"பிழை: {err}")
-                        else:
-                            st.warning("தயவுசெய்து கிளையின் பெயர் மற்றும் குறியீட்டை உள்ளிடவும்.")
-
-                st.markdown("---")
-                st.markdown("##### 📋 ஏற்கனவே உள்ள கிளைகள் பட்டியல்")
-                b_list_res = supabase.table("branches").select("id, branch_name, branch_code, address, phone, email, office_manager").order("id").execute()
-                if b_list_res.data:
-                    st.dataframe(pd.DataFrame(b_list_res.data), use_container_width=True)
-                else:
-                    st.info("கிளைகள் எதுவும் பதிவு செய்யப்படவில்லை.")
-
-            with b_sub_tab2:
-                st.markdown("##### ✏️ கிளை விவரங்களைத் திருத்துதல்")
-                b_edit_res = supabase.table("branches").select("*").order("id").execute()
-                branches_data = b_edit_res.data if b_edit_res.data else []
-
-                if branches_data:
-                    branch_choices = {f"{b['branch_name']} ({b['branch_code']}) - ID: {b['id']}": b for b in branches_data}
-                    selected_choice = st.selectbox("எடிட் செய்ய வேண்டிய கிளೆಯನ್ನುத் தேர்ந்தெடுக்கவும்", list(branch_choices.keys()), key="select_branch_to_edit_unique_tab2")
-                    curr_b = branch_choices[selected_choice]
-
-                    with st.form(key=f"unique_edit_branch_form_{curr_b['id']}_{curr_b['branch_code']}"):
-                        e_name = st.text_input("கிளையின் பெயர்", value=curr_b.get("branch_name", ""), key=f"e_name_{curr_b['id']}")
-                        e_code = st.text_input("கிளை குறியீடு", value=curr_b.get("branch_code", ""), key=f"e_code_{curr_b['id']}")
-                        e_phone = st.text_input("தொடர்பு எண்", value=curr_b.get("phone", ""), key=f"e_phone_{curr_b['id']}")
-                        e_email = st.text_input("இமெயில் ஐடி", value=curr_b.get("email", ""), key=f"e_email_{curr_b['id']}")
-                        e_manager = st.text_input("Office Manager பெயர்", value=curr_b.get("office_manager", ""), key=f"e_manager_{curr_b['id']}")
-                        e_address = st.text_area("கிளை முகவரி", value=curr_b.get("address", "") or curr_b.get("branch_address", ""), key=f"e_address_{curr_b['id']}")
-
-                        if st.form_submit_button("கிளை விவரங்களைப் புதுப்பி", type="primary"):
-                            try:
-                                supabase.table("branches").update({
-                                    "branch_name": e_name.strip(),
-                                    "branch_code": e_code.strip().upper(),
-                                    "address": e_address.strip(),
-                                    "branch_address": e_address.strip(),
-                                    "email": e_email.strip(),
-                                    "phone": e_phone.strip(),
-                                    "office_manager": e_manager.strip()
-                                }).eq("id", curr_b["id"]).execute()
-                                st.success("✅ கிளை விவரங்கள் வெற்றிகரமாகப் புதுப்பிக்கப்பட்டன!")
-                                st.rerun()
-                            except Exception as err:
-                                st.error(f"பிழை: {err}")
-                else:
-                    st.info("திருத்துவதற்கு கிளைகள் எதுவும் இல்லை.")
-
-                st.markdown("---")
-                st.markdown("##### 📋 அனைத்து கிளைகளின் பட்டியல்")
-                b_display_res = supabase.table("branches").select("*").order("id").execute()
-                if b_display_res.data:
-                    st.dataframe(pd.DataFrame(b_display_res.data), use_container_width=True)
-
-        with tab2:
-            st.subheader("👥 பணியாளர்கள் பட்டியல் & சேர்த்தல்")
-            users_res = supabase.table("users").select("id, name, username, role, branch_id, is_active").order("id").execute()
-            if users_res.data:
-                st.dataframe(pd.DataFrame([{
-                    "ID": u["id"], "பெயர்": u["name"], "Username": u["username"], "பணி நிலை": u["role"],
-                    "கிளை": branch_id_to_name.get(u.get("branch_id"), "HO / Special"),
-                    "நிலை": "🟢 Active" if u.get("is_active", True) else "🔴 Inactive"
-                } for u in users_res.data]), use_container_width=True)
-
-            st.markdown("---")
-            sub_col1, sub_col2 = st.columns(2)
-            with sub_col1:
-                with st.form("admin_add_user_form", clear_on_submit=True):
-                    u_name = st.text_input("முழுப் பெயர்")
-                    u_username = st.text_input("உள்நுழைவு பெயர்")
-                    u_pass = st.text_input("கடவுச்சொல்", type="password")
-                    u_role = st.selectbox("பணி நிலை", ["Branch Head / Cashier", "Staff", "Operations", "Auditor", "Admin"])
-                    b_selection = st.selectbox("கிளை", options=list(branch_options.keys()))
-                    if st.form_submit_button("உருவாக்கு"):
-                        if u_name.strip() and u_username.strip() and u_pass.strip():
-                            b_id = branch_options.get(b_selection) if u_role not in ["Admin", "Auditor", "Operations"] else None
-                            supabase.table("users").insert({
-                                "name": u_name.strip(), "username": u_username.strip(),
-                                "password_hash": u_pass.strip(), "role": u_role, "branch_id": b_id, "is_active": True
-                            }).execute()
-                            st.success("பயனர் உருவாக்கப்பட்டுவிட்டார்!")
-                            st.rerun()
-
-            with sub_col2:
-                if users_res.data:
-                    br_res = supabase.table("branches").select("id, branch_name, branch_code").execute()
-                    branches_dict = {b["id"]: f"{b['branch_name']} ({b['branch_code']})" for b in br_res.data} if br_res.data else {}
-                    branch_ids = list(branches_dict.keys())
-
-                    user_choices = {}
-                    for u in users_res.data:
-                        b_id = u.get("branch_id")
-                        b_name = branches_dict.get(b_id, "கிளை ஒதுக்கப்படவில்லை")
-                        display_name = f"{u.get('name', 'No Name')} (@{u.get('username', '')}) - கிளை: {b_name}"
-                        user_choices[display_name] = u
-
-                    selected_user_key = st.selectbox("திருத்த வேண்டிய பணியாளர்", list(user_choices.keys()), key="edit_staff_select_box_unique")
-                    curr_user = user_choices[selected_user_key]
-
-                    with st.form(key=f"admin_edit_user_form_{curr_user['id']}"):
-                        edit_name = st.text_input("பெயர்", value=curr_user.get("name", ""), key=f"edit_name_{curr_user['id']}")
-                        edit_pass = st.text_input("புதிய கடவுச்சொல் (விரும்பினால் மட்டும்)", type="password", key=f"edit_pass_{curr_user['id']}")
-                        
-                        current_branch_id = curr_user.get("branch_id")
-                        default_idx = branch_ids.index(current_branch_id) if current_branch_id in branch_ids else 0
-                        
-                        selected_branch_name = st.selectbox(
-                            "கிளையை மாற்றுக (Assign Branch)",
-                            options=list(branches_dict.values()) if branches_dict else ["கிளைகள் இல்லை"],
-                            index=default_idx if branches_dict else 0,
-                            key=f"staff_branch_select_{curr_user['id']}"
-                        )
-                        
-                        selected_branch_id = None
-                        for b_id, b_label in branches_dict.items():
-                            if b_label == selected_branch_name:
-                                selected_branch_id = b_id
-                                break
-
-                        roles_list = ["Branch Head / Cashier", "Staff", "Operations", "Auditor", "Admin"]
-                        current_role = curr_user.get("role", "Staff")
-                        role_idx = roles_list.index(current_role) if current_role in roles_list else 0
-                        edit_role = st.selectbox("பணி நிலை", roles_list, index=role_idx, key=f"edit_role_{curr_user['id']}")
-                        
-                        edit_status = st.radio("நிலை", ["Active", "Inactive"], index=0 if curr_user.get("is_active", True) else 1, key=f"edit_status_{curr_user['id']}")
-
-                        if st.form_submit_button("புதுப்பி", type="primary"):
-                            try:
-                                up_data = {
-                                    "name": edit_name.strip(), 
-                                    "role": edit_role, 
-                                    "branch_id": selected_branch_id,
-                                    "is_active": edit_status == "Active"
-                                }
-                                if edit_pass.strip():
-                                    up_data["password_hash"] = edit_pass.strip()
-                                    
-                                supabase.table("users").update(up_data).eq("id", curr_user["id"]).execute()
-                                st.success("✅ பணியாளர் விவரங்கள் மற்றும் கிளை வெற்றிகரமாகப் புதுப்பிக்கப்பட்டன!")
-                                st.rerun()
-                            except Exception as err:
-                                st.error(f"பிழை: {err}")
-                else:
-                    st.info("திருத்துவதற்கு பணியாளர்கள் யாரும் இல்லை.")
-
-        with tab3:
-            st.subheader("📋 ஸ்கீம்கள் மேலாண்மை (Pledge, FD & RD Scheme Master)")
-            s_tab1, s_tab2, s_tab3 = st.tabs(["🪙 நகைக்கடன் திட்டங்கள் (Pledge)", "📑 FD திட்டங்கள்", "📈 RD திட்டங்கள்"])
-
-            with s_tab1:
-                st.markdown("##### 🪙 புதிய நகைக் கடன் திட்டம் உருவாக்குதல் (Create Gold Loan Scheme)")
-                with st.form("admin_gold_scheme_form", clear_on_submit=True):
-                    gs_col1, gs_col2, gs_col3 = st.columns(3)
-                    with gs_col1:
-                        gs_name = st.text_input("Scheme Name *", placeholder="எ.கா: சூப்பர் சேவர் 12%")
-                        gs_rpg = st.number_input("Rate Per Gram (RPG ₹) *", min_value=100.0, value=5500.0, step=50.0)
-                        gs_min = st.number_input("Min Loan Value (₹)", min_value=0.0, value=1000.0, step=500.0)
-                        gs_max = st.number_input("Max Loan Value (₹)", min_value=0.0, value=1000000.0, step=5000.0)
-                    with gs_col2:
-                        gs_tenor = st.number_input("Scheme Tenor (Months) *", min_value=1, max_value=60, value=12)
-                        gs_chg_timing = st.selectbox("Charges Timing", ["Initial", "Closing"])
-                        gs_chg_type = st.selectbox("Charges Type", ["Percentage (%)", "Fixed Amount (₹)"])
-                        gs_chg_val = st.number_input("Charges Value", min_value=0.0, value=0.0, step=0.1)
-                    with gs_col3:
-                        gs_auction_chg = st.number_input("Auction Charges (%)", min_value=0.0, value=2.0, step=0.5)
-                        gs_penal_chg = st.number_input("Penal Charges (%)", min_value=0.0, value=2.0, step=0.5)
-
-                    st.markdown("###### 📊 Interest Slabs (வட்டி ஸ்லாப்கள் - நேரடி உள்ளீடு):")
-                    sl_c1, sl_c2, sl_c3 = st.columns(3)
-                    with sl_c1:
-                        st.markdown("**ஸ்லாப் 1 (Slab 1):**")
-                        s1_from = st.number_input("தொடக்க நாள்", value=1, step=1, key="s1_f")
-                        s1_to = st.number_input("முடிவு நாள்", value=90, step=1, key="s1_t")
-                        s1_roi = st.number_input("வட்டி விகிதம் (%)", value=12.0, step=0.5, key="s1_r")
-                    with sl_c2:
-                        st.markdown("**ஸ்லாப் 2 (Slab 2):**")
-                        s2_from = st.number_input("தொடக்க நாள்", value=91, step=1, key="s2_f")
-                        s2_to = st.number_input("முடிவு நாள்", value=180, step=1, key="s2_t")
-                        s2_roi = st.number_input("வட்டி விகிதம் (%)", value=15.0, step=0.5, key="s2_r")
-                    with sl_c3:
-                        st.markdown("**ஸ்லாப் 3 (Slab 3):**")
-                        s3_from = st.number_input("தொடக்க நாள்", value=181, step=1, key="s3_f")
-                        s3_to = st.number_input("முடிவு நாள்", value=365, step=1, key="s3_t")
-                        s3_roi = st.number_input("வட்டி விகிதம் (%)", value=18.0, step=0.5, key="s3_r")
-
-                    if st.form_submit_button("நகைக்கடன் ஸ்கீமைச் சேமி", type="primary"):
-                        if gs_name.strip():
-                            try:
-                                formatted_slabs = [
-                                    {"from_days": int(s1_from), "to_days": int(s1_to), "roi": float(s1_roi)},
-                                    {"from_days": int(s2_from), "to_days": int(s2_to), "roi": float(s2_roi)},
-                                    {"from_days": int(s3_from), "to_days": int(s3_to), "roi": float(s3_roi)}
-                                ]
-                                supabase.table("gold_loan_schemes").insert({
-                                    "scheme_name": gs_name.strip(),
-                                    "rate_per_gram": float(gs_rpg),
-                                    "interest_slabs": formatted_slabs,
-                                    "min_loan_amount": float(gs_min),
-                                    "max_loan_amount": float(gs_max),
-                                    "scheme_tenor_months": int(gs_tenor),
-                                    "charges_timing": gs_chg_timing,
-                                    "charges_type": "Percentage" if "Percentage" in gs_chg_type else "Fixed Amount",
-                                    "charges_value": float(gs_chg_val),
-                                    "auction_charges_percent": float(gs_auction_chg),
-                                    "penal_charges_percent": float(gs_penal_chg),
-                                    "is_active": True
-                                }).execute()
-                                st.success(f"✅ '{gs_name}' திட்டம் சேமிக்கப்பட்டது!")
-                                st.rerun()
-                            except Exception as e:
-                                st.error(f"பிழை: {e}")
-
-                g_schemes = supabase.table("gold_loan_schemes").select("*").order("id", desc=True).execute().data or []
-                if g_schemes:
-                    st.dataframe(pd.DataFrame(g_schemes)[["scheme_name", "rate_per_gram", "scheme_tenor_months", "min_loan_amount", "max_loan_amount"]], use_container_width=True)
-
-            with s_tab2:
-                st.markdown("##### 📑 புதிய FD திட்டம் உருவாக்குதல்")
-                with st.form("admin_fd_scheme_form", clear_on_submit=True):
-                    fd_c1, fd_c2, fd_c3 = st.columns(3)
-                    with fd_c1:
-                        fd_name = st.text_input("Scheme Name *", placeholder="எ.கா: பிக்சட் பிளஸ் 9.5%")
-                        fd_tenure = st.number_input("Tenure (Months) *", min_value=1, max_value=120, value=12)
-                        fd_lock = st.number_input("Locking Period (Months)", min_value=0, max_value=60, value=3)
-                    with fd_c2:
-                        fd_min_amt = st.number_input("Minimum Deposit Amount (₹) *", min_value=100.0, value=5000.0, step=1000.0)
-                        fd_interest = st.number_input("Annual Interest (%) *", min_value=0.0, value=9.5, step=0.25)
-                        fd_int_type = st.selectbox("Interest Type", ["Simple", "Compounding"])
-                    with fd_c3:
-                        fd_payout = st.selectbox("Interest Payout", ["Monthly", "Quarterly", "Half-Yearly", "Yearly", "At Maturity"])
-
-                    if st.form_submit_button("FD ஸ்கீமைச் சேமி", type="primary"):
-                        if fd_name.strip():
-                            supabase.table("fd_schemes").insert({
-                                "scheme_name": fd_name.strip(), "tenure_months": int(fd_tenure),
-                                "locking_period_months": int(fd_lock), "min_deposit_amount": float(fd_min_amt),
-                                "annual_interest_percent": float(fd_interest), "interest_type": fd_int_type,
-                                "interest_payout": fd_payout, "is_active": True
-                            }).execute()
-                            st.success(f"FD திட்டம் சேமிக்கப்பட்டது!")
-                            st.rerun()
-
-            with s_tab3:
-                st.markdown("##### 📈 புதிய RD திட்டம் உருவாக்குதல்")
-                with st.form("admin_rd_scheme_form", clear_on_submit=True):
-                    rd_c1, rd_c2, rd_c3 = st.columns(3)
-                    with rd_c1:
-                        rd_name = st.text_input("Scheme Name *", placeholder="எ.கா: மாத சேமிப்பு 10%")
-                        rd_tenure = st.number_input("Tenure (Months) *", min_value=1, max_value=120, value=12)
-                        rd_lock = st.number_input("Locking Period (Months)", min_value=0, max_value=60, value=3)
-                    with rd_c2:
-                        rd_min_amt = st.number_input("Minimum Deposit Amount (₹) *", min_value=100.0, value=500.0, step=100.0)
-                        rd_interest = st.number_input("Annual Interest (%) *", min_value=0.0, value=10.0, step=0.25)
-                        rd_int_type = st.selectbox("Interest Type", ["Simple", "Compounding"], key="rd_int_tp")
-                    with rd_c3:
-                        rd_freq = st.selectbox("Due Frequency", ["Monthly", "Weekly"])
-                        rd_grace = st.number_input("Grace Days", min_value=0, max_value=30, value=5)
-                        rd_fine = st.number_input("Fine Percentage (%)", min_value=0.0, value=1.5, step=0.25)
-
-                    if st.form_submit_button("RD ஸ்கீமைச் சேமி", type="primary"):
-                        if rd_name.strip():
-                            supabase.table("rd_schemes").insert({
-                                "scheme_name": rd_name.strip(), "tenure_months": int(rd_tenure),
-                                "locking_period_months": int(rd_lock), "min_deposit_amount": float(rd_min_amt),
-                                "annual_interest_percent": float(rd_interest), "interest_type": rd_int_type,
-                                "due_frequency": rd_freq, "grace_days": int(rd_grace), "fine_percentage": float(rd_fine),
-                                "is_active": True
-                            }).execute()
-                            st.success(f"RD திட்டம் சேமிக்கப்பட்டது!")
-                            st.rerun()
-
-        with tab4:
-            st.subheader("🎯 பணியாளர் இன்சென்டிவ் & புள்ளிகள் விதிகள் (Staff Incentive Master)")
-
-            set_res = supabase.table("incentive_settings").select("*").eq("id", 1).execute().data
-            curr_rpp = float(set_res[0].get("rupees_per_point", 5.0)) if set_res else 5.0
-            curr_pen = float(set_res[0].get("negative_growth_penalty_per_lakh", 15.0)) if set_res else 15.0
-
-            with st.container(border=True):
-                st.markdown("##### 🪙 நிலையான புள்ளி பண மதிப்பு (Global Point Value)")
-                gp_col1, gp_col2, gp_col3 = st.columns(3)
-                with gp_col1:
-                    new_rpp = st.number_input("ஒரு புள்ளிக்கான ரூபாய் மதிப்பு (1 Point = ₹):", value=curr_rpp, step=0.5)
-                with gp_col2:
-                    new_pen = st.number_input("நெகட்டிவ் கடன் வளர்ச்சி அபராதப் புள்ளி (₹1 லட்சத்திற்கு):", value=curr_pen, step=1.0)
-                with gp_col3:
-                    st.write("")
-                    st.write("")
-                    if st.button("💾 பொது மதிப்புகளைச் சேமி (Update Values)", type="primary"):
-                        supabase.table("incentive_settings").upsert({
-                            "id": 1,
-                            "rupees_per_point": float(new_rpp),
-                            "negative_growth_penalty_per_lakh": float(new_pen)
-                        }).execute()
-                        st.success("புள்ளி மதிப்பு புதுப்பிக்கப்பட்டது!")
-                        st.rerun()
-
-            st.markdown("---")
-            st.markdown("##### ⚙️ குறிப்பிட்ட ஸ்கீம் வாரியான புள்ளி விதிகள் (Scheme-wise Points Rule)")
-
-            all_g_sch = [s["scheme_name"] for s in supabase.table("gold_loan_schemes").select("scheme_name").execute().data or []]
-            all_fd_sch = [s["scheme_name"] for s in supabase.table("fd_schemes").select("scheme_name").execute().data or []]
-            all_rd_sch = [s["scheme_name"] for s in supabase.table("rd_schemes").select("scheme_name").execute().data or []]
-            available_schemes = ["All"] + all_g_sch + all_fd_sch + all_rd_sch
-
-            with st.form("admin_custom_incentive_form", clear_on_submit=True):
-                ir_c1, ir_c2, ir_c3, ir_c4, ir_c5 = st.columns(5)
-                with ir_c1:
-                    ir_txn_type = st.selectbox(
-                        "நடவடிக்கை வகை *:",
-                        [
-                            "Pledge (புதிய நகைக் கடன்)", "GL Release (அடமானம் மீட்டல்)",
-                            "Interest Payment (வட்டி வரவு)", "Part Payment (அசல் வரவு)",
-                            "Take Over (பிற நிறுவன கடன் மீட்டல்)", "FD Open (புதிய வைப்பு நிதி)",
-                            "RD Open (புதிய RD சேமிப்பு)", "GP (Gold Purchase)", "GS (Gold Sale)"
-                        ]
-                    )
-                with ir_c2:
-                    ir_scheme = st.selectbox("குறிப்பிட்ட ஸ்கீம் *:", available_schemes)
-                with ir_c3:
-                    ir_basis = st.selectbox("அடிப்படைக் கணக்கீடு *:", ["Amount (தொகை வழி - ₹)", "Weight_Grams (எடை வழி - Grams)"])
-                with ir_c4:
-                    ir_unit = st.number_input("அலகு மதிப்பு (Unit Value) *:", value=100000.0, step=100.0)
-                with ir_c5:
-                    ir_pts = st.number_input("புள்ளிகள் (Points Per Unit) *:", value=10.0, step=1.0)
-
-                if st.form_submit_button("ஸ்கீம் விதியைச் சேமி", type="primary"):
-                    try:
-                        clean_basis = "Amount" if "Amount" in ir_basis else "Weight_Grams"
-                        payload = {
-                            "transaction_type": ir_txn_type, "scheme_name": ir_scheme,
-                            "basis_type": clean_basis, "unit_value": float(ir_unit),
-                            "points_per_unit": float(ir_pts), "is_active": True
-                        }
-                        check_existing = supabase.table("staff_incentive_rules").select("id").eq("transaction_type", ir_txn_type).eq("scheme_name", ir_scheme).execute()
-                        if check_existing.data:
-                            supabase.table("staff_incentive_rules").update(payload).eq("id", check_existing.data[0]["id"]).execute()
-                        else:
-                            supabase.table("staff_incentive_rules").insert(payload).execute()
-                        st.success(f"✅ விதி சேமிக்கப்பட்டது!")
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"பிழை: {e}")
-
-            st.markdown("###### 📋 தற்போதுள்ள விதிகள் (எடிட் / நீக்கு வசதியுடன்)")
-            rules_view = supabase.table("staff_incentive_rules").select("*").order("id", desc=True).execute().data or []
-            if rules_view:
-                for r in rules_view:
-                    rc1, rc2, rc3, rc4, rc5 = st.columns([2.5, 2, 1.5, 1.5, 1])
-                    rc1.write(f"**{r['transaction_type']}**")
-                    rc2.write(f"ஸ்கீம்: `{r.get('scheme_name', 'All')}`")
-                    rc3.write(f"யூனிட்: ₹{float(r.get('unit_value', 1)):,.0f}" if r.get("basis_type") == "Amount" else f"யூனிட்: {r.get('unit_value')}g")
-                    rc4.write(f"புள்ளிகள்: {r.get('points_per_unit')}")
-                    if rc5.button("🗑️ நீக்கு", key=f"del_rule_{r['id']}"):
-                        supabase.table("staff_incentive_rules").delete().eq("id", r["id"]).execute()
-                        st.success("விதி நீக்கப்பட்டது!")
-                        st.rerun()
-
-        with tab10:
-            rep_b_opts = ["அனைத்து கிளைகளும் (All Branches)"] + list(branch_options.keys())
-            sel_rep_b = st.selectbox("கிளையை வடிகட்டவும்:", rep_b_opts, key="adm_rep_branch_sel")
-            filter_b_id = branch_options.get(sel_rep_b) if sel_rep_b != "அனைத்து கிளைகளும் (All Branches)" else None
-            
-            # tab10-க்கான தனித்துவமான key_suffix உடன் கூடிய ஃபங்ஷன் அழைப்பு
-            render_staff_attribution_report(selected_branch_id=filter_b_id, key_suffix="tab10_report")
+user_role = st.session_state.get("user_role", "Staff")
 
 # ----------------------------------------------------
-# B. ஆப்பரேஷன்ஸ் திரை (OPERATIONS DESK)
+# A. நிர்வாக மேலாண்மை திரை (ADMIN PANEL WITH 10 FULL TABS)
+# ----------------------------------------------------
+if user_role == "Admin":
+    st.header("⚙️ நிர்வாக மேலாண்மை (Admin Control Panel)")
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10 = st.tabs([
+        "🏢 கிளைகள்",
+        "👥 பணியாளர்கள்",
+        "📋 ஸ்கீம்கள் மேலாண்மை (Pledge, FD, RD)",
+        "🎯 இன்சென்டிவ் & புள்ளி விதிகள்",
+        "📥 மொத்தப் பதிவேற்றம்",
+        "🗂️ வாடிக்கையாளர் மேலாண்மை",
+        "📊 வருகை & பரிவர்த்தனை திருத்தம்",
+        "💰 கிளை துவக்க இருப்பு & கல்லா",
+        "🏦 தலைமையக பணப் பரிமாற்றம்",
+        "📈 காரணப் பணியாளர் அறிக்கை"
+    ])
+
+    with tab1:
+        st.subheader("🏢 கிளைகள் மேலாண்மை (Branches Management)")
+        b_sub_tab1, b_sub_tab2 = st.tabs(["➕ புதிய கிளை சேர்த்தல்", "✏️ கிளை விவரங்களைத் திருத்துதல் (Edit)"])
+
+        with b_sub_tab1:
+            st.markdown("##### புதிய கிளை பதிவுப் படிவம்")
+            with st.form("admin_add_branch_form", clear_on_submit=True):
+                bc1, bc2 = st.columns(2)
+                with bc1:
+                    b_name = st.text_input("கிளையின் பெயர் *", placeholder="எ.கா: திங்கள்நகர் கிளை")
+                    b_code = st.text_input("கிளை குறியீடு *", placeholder="எ.கா: TGL")
+                    b_phone = st.text_input("தொடர்பு எண் (Contact No)", placeholder="எ.கா: 9876543210")
+                with bc2:
+                    b_email = st.text_input("இமெயில் ஐடி (Email ID)", placeholder="branch@muthusise.com")
+                    b_manager = st.text_input("Office Manager பெயர்", placeholder="மேனேஜர் பெயர்")
+                
+                b_address = st.text_area("கிளை முகவரி (Branch Address)", placeholder="முழு முகவரி...")
+                submit_branch = st.form_submit_button("கிளையைச் சேர்", type="primary")
+
+                if submit_branch:
+                    if b_name.strip() and b_code.strip():
+                        try:
+                            supabase.table("branches").insert({
+                                "branch_name": b_name.strip(),
+                                "branch_code": b_code.strip().upper(),
+                                "address": b_address.strip(),
+                                "branch_address": b_address.strip(),
+                                "email": b_email.strip(),
+                                "phone": b_phone.strip(),
+                                "office_manager": b_manager.strip()
+                            }).execute()
+                            st.success(f"'{b_name}' வெற்றிகரமாகச் சேர்க்கப்பட்டது!")
+                            st.rerun()
+                        except Exception as err:
+                            st.error(f"பிழை: {err}")
+                    else:
+                        st.warning("தயவுசெய்து கிளையின் பெயர் மற்றும் குறியீட்டை உள்ளிடவும்.")
+
+            st.markdown("---")
+            st.markdown("##### 📋 ஏற்கனவே உள்ள கிளைகள் பட்டியல்")
+            b_list_res = supabase.table("branches").select("id, branch_name, branch_code, address, phone, email, office_manager").order("id").execute()
+            if b_list_res.data:
+                st.dataframe(pd.DataFrame(b_list_res.data), use_container_width=True)
+            else:
+                st.info("கிளைகள் எதுவும் பதிவு செய்யப்படவில்லை.")
+
+        with b_sub_tab2:
+            st.markdown("##### ✏️ கிளை விவரங்களைத் திருத்துதல்")
+            b_edit_res = supabase.table("branches").select("*").order("id").execute()
+            branches_data = b_edit_res.data if b_edit_res.data else []
+
+            if branches_data:
+                branch_choices = {f"{b['branch_name']} ({b['branch_code']}) - ID: {b['id']}": b for b in branches_data}
+                selected_choice = st.selectbox("எடிட் செய்ய வேண்டிய கிளೆಯನ್ನುத் தேர்ந்தெடுக்கவும்", list(branch_choices.keys()), key="select_branch_to_edit_unique_tab2")
+                curr_b = branch_choices[selected_choice]
+
+                with st.form(key=f"unique_edit_branch_form_{curr_b['id']}_{curr_b['branch_code']}"):
+                    e_name = st.text_input("கிளையின் பெயர்", value=curr_b.get("branch_name", ""), key=f"e_name_{curr_b['id']}")
+                    e_code = st.text_input("கிளை குறியீடு", value=curr_b.get("branch_code", ""), key=f"e_code_{curr_b['id']}")
+                    e_phone = st.text_input("தொடர்பு எண்", value=curr_b.get("phone", ""), key=f"e_phone_{curr_b['id']}")
+                    e_email = st.text_input("இமெயில் ஐடி", value=curr_b.get("email", ""), key=f"e_email_{curr_b['id']}")
+                    e_manager = st.text_input("Office Manager பெயர்", value=curr_b.get("office_manager", ""), key=f"e_manager_{curr_b['id']}")
+                    e_address = st.text_area("கிளை முகவரி", value=curr_b.get("address", "") or curr_b.get("branch_address", ""), key=f"e_address_{curr_b['id']}")
+
+                    if st.form_submit_button("கிளை விவரங்களைப் புதுப்பி", type="primary"):
+                        try:
+                            supabase.table("branches").update({
+                                "branch_name": e_name.strip(),
+                                "branch_code": e_code.strip().upper(),
+                                "address": e_address.strip(),
+                                "branch_address": e_address.strip(),
+                                "email": e_email.strip(),
+                                "phone": e_phone.strip(),
+                                "office_manager": e_manager.strip()
+                            }).eq("id", curr_b["id"]).execute()
+                            st.success("✅ கிளை விவரங்கள் வெற்றிகரமாகப் புதுப்பிக்கப்பட்டன!")
+                            st.rerun()
+                        except Exception as err:
+                            st.error(f"பிழை: {err}")
+            else:
+                st.info("திருத்துவதற்கு கிளைகள் எதுவும் இல்லை.")
+
+    with tab2:
+        st.subheader("👥 பணியாளர்கள் பட்டியல் & சேர்த்தல்")
+        users_res = supabase.table("users").select("id, name, username, role, branch_id, is_active").order("id").execute()
+        br_res_global = supabase.table("branches").select("id, branch_name, branch_code").execute()
+        branches_dict_global = {b["id"]: f"{b['branch_name']} ({b['branch_code']})" for b in br_res_global.data} if br_res_global.data else {}
+
+        if users_res.data:
+            st.dataframe(pd.DataFrame([{
+                "ID": u["id"], "பெயர்": u["name"], "Username": u["username"], "பணி நிலை": u["role"],
+                "கிளை": branches_dict_global.get(u.get("branch_id"), "HO / Special"),
+                "நிலை": "🟢 Active" if u.get("is_active", True) else "🔴 Inactive"
+            } for u in users_res.data]), use_container_width=True)
+
+        st.markdown("---")
+        sub_col1, sub_col2 = st.columns(2)
+        with sub_col1:
+            with st.form("admin_add_user_form", clear_on_submit=True):
+                u_name = st.text_input("முழுப் பெயர்")
+                u_username = st.text_input("உள்நுழைவு பெயர்")
+                u_pass = st.text_input("கடவுச்சொல்", type="password")
+                u_role = st.selectbox("பணி நிலை", ["Branch Head / Cashier", "Staff", "Operations", "Auditor", "Admin"])
+                b_selection = st.selectbox("கிளை", options=list(branch_options.keys()))
+                if st.form_submit_button("உருவாக்கு"):
+                    if u_name.strip() and u_username.strip() and u_pass.strip():
+                        b_id = branch_options.get(b_selection) if u_role not in ["Admin", "Auditor", "Operations"] else None
+                        supabase.table("users").insert({
+                            "name": u_name.strip(), "username": u_username.strip(),
+                            "password_hash": u_pass.strip(), "role": u_role, "branch_id": b_id, "is_active": True
+                        }).execute()
+                        st.success("பயனர் உருவாக்கப்பட்டுவிட்டார்!")
+                        st.rerun()
+
+        with sub_col2:
+            if users_res.data:
+                branch_ids = list(branches_dict_global.keys())
+                user_choices = {}
+                for u in users_res.data:
+                    b_id = u.get("branch_id")
+                    b_name = branches_dict_global.get(b_id, "கிளை ஒதுக்கப்படவில்லை")
+                    display_name = f"{u.get('name', 'No Name')} (@{u.get('username', '')}) - கிளை: {b_name}"
+                    user_choices[display_name] = u
+
+                selected_user_key = st.selectbox("திருத்த வேண்டிய பணியாளர்", list(user_choices.keys()), key="edit_staff_select_box_unique")
+                curr_user = user_choices[selected_user_key]
+
+                with st.form(key=f"admin_edit_user_form_{curr_user['id']}"):
+                    edit_name = st.text_input("பெயர்", value=curr_user.get("name", ""), key=f"edit_name_{curr_user['id']}")
+                    edit_pass = st.text_input("புதிய கடவுச்சொல் (விரும்பினால் மட்டும்)", type="password", key=f"edit_pass_{curr_user['id']}")
+                    current_branch_id = curr_user.get("branch_id")
+                    default_idx = branch_ids.index(current_branch_id) if current_branch_id in branch_ids else 0
+                    
+                    selected_branch_name = st.selectbox(
+                        "கிளையை மாற்றுக (Assign Branch)",
+                        options=list(branches_dict_global.values()) if branches_dict_global else ["கிளைகள் இல்லை"],
+                        index=default_idx if branches_dict_global else 0,
+                        key=f"staff_branch_select_{curr_user['id']}"
+                    )
+                    
+                    selected_branch_id = None
+                    for b_id, b_label in branches_dict_global.items():
+                        if b_label == selected_branch_name:
+                            selected_branch_id = b_id
+                            break
+
+                    roles_list = ["Branch Head / Cashier", "Staff", "Operations", "Auditor", "Admin"]
+                    current_role = curr_user.get("role", "Staff")
+                    role_idx = roles_list.index(current_role) if current_role in roles_list else 0
+                    edit_role = st.selectbox("பணி நிலை", roles_list, index=role_idx, key=f"edit_role_{curr_user['id']}")
+                    edit_status = st.radio("நிலை", ["Active", "Inactive"], index=0 if curr_user.get("is_active", True) else 1, key=f"edit_status_{curr_user['id']}")
+
+                    if st.form_submit_button("புதுப்பி", type="primary"):
+                        try:
+                            up_data = {
+                                "name": edit_name.strip(), "role": edit_role, 
+                                "branch_id": selected_branch_id, "is_active": edit_status == "Active"
+                            }
+                            if edit_pass.strip():
+                                up_data["password_hash"] = edit_pass.strip()
+                            supabase.table("users").update(up_data).eq("id", curr_user["id"]).execute()
+                            st.success("✅ பணியாளர் விவரங்கள் மற்றும் கிளை வெற்றிகரமாகப் புதுப்பிக்கப்பட்டன!")
+                            st.rerun()
+                        except Exception as err:
+                            st.error(f"பிழை: {err}")
+
+    with tab3:
+        st.subheader("📋 ஸ்கீம்கள் மேலாண்மை (Pledge, FD & RD Scheme Master)")
+        s_tab1, s_tab2, s_tab3 = st.tabs(["🪙 நகைக்கடன் திட்டங்கள் (Pledge)", "📑 FD திட்டங்கள்", "📈 RD திட்டங்கள்"])
+
+        with s_tab1:
+            st.markdown("##### 🪙 புதிய நகைக் கடன் திட்டம் உருவாக்குதல்")
+            with st.form("admin_gold_scheme_form", clear_on_submit=True):
+                gs_col1, gs_col2, gs_col3 = st.columns(3)
+                with gs_col1:
+                    gs_name = st.text_input("Scheme Name *", placeholder="எ.கா: சூப்பர் சேவர் 12%")
+                    gs_rpg = st.number_input("Rate Per Gram (RPG ₹) *", min_value=100.0, value=5500.0, step=50.0)
+                    gs_min = st.number_input("Min Loan Value (₹)", min_value=0.0, value=1000.0, step=500.0)
+                    gs_max = st.number_input("Max Loan Value (₹)", min_value=0.0, value=1000000.0, step=5000.0)
+                with gs_col2:
+                    gs_tenor = st.number_input("Scheme Tenor (Months) *", min_value=1, max_value=60, value=12)
+                    gs_chg_timing = st.selectbox("Charges Timing", ["Initial", "Closing"])
+                    gs_chg_type = st.selectbox("Charges Type", ["Percentage (%)", "Fixed Amount (₹)"])
+                    gs_chg_val = st.number_input("Charges Value", min_value=0.0, value=0.0, step=0.1)
+                with gs_col3:
+                    gs_auction_chg = st.number_input("Auction Charges (%)", min_value=0.0, value=2.0, step=0.5)
+                    gs_penal_chg = st.number_input("Penal Charges (%)", min_value=0.0, value=2.0, step=0.5)
+
+                if st.form_submit_button("நகைக்கடன் ஸ்கீமைச் சேமி", type="primary"):
+                    if gs_name.strip():
+                        supabase.table("gold_loan_schemes").insert({
+                            "scheme_name": gs_name.strip(), "rate_per_gram": float(gs_rpg),
+                            "min_loan_amount": float(gs_min), "max_loan_amount": float(gs_max),
+                            "scheme_tenor_months": int(gs_tenor), "is_active": True
+                        }).execute()
+                        st.success("நகைக்கடன் திட்டம் சேமிக்கப்பட்டது!")
+                        st.rerun()
+
+        with s_tab2:
+            st.markdown("##### 📑 புதிய FD திட்டம் உருவாக்குதல்")
+            with st.form("admin_fd_scheme_form", clear_on_submit=True):
+                fd_name = st.text_input("Scheme Name *")
+                if st.form_submit_button("FD ஸ்கீமைச் சேமி", type="primary"):
+                    if fd_name.strip():
+                        supabase.table("fd_schemes").insert({"scheme_name": fd_name.strip(), "is_active": True}).execute()
+                        st.success("FD திட்டம் சேமிக்கப்பட்டது!")
+                        st.rerun()
+
+        with s_tab3:
+            st.markdown("##### 📈 புதிய RD திட்டம் உருவாக்குதல்")
+            with st.form("admin_rd_scheme_form", clear_on_submit=True):
+                rd_name = st.text_input("Scheme Name *")
+                if st.form_submit_button("RD ஸ்கீமைச் சேமி", type="primary"):
+                    if rd_name.strip():
+                        supabase.table("rd_schemes").insert({"scheme_name": rd_name.strip(), "is_active": True}).execute()
+                        st.success("RD திட்டம் சேமிக்கப்பட்டது!")
+                        st.rerun()
+
+    with tab4:
+        st.subheader("🎯 பணியாளர் இன்சென்டிவ் & புள்ளிகள் விதிகள் (Staff Incentive Master)")
+        set_res = supabase.table("incentive_settings").select("*").eq("id", 1).execute().data
+        curr_rpp = float(set_res[0].get("rupees_per_point", 5.0)) if set_res else 5.0
+        curr_pen = float(set_res[0].get("negative_growth_penalty_per_lakh", 15.0)) if set_res else 15.0
+
+        with st.container(border=True):
+            gp_col1, gp_col2, gp_col3 = st.columns(3)
+            with gp_col1:
+                new_rpp = st.number_input("ஒரு புள்ளிக்கான ரூபாய் மதிப்பு (1 Point = ₹):", value=curr_rpp, step=0.5)
+            with gp_col2:
+                new_pen = st.number_input("நெகட்டிவ் கடன் வளர்ச்சி அபராதப் புள்ளி (₹1 லட்சத்திற்கு):", value=curr_pen, step=1.0)
+            with gp_col3:
+                st.write("")
+                if st.button("💾 பொது மதிப்புகளைச் சேமி (Update Values)", type="primary"):
+                    supabase.table("incentive_settings").upsert({
+                        "id": 1, "rupees_per_point": float(new_rpp),
+                        "negative_growth_penalty_per_lakh": float(new_pen)
+                    }).execute()
+                    st.success("புள்ளி மதிப்பு புதுப்பிக்கப்பட்டது!")
+                    st.rerun()
+
+    with tab5:
+        st.subheader("📥 மொத்தப் பதிவேற்றம் (Bulk Import)")
+        st.info("பழைய தரவுகளை மொத்தமாகப் பதிவேற்றுக.")
+
+    with tab6:
+        st.subheader("🗂️ வாடிக்கையாளர் மேலாண்மை (Customer Directory)")
+        cust_res_admin = supabase.table("customers").select("*").order("id", desc=True).limit(50).execute().data or []
+        if cust_res_admin:
+            st.dataframe(pd.DataFrame(cust_res_admin), use_container_width=True)
+
+    with tab7:
+        st.subheader("📊 வருகை & பரிவர்த்தனை திருத்தம்")
+        visits_admin = supabase.table("customer_visits").select("*").order("id", desc=True).limit(20).execute().data or []
+        if visits_admin:
+            st.dataframe(pd.DataFrame(visits_admin), use_container_width=True)
+
+    with tab8:
+        st.subheader("💰 கிளை துவக்க இருப்பு & கல்லா")
+        sel_op_branch = st.selectbox("கிளை:", list(branch_options.keys()), key="sel_op_b_admin")
+        with st.form("admin_op_form_main"):
+            op_500 = st.number_input("₹500", min_value=0, step=1, key="op_500_key_m")
+            calc_total = op_500 * 500
+            st.write(f"**மொத்தத் தொகை:** ₹{calc_total:,.2f}")
+            if st.form_submit_button("சேமி", type="primary"):
+                st.success("சேமிக்கப்பட்டது!")
+
+    with tab9:
+        st.subheader("🏦 தலைமையக பணப் பரிமாற்றம்")
+        fund_rows = supabase.table("branch_fund_transfers").select("*").order("id", desc=True).limit(20).execute().data or []
+        if fund_rows:
+            st.dataframe(pd.DataFrame(fund_rows), use_container_width=True)
+
+    with tab10:
+        rep_b_opts = ["அனைத்து கிளைகளும் (All Branches)"] + list(branch_options.keys())
+        sel_rep_b = st.selectbox("கிளையை வடிகட்டவும்:", rep_b_opts, key="adm_rep_branch_sel")
+        filter_b_id = branch_options.get(sel_rep_b) if sel_rep_b != "அனைத்து கிளைகளும் (All Branches)" else None
+        render_staff_attribution_report(selected_branch_id=filter_b_id, key_suffix="tab10_report")
+
+# ----------------------------------------------------
+# B. ஆப்பரேஷன்ஸ் மேசை (OPERATIONS DESK)
 # ----------------------------------------------------
 elif user_role == "Operations":
-    # நீங்கள் மேலே அனுப்பிய முழுமையான Operations Desk கோடு இங்கே அப்படியே வரும்:
     st.header("📞 ஆப்பரேஷன்ஸ் மேசை (Operations Desk)")
     ops_tab1, ops_tab2, ops_tab3, ops_tab4, ops_tab5 = st.tabs([
         "🏦 நிதிப் பரிமாற்ற ஒப்புதல்", "👤 புதிய வாடிக்கையாளர் KYC",
         "📝 விவரத் திருத்தக் கோரிக்கைகள்", "🔔 பரிவர்த்தனை அழைப்பு சரிபார்ப்பு", 
         "📑 FD / RD பாண்ட் & சான்றிதழ்"
     ])
+    
     with ops_tab1:
         st.subheader("🏦 தலைமையக & கிளை நிதிப் பரிமாற்ற ஒப்புதல் மேசை")
-        try:
-            pending_fund_transfers = supabase.table("branch_fund_transfers").select("*, branches(branch_name)").eq("status", "Pending_Approval").order("id", desc=True).execute().data or []
-        except Exception:
-            try:
-                pending_fund_transfers = supabase.table("branch_fund_transfers").select("*").eq("status", "Pending_Approval").order("id", desc=True).execute().data or []
-            except Exception:
-                pending_fund_transfers = []
-
+        pending_fund_transfers = supabase.table("branch_fund_transfers").select("*, branches(branch_name)").eq("status", "Pending_Approval").order("id", desc=True).execute().data or []
         if not pending_fund_transfers:
             st.info("✅ எந்த பணப் பரிமாற்றங்களும் நிலுவையில் இல்லை.")
         else:
             for f_item in pending_fund_transfers:
-                b_name = f_item.get("branches", {}).get("branch_name", "Branch")
-                with st.expander(f"💰 {f_item['transfer_type']} | {b_name} | ₹{float(f_item['amount']):,.2f}"):
-                    st.json(f_item.get("denomination_details", {}))
+                with st.expander(f"💰 {f_item['transfer_type']} | ₹{float(f_item['amount']):,.2f}"):
                     if st.button("✅ அங்கீகரி", key=f"app_f_{f_item['id']}", type="primary"):
                         supabase.table("branch_fund_transfers").update({"status": "Approved", "approved_by": st.session_state.username}).eq("id", f_item["id"]).execute()
                         st.success("அங்கீகரிக்கப்பட்டது!")
                         st.rerun()
-                        
-        st.markdown("---")
-        st.subheader("💸 கிளைச் செலவு ஒப்புதல் மேசை (Branch Expenses Approval Desk)")
-        try:
-            pending_expenses = supabase.table("branch_expenses").select("*, branches(branch_name)").eq("status", "Pending_Approval").order("id", desc=True).execute().data or []
-        except Exception:
-            try:
-                pending_expenses = supabase.table("branch_expenses").select("*").eq("status", "Pending_Approval").order("id", desc=True).execute().data or []
-            except Exception:
-                pending_expenses = []
-
-        if not pending_expenses:
-            st.info("✅ ஒப்புதலுக்கு நிலுவையில் உள்ள கிளைச் செலவுகள் எதுவும் இல்லை.")
-        else:
-            for ex in pending_expenses:
-                b_name = ex.get("branches", {}).get("branch_name", "Branch")
-                with st.expander(f"📌 செலவு: {ex['expense_head']} | கிளை: {b_name} | தொகை: ₹{float(ex['amount']):,.2f} | வவுச்சர்: {ex.get('voucher_no', '-')}"):
-                    st.write(f"• **விளக்கம்:** {ex.get('description', '-')}")
-                    st.write(f"• **பதிவு செய்தவர்:** {ex.get('created_by', '-')}")
-                    st.write(f"• **தேதி:** {ex.get('expense_date', '-')}")
-
-                    st.markdown("##### 💵 செலவுக்கான டினாமினேஷன் விவரம்:")
-                    st.json(ex.get("denomination_details", {}))
-
-                    col_ex1, col_ex2 = st.columns(2)
-                    with col_ex1:
-                        if st.button("✅ அங்கீகரி (Approve Expense)", key=f"app_ex_{ex['id']}", type="primary"):
-                            try:
-                                supabase.table("branch_expenses").update({"status": "Approved", "approved_by": st.session_state.username}).eq("id", ex["id"]).execute()
-                                st.success("செலவு அங்கீகரிக்கப்பட்டு கல்லாவில் இருந்து நோட்டுகள் கணக்கிடப்பட்டன!")
-                                st.rerun()
-                            except Exception as e:
-                                st.error(f"பிழை: {e}")
-                    with col_ex2:
-                        if st.button("❌ நிராகரி (Reject)", key=f"rej_ex_{ex['id']}", type="secondary"):
-                            supabase.table("branch_expenses").update({"status": "Rejected", "approved_by": st.session_state.username}).eq("id", ex["id"]).execute()
-                            st.warning("செலவு நிராகரிக்கப்பட்டது.")
-                            st.rerun()
 
     with ops_tab2:
         st.subheader("👤 புதிய வாடிக்கையாளர் KYC ஒப்புதல்")
         pending_kyc = supabase.table("customers").select("*").eq("kyc_status", "Pending_KYC_Approval").execute().data or []
         if not pending_kyc:
-            st.info("✅ எந்த KYC-ಯும் நிலுவையில் இல்லை.")
+            st.info("✅ எந்த KYC-யும் நிலுவையில் இல்லை.")
         else:
             for pc in pending_kyc:
-                with st.expander(f"🆕 {pc['customer_code']} | {pc['name']}"):
-                    k_c1, k_c2, k_c3 = st.columns([1.5, 1, 1])
-                    with k_c1:
-                        st.write(f"👤 பெயர்: {pc['name']} | 📞 {pc['mobile']}")
-                        st.write(f"🏠 முகவரி: {pc.get('address', '-')}")
-                    with k_c2:
-                        if pc.get("photo_url"):
-                            st.image(pc["photo_url"], width=130)
-                    with k_c3:
-                        if pc.get("id_proof_url"):
-                            st.markdown(f"🪪 [அடையாள ஆவணம்]({pc['id_proof_url']})")
-                        if pc.get("address_proof_url"):
-                            st.markdown(f"📄 [முகவரி ஆவணம்]({pc['address_proof_url']})")
-
+                with st.expander(f"🆕 {pc['name']}"):
                     if st.button("✅ அங்கீகரி", key=f"app_k_{pc['id']}", type="primary"):
                         supabase.table("customers").update({"kyc_status": "Approved", "is_active": True}).eq("id", pc["id"]).execute()
                         st.success("அங்கீகரிக்கப்பட்டார்!")
                         st.rerun()
 
     with ops_tab3:
-        st.subheader("📝 வாடிக்கையாளர் விவரத் திருத்தக் கோரிக்கைகள் (Profile Update Requests)")
-        try:
-            pending_reqs = supabase.table("customer_update_requests").select("*, customers(*), branches(branch_name)").eq("status", "Pending_Approval").order("id", desc=True).execute().data or []
-        except Exception:
-            try:
-                pending_reqs = supabase.table("customer_update_requests").select("*").eq("status", "Pending_Approval").order("id", desc=True).execute().data or []
-            except Exception:
-                pending_reqs = []
+        st.subheader("📝 வாடிக்கையாளர் விவரத் திருத்தக் கோரிக்கைகள்")
+        pending_reqs = supabase.table("customer_update_requests").select("*, customers(*), branches(branch_name)").eq("status", "Pending_Approval").order("id", desc=True).execute().data or []
         if not pending_reqs:
             st.info("✅ எந்த கோரிக்கைகளும் இல்லை.")
-        else:
-            for u_req in pending_reqs:
-                target_c = u_req.get("customers", {}) or {}
-                b_name = u_req.get("branches", {}).get("branch_name", "Branch")
-                new_d = u_req.get("updated_data", {}) or {}
-                with st.expander(f"📌 {target_c.get('name')} | கிளை: {b_name} | காரணம்: {u_req.get('change_reason')}"):
-                    comp_col1, comp_col2 = st.columns(2)
-                    with comp_col1:
-                        st.markdown("#### 🔴 பழைய விவரங்கள்")
-                        st.write(f"பெயர்: {target_c.get('name')}")
-                        st.write(f"மொபைல்: {target_c.get('mobile')}")
-                        st.write(f"முகவரி: {target_c.get('address')}")
-                    with comp_col2:
-                        st.markdown("#### 🟢 புதிய விவரங்கள்")
-                        st.write(f"பெயர்: {new_d.get('name')}")
-                        st.write(f"மொபைல்: {new_d.get('mobile')}")
-                        st.write(f"முகவரி: {new_d.get('address')}")
-
-                    if st.button("✅ ஏற்றுக்கொள் & புதுப்பி", key=f"app_u_{u_req['id']}", type="primary"):
-                        supabase.table("customers").update(new_d).eq("id", target_c["id"]).execute()
-                        supabase.table("customer_update_requests").update({"status": "Approved", "reviewed_by": st.session_state.username}).eq("id", u_req["id"]).execute()
-                        st.success("மாற்றப்பட்டது!")
-                        st.rerun()
 
     with ops_tab4:
-        st.subheader("📞 பரிவர்த்தனை அழைப்பு சரிபார்ப்பு (Transaction Call Verification)")
-        st.caption("கிளை ஊழியர்களால் முடிக்கப்பட்டு, வாடிக்கையாளர் அழைப்புச் சரிபார்ப்புக்காக நிலுவையில் உள்ள வருகைகள்.")
-
-        try:
-            ops_visits = (
-                supabase.table("customer_visits")
-                .select("*, customers(name, mobile, mobile2), transactions(*), branches(branch_name)")
-                .eq("status", "Pending_Calling_Verification")
-                .order("id", desc=True)
-                .execute()
-                .data or []
-            )
-        except Exception:
-            try:
-                ops_visits = (
-                    supabase.table("customer_visits")
-                    .select("*")
-                    .eq("status", "Pending_Calling_Verification")
-                    .order("id", desc=True)
-                    .execute()
-                    .data or []
-                )
-            except Exception:
-                ops_visits = []
-
+        st.subheader("📞 பரிவர்த்தனை அழைப்பு சரிபார்ப்பு")
+        ops_visits = supabase.table("customer_visits").select("*, customers(name, mobile, mobile2), transactions(*), branches(branch_name)").eq("status", "Pending_Calling_Verification").order("id", desc=True).execute().data or []
         if not ops_visits:
-            st.info("✅ சரிபார்க்க வேண்டிய வருகைகள் எதுவும் நிலுவையில் இல்லை.")
-        else:
-            for item in ops_visits:
-                cust = item.get("customers", {}) or {}
-                b_name = item.get("branches", {}).get("branch_name", "கிளை")
-                txns = item.get("transactions", []) or []
-
-                with st.expander(f"🔔 வருகை எண்: {item['visit_no']} | வாடிக்கையாளர்: {cust.get('name', '-')} | கிளை: {b_name} | நிகரத் தொகை: ₹{float(item.get('net_cash_amount', 0)):,.2f}"):
-                    col_o1, col_o2 = st.columns(2)
-                    with col_o1:
-                        st.markdown("##### 👤 வாடிக்கையாளர் விவரங்கள்:")
-                        st.write(f"• **பெயர்:** {cust.get('name', '-')}")
-                        st.write(f"• **முதன்மை மொபைல்:** `{cust.get('mobile', '-')}`")
-                        st.write(f"• **கூடுதல் மொபைல்:** `{cust.get('mobile2', '-')}`")
-                    with col_o2:
-                        st.markdown("##### 💳 பரிவர்த்தனை & செலுத்தும் முறை:")
-                        st.write(f"• **பரிமாற்ற முறை:** {item.get('payment_mode', 'Cash')}")
-                        if item.get('bank_reference_no'):
-                            st.write(f"• **UTR / Ref எண்:** `{item.get('bank_reference_no')}`")
-                        st.write(f"• **OTP சரிபார்ப்பு:** {'🟢 Verified' if item.get('otp_verified') else '🔴 Pending'}")
-
-                    st.markdown("---")
-                    st.markdown("##### 🛒 இந்த வருகையில் மேற்கொள்ளப்பட்ட நடவடிக்கைகள் (Transactions):")
-                    if txns:
-                        for idx, t in enumerate(txns, 1):
-                            st.markdown(f"**{idx}. {t.get('transaction_type', '-')}** | பணியாளர்: `{t.get('staff_name', '-')}`")
-                            st.write(f"   • பட்டுவாடா: ₹{float(t.get('paid_amount', 0)):,.2f} | வரவு: ₹{float(t.get('received_amount', 0)):,.2f}")
-                            st.write(f"   • குறிப்பு: {t.get('remarks', '-')}")
-                            st.markdown("")
-                    else:
-                        st.warning("⚠️ இந்த வருகையில் நடவடிக்கைகள் எதுவும் பதிவு செய்யப்படவில்லை.")
-
-                    st.markdown("---")
-                    if st.button("✅ தொலைபேசி வழி சரிபார்க்கப்பட்டது (Approve & Send)", key=f"v_call_{item['id']}", type="primary"):
-                        try:
-                            supabase.table("customer_visits").update({"status": "Pending_Branch_Docs"}).eq("id", item["id"]).execute()
-                            st.success(f"✅ வருகை {item['visit_no']} சரிபார்க்கப்பட்டது!")
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"பிழை: {e}")
+            st.info("✅ சரிபார்க்க வேண்டிய வருகைகள் இல்லை.")
 
     with ops_tab5:
         st.subheader("📑 FD பாண்ட் மற்றும் RD சான்றிதழ் ஜெனரேட்டர்")
-        st.caption("கிளைகளில் திறக்கப்பட்ட புதிய Fixed Deposit மற்றும் Recurring Deposit கணக்குகளுக்கான பாண்ட் மற்றும் சான்றிதழ்களைப் பதிவிறக்கம் செய்க.")
-
         fd_rd_txns = supabase.table("transactions").select("*, customer_visits(visit_no, customers(name, customer_code))").in_("transaction_type", ["FD Open (புதிய வைப்பு நிதி)", "RD Open (புதிய RD சேமிப்பு)"]).order("id", desc=True).execute().data or []
-
         if not fd_rd_txns:
-            st.info("✅ பாண்ட் அல்லது சான்றிதழ் வழங்க வேண்டிய புதிய கணக்குகள் எதுவும் இல்லை.")
-        else:
-            for txn in fd_rd_txns:
-                t_type = txn.get("transaction_type")
-                t_det = txn.get("transaction_details", {}) or {}
-                visit_info = txn.get("customer_visits", {}) or {}
-                cust_info = visit_info.get("customers", {}) or {}
-
-                doc_title = "FD பாண்ட் (Fixed Deposit Bond)" if "FD" in t_type else "RD சான்றிதழ் (Recurring Deposit Certificate)"
-
-                with st.expander(f"📌 {t_type} | கணக்கு எண்: {t_det.get('account_no', '-')} | வாடிக்கையாளர்: {cust_info.get('name', '-')}"):
-                    c_d1, c_d2 = st.columns(2)
-                    with c_d1:
-                        st.write(f"• **வாடிக்கையாளர் பெயர்:** {cust_info.get('name', '-')}")
-                        st.write(f"• **கணக்கு எண்:** `{t_det.get('account_no', '-')}`")
-                        st.write(f"• **தொகை:** ₹{float(t_det.get('deposit_amount') or t_det.get('installment_amount') or 0):,.2f}")
-                    with c_d2:
-                        st.write(f"• **நாமினி:** {t_det.get('nominee', '-')}")
-                        st.write(f"• **உறவுமுறை & வயது:** {t_det.get('relation', '-')}, வயது: {t_det.get('age', '-')}")
-                        st.write(f"• **முகவரி:** {t_det.get('address', '-')}")
-
-                    print_data = {
-                        "account_no": t_det.get('account_no'),
-                        "customer_name": cust_info.get('name'),
-                        "customer_code": cust_info.get('customer_code'),
-                        "deposit_amount": t_det.get('deposit_amount'),
-                        "installment_amount": t_det.get('installment_amount'),
-                        "nominee": t_det.get('nominee'),
-                        "relation": t_det.get('relation'),
-                        "age": t_det.get('age'),
-                        "address": t_det.get('address')
-                    }
-
-                    if "FD" in t_type:
-                        pdf_buffer = generate_fd_bond_pdf(print_data)
-                        file_name = f"FD_Bond_{t_det.get('account_no', 'Receipt')}.pdf"
-                    else:
-                        pdf_buffer = generate_rd_certificate_pdf(print_data)
-                        file_name = f"RD_Certificate_{t_det.get('account_no', 'Receipt')}.pdf"
-
-                    st.download_button(
-                        label=f"📥 {doc_title}-ஐப் பதிவிறக்குக (Download PDF)",
-                        data=pdf_buffer,
-                        file_name=file_name,
-                        mime="application/pdf",
-                        key=f"dl_pdf_{txn['id']}"
-                    )
+            st.info("✅ புதிய கணக்குகள் எதுவும் இல்லை.")
 
 # ----------------------------------------------------
-# C. தணிக்கையர் திரை (AUDITOR DESK)
+# C. தணிக்கையர் மேசை (AUDITOR DESK)
 # ----------------------------------------------------
-elif st.session_state.user_role == "Auditor":
+elif user_role == "Auditor":
     st.header("🔍 தணிக்கையர் பணிப்பாய்வு (Auditor Verification)")
     pending_visits = supabase.table("customer_visits").select("*, customers(*), transactions(*), audit_records(*)").eq("status", "Submitted_to_Auditor").execute().data or []
-    for item in pending_visits:
-        with st.expander(f"வருகை: {item['visit_no']} | {item.get('customers', {}).get('name')}"):
-            if item.get("transactions"):
-                st.dataframe(pd.DataFrame(item["transactions"]))
-            audit_recs = item.get("audit_records", [])
-            if audit_recs and audit_recs[0].get("document_urls"):
-                for doc_url in audit_recs[0]["document_urls"]:
-                    st.markdown(f"- 🔗 [ஆவணத்தைப் பார்க்க]({doc_url})")
-            if st.button("அங்கீகரி (Approve)", key=f"aud_app_{item['id']}", type="primary"):
-                supabase.table("customer_visits").update({"status": "Approved"}).eq("id", item["id"]).execute()
-                st.success("அங்கீகரிக்கப்பட்டது!")
-                st.rerun()
+    if not pending_visits:
+        st.info("தணிக்கைக்கு நிலுவையில் உள்ள வருகைகள் இல்லை.")
+    else:
+        for item in pending_visits:
+            with st.expander(f"வருகை: {item['visit_no']}"):
+                if st.button("அங்கீகரி (Approve)", key=f"aud_app_{item['id']}", type="primary"):
+                    supabase.table("customer_visits").update({"status": "Approved"}).eq("id", item["id"]).execute()
+                    st.success("அங்கீகரிக்கப்பட்டது!")
+                    st.rerun()
 
 # ----------------------------------------------------
-# D. கிளை செயல்பாடுகள் திரை (BRANCH FLOW)
+# D. கிளைப் பணியாளர் மேசை (BRANCH FLOW - STAFF DESK)
 # ----------------------------------------------------
 else:
     branch_tab1, branch_tab2, branch_tab3, branch_tab4, branch_tab5, branch_tab6 = st.tabs([
@@ -1551,704 +1223,48 @@ else:
         "⚠️ விளக்கங்கள்", "💼 கிளை கல்லா", "🏦 HO பணப் பரிமாற்றம்", "📈 காரணப் பணியாளர் அறிக்கை"
     ])
 
-    with branch_tab6:
-        # வரி 1634-ல் உள்ள பழைய வரியை இப்படி மாற்றவும்:
-        render_staff_attribution_report(
-    selected_branch_id=st.session_state.branch_id, 
-    key_suffix="branch_main_report"
-)
+    with branch_tab1:
+        st.subheader("🛒 கவுண்ட்டர் வருகை & OTP (Counter Visit)")
+        if st.session_state.get("current_visit") is None:
+            st.info("புதிய வருகையைத் தொடங்க வாடிக்கையாளரைத் தேர்ந்தெடுக்கவும்.")
+        else:
+            st.success("வருகை فعال உள்ளது.")
+
+    with branch_tab2:
+        st.subheader("📁 கிளை ஆவணங்கள் பதிவேற்றம் (Upload Docs Desk)")
+        branch_pending = supabase.table("customer_visits").select("*, customers(name, mobile), transactions(*)").eq("branch_id", st.session_state.branch_id).in_("status", ["Pending_Branch_Docs", "Pending_Calling_Verification"]).order("id", desc=True).execute().data or []
+        if not branch_pending:
+            st.info("தற்போது ஆவணங்கள் ஏற்ற வேண்டிய வருகைகள் எதுவும் இல்லை.")
+
+    with branch_tab3:
+        st.subheader("⚠️ தலைமை அலுவலக விளக்கங்கள் & மறுப்புகள்")
+        clarification_visits = supabase.table("customer_visits").select("*, customers(name, mobile), transactions(*)").eq("branch_id", st.session_state.branch_id).eq("status", "Needs_Clarification").execute().data or []
+        if not clarification_visits:
+            st.info("✅ எந்த விளக்கங்களும் நிலுவையில் இல்லை.")
+
+    with branch_tab4:
+        st.subheader("💸 கிளை செலவுப் பதிவு & சில்லறை மேலாண்மை (Branch Expense Desk)")
+        b_exp_logs = []
+        if "branch_id" in st.session_state and st.session_state.branch_id is not None:
+            try:
+                b_branch_id = int(st.session_state.branch_id) if str(st.session_state.branch_id).isdigit() else st.session_state.branch_id
+                b_exp_logs = supabase.table("branch_expenses").select("*").eq("branch_id", b_branch_id).order("id", desc=True).limit(15).execute().data or []
+            except Exception as e:
+                st.error(f"பிழை: {e}")
 
     with branch_tab5:
         st.subheader("🏦 தலைமையக பணப் பரிமாற்றம் (Head Office ⇄ Branch Fund Transfer Desk)")
-        st.caption("தலைமையகத்திலிருந்து ரொக்கம் பெறுதல் அல்லது தலைமையகத்திற்கு ரொக்கம் அனுப்புதல். (அனைத்துப் பரிமாற்றங்களும் ஆப்பரேஷன்ஸ் ஒப்புதலுக்குப் பிறகே கல்லாவில் கணக்கிடப்படும்).")
-
-        curr_b_drawer = get_current_branch_cash_drawer(st.session_state.branch_id)
-
-        with st.expander("💼 தற்போதைய நேரடி கல்லா கையிருப்பு (Live Approved Stock)", expanded=False):
-            bd1, bd2, bd3, bd4 = st.columns(4)
-            bd1.metric("₹500 தாள்கள்", f"{curr_b_drawer['500']}")
-            bd1.metric("₹20 தாள்கள்", f"{curr_b_drawer['20']}")
-            bd2.metric("₹200 தாள்கள்", f"{curr_b_drawer['200']}")
-            bd2.metric("₹10 தாள்கள்", f"{curr_b_drawer['10']}")
-            bd3.metric("₹100 தாள்கள்", f"{curr_b_drawer['100']}")
-            bd3.metric("₹5 தாள்கள்", f"{curr_b_drawer['5']}")
-            bd4.metric("₹50 தாள்கள்", f"{curr_b_drawer['50']}")
-            bd4.metric("நாணயங்கள் (₹)", f"{curr_b_drawer['coins']:,.2f}")
-
-        with st.form("branch_fund_transfer_flow_form", clear_on_submit=True):
-            st.markdown("##### 🔄 புதிய பணப் பரிமாற்றப் பதிவு (Submit for Operations Approval)")
-            b_ft_c1, b_ft_c2, b_ft_c3 = st.columns(3)
-            with b_ft_c1:
-                b_ft_dir = st.selectbox(
-                    "பரிமாற்ற திசை (Direction) *:",
-                    [
-                        "HO_TO_BRANCH (தலைமையகத்திலிருந்து கிளைக்கு ரொக்கம் பெறுதல்)",
-                        "BRANCH_TO_HO (கிளையிலிருந்து தலைமையகத்திற்கு ரொக்கம் அனுப்புதல்)"
-                    ],
-                    key="b_ft_dir_select"
-                )
-            with b_ft_c2:
-                b_ft_mode = st.selectbox("அனுப்பும் / பெறும் முறை *:", ["Cash (ரொக்கம்)", "Bank Transfer (வங்கி வரவு)"], key="b_ft_mode_select")
-            with b_ft_c3:
-                b_ft_ref = st.text_input("குறிப்பு எண் / UTR No / ரசீது எண் *:", placeholder="எ.கா: HO-PAY-101 / UTR...", key="b_ft_ref_input")
-
-            st.markdown("##### 💵 ரூபாய் நோட்டுகள் விவரம் (Denominations):")
-            bf_1, bf_2, bf_3, bf_4 = st.columns(4)
-            is_sending_to_ho = "BRANCH_TO_HO" in b_ft_dir
-
-            with bf_1:
-                m_500 = max(0, curr_b_drawer['500']) if is_sending_to_ho else 100000
-                b_t_500 = st.number_input(f"₹500 {'(இருப்பு:'+str(curr_b_drawer['500'])+')' if is_sending_to_ho else ''}", min_value=0, max_value=m_500, step=1, key="bt_500")
-                m_20 = max(0, curr_b_drawer['20']) if is_sending_to_ho else 100000
-                b_t_20 = st.number_input(f"₹20 {'(இருப்பு:'+str(curr_b_drawer['20'])+')' if is_sending_to_ho else ''}", min_value=0, max_value=m_20, step=1, key="bt_20")
-            with bf_2:
-                m_200 = max(0, curr_b_drawer['200']) if is_sending_to_ho else 100000
-                b_t_200 = st.number_input(f"₹200 {'(இருப்பு:'+str(curr_b_drawer['200'])+')' if is_sending_to_ho else ''}", min_value=0, max_value=m_200, step=1, key="bt_200")
-                m_10 = max(0, curr_b_drawer['10']) if is_sending_to_ho else 100000
-                b_t_10 = st.number_input(f"₹10 {'(இருப்பு:'+str(curr_b_drawer['10'])+')' if is_sending_to_ho else ''}", min_value=0, max_value=m_10, step=1, key="bt_10")
-            with bf_3:
-                m_100 = max(0, curr_b_drawer['100']) if is_sending_to_ho else 100000
-                b_t_100 = st.number_input(f"₹100 {'(இருப்பு:'+str(curr_b_drawer['100'])+')' if is_sending_to_ho else ''}", min_value=0, max_value=m_100, step=1, key="bt_100")
-                m_5 = max(0, curr_b_drawer['5']) if is_sending_to_ho else 100000
-                b_t_5 = st.number_input(f"₹5 {'(இருப்பு:'+str(curr_b_drawer['5'])+')' if is_sending_to_ho else ''}", min_value=0, max_value=m_5, step=1, key="bt_5")
-            with bf_4:
-                m_50 = max(0, curr_b_drawer['50']) if is_sending_to_ho else 100000
-                b_t_50 = st.number_input(f"₹50 {'(இருப்பு:'+str(curr_b_drawer['50'])+')' if is_sending_to_ho else ''}", min_value=0, max_value=m_50, step=1, key="bt_50")
-                m_coins = float(curr_b_drawer['coins']) if is_sending_to_ho else 100000.0
-                b_t_coins = st.number_input(f"நாணயங்கள் (₹)", min_value=0.0, max_value=m_coins, step=1.0, key="bt_coins")
-
-            calc_b_cash = (
-                (b_t_500 * 500) + (b_t_200 * 200) + (b_t_100 * 100) + (b_t_50 * 50) +
-                (b_t_20 * 20) + (b_t_10 * 10) + (b_t_5 * 5) + b_t_coins
-            )
-
-            if "Cash" in b_ft_mode:
-                b_final_fund_amt = float(calc_b_cash)
-                st.info(f"💵 **நோட்டுகளின் கூட்டுத்தொகை மொத்தத் தொகை: ₹{b_final_fund_amt:,.2f}**")
-            else:
-                b_final_fund_amt = st.number_input("வங்கிப் பரிவர்த்தனைத் தொகை (₹) *:", min_value=0.0, step=5000.0, key="b_bank_amt_in")
-
-            st.caption("ℹ️ குறிப்பு: இது ஆப்பரேஷன்ஸ் ஒப்புதலுக்குச் செல்லும். ஆப்பரேஷன்ஸ் அங்கீகரித்த பிறகே கல்லாவில் சேரும் / கழியும்.")
-
-            if st.form_submit_button("பணப் பரிமாற்றத்தை ஆப்பரேஷன்ஸ் ஒப்புதலுக்கு அனுப்புக (Submit)", type="primary"):
-                if b_final_fund_amt > 0:
-                    pure_dir = "HO_TO_BRANCH" if "HO_TO_BRANCH" in b_ft_dir else "BRANCH_TO_HO"
-                    pure_m = "Cash" if "Cash" in b_ft_mode else "Bank Transfer"
-                    try:
-                        supabase.table("branch_fund_transfers").insert({
-                            "branch_id": st.session_state.branch_id,
-                            "transfer_date": str(date.today()),
-                            "transfer_type": pure_dir,
-                            "amount": b_final_fund_amt,
-                            "payment_mode": pure_m,
-                            "reference_no": b_ft_ref.strip(),
-                            "denomination_details": {
-                                "500": b_t_500, "200": b_t_200, "100": b_t_100, "50": b_t_50,
-                                "20": b_t_20, "10": b_t_10, "5": b_t_5, "coins": b_t_coins
-                            } if pure_m == "Cash" else {},
-                            "created_by": st.session_state.username,
-                            "status": "Pending_Approval"
-                        }).execute()
-
-                        st.success(f"✅ ₹{b_final_fund_amt:,.2f} பணப் பரிமாற்றம் ஆப்பரேஷன்ஸ் ஒப்புதலுக்கு அனுப்பப்பட்டது!")
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"பிழை: {e}")
-                else:
-                    st.error("நோட்டுகள் அல்லது பரிமாற்றத் தொகையை உள்ளிடவும்.")
-
-        st.markdown("---")
-        st.subheader("📋 உங்கள் கிளையின் சமீபத்திய பணப் பரிமாற்றங்கள் & ஒப்புதல் நிலை")
-
-b_fund_logs = []
-if "branch_id" in st.session_state and st.session_state.branch_id:
-        try:
-            b_fund_logs = (
-                supabase.table("branch_fund_transfers")
-                .select("*")
-                .eq("branch_id", st.session_state.branch_id)
-                .order("id", desc=True)
-                .limit(20)
-                .execute()
-                .data or []
-            )
-        except Exception as e:
-            st.error(f"Supabase API பிழை: {e}")
-            b_fund_logs = []
-else:
-        st.warning("⚠️ கிளை ID (Branch ID) கண்டறியப்படவில்லை.")
-
-    # இந்த if நிபந்தனை வெளியில் இருக்க வேண்டும், அப்பொழுதுதான் டாட்டா இருந்தால் டேபிள் காட்டும்
+        b_fund_logs = []
+        if "branch_id" in st.session_state and st.session_state.branch_id:
+            try:
+                b_fund_logs = supabase.table("branch_fund_transfers").select("*").eq("branch_id", st.session_state.branch_id).order("id", desc=True).limit(20).execute().data or []
+            except Exception:
+                b_fund_logs = []
         if b_fund_logs:
-            st.dataframe(
-            pd.DataFrame([
-                {
-                    "தேதி": f.get("transfer_date", "-"),
-                    "பரிமாற்றம்": "📥 HO ➔ கிளைக்கு பணம் பெறுதல்" if f.get("transfer_type") == "HO_TO_BRANCH" else "📤 கிளை ➔ HO-க்கு அனுப்புதல்",
-                    "தொகை (₹)": f"₹{float(f.get('amount', 0)):,.2f}",
-                    "முறை": f.get("payment_mode", "Cash"),
-                    "நிலை (Status)": "🟢 Approved (ஏற்கப்பட்டது)" if f.get("status") == "Approved" else ("🔴 Rejected (மறுக்கப்பட்டது)" if f.get("status") == "Rejected" else "🟡 Pending (ஆப்பரேஷன்ஸ் ஒப்புதல் நிலுவை)"),
-                    "குறிப்பு / UTR": f.get("reference_no", "-"),
-                    "பதிவு செய்தவர்": f.get("created_by", "-")
-                } for f in b_fund_logs
-            ]), 
-            use_container_width=True
-        )
-        with branch_tab4:
-                st.subheader("💸 கிளை செலவுப் பதிவு & சில்லறை மேலாண்மை (Branch Expense Desk)")
-                st.caption("செலவுத் தொகைக்கு நாம் கொடுத்த நோட்டுகளையும், கடைக்காரர் திருப்பிக் கொடுத்த மீதி சில்லறையையும் (Cash Return) சரியாக உள்ளிடவும்.")
-    
-                curr_b_drawer = get_current_branch_cash_drawer(st.session_state.branch_id)
-    
-                with st.expander("💼 தற்போதைய நேரடி கல்லா கையிருப்பு (Live Approved Stock)", expanded=False):
-                    bd1, bd2, bd3, bd4 = st.columns(4)
-                    bd1.metric("₹500 தாள்கள்", f"{curr_b_drawer['500']}")
-                    bd1.metric("₹20 தாள்கள்", f"{curr_b_drawer['20']}")
-                    bd2.metric("₹200 தாள்கள்", f"{curr_b_drawer['200']}")
-                    bd2.metric("₹10 தாள்கள்", f"{curr_b_drawer['10']}")
-                    bd3.metric("₹100 தாள்கள்", f"{curr_b_drawer['100']}")
-                    bd3.metric("₹5 தாள்கள்", f"{curr_b_drawer['5']}")
-                    bd4.metric("₹50 தாள்கள்", f"{curr_b_drawer['50']}")
-                    bd4.metric("நாணயங்கள் (₹)", f"{curr_b_drawer['coins']:,.2f}")
-    
-                with st.form("branch_expense_flow_form", clear_on_submit=True):
-                    st.markdown("##### 🔄 புதிய செலவுப் பதிவு (Submit for Operations Approval)")
-                    ex_c1, ex_c2, ex_c3 = st.columns(3)
-                    with ex_c1:
-                        exp_head = st.selectbox(
-                            "செலவினத் தலைப்பு (Expense Head) *:",
-                            [
-                                "Rent (வாடகை)", "Electricity (மின் கட்டணம்)", "Staff Salary (சம்பளம்)",
-                                "Water / Staffwelfar (நீர் & பணியாளர் சார் செலவு)", "Stationery / Printing (ஸ்டேஷனரி)",
-                                "Maintenance / Repair (பராமரிப்பு)", "Transport / Courier (போக்குவரத்து)", "Miscellaneous (இதர செலவுகள்)"
-                            ],
-                            key="exp_head_sel"
-                        )
-                    with ex_c2:
-                        actual_exp_amount = st.number_input("உண்மையான செலவுத் தொகை (Actual Expense ₹) *:", min_value=1.0, step=10.0, key="actual_exp_amt")
-                    with ex_c3:
-                        exp_ref = st.text_input("வவுச்சர் / பில் எண் *:", placeholder="எ.கா: VOU-101...", key="exp_ref_in")
-    
-                    exp_desc = st.text_area("செலவுக்கான விளக்கம் / காரணங்கள் *:", placeholder="எ.கா: தேநீர் மற்றும் சிற்றுண்டி வாங்கியது...", key="exp_desc_in")
-    
-                    st.markdown("---")
-                    col_ex_in, col_ex_out = st.columns(2)
-    
-                    with col_ex_out:
-                        st.markdown("##### 📤 நாம் கொடுத்த நோட்டுகள் (Cash OUT):")
-                        st.caption("செலவுக்காகவும் சில்லறை வாங்குவதற்காகவும் நாம் கொடுத்தவை:")
-                        o_500 = st.number_input("₹500 கொடுத்தது", min_value=0, max_value=curr_b_drawer['500'], step=1, key="ex_out_500")
-                        o_200 = st.number_input("₹200 கொடுத்தது", min_value=0, max_value=curr_b_drawer['200'], step=1, key="ex_out_200")
-                        o_100 = st.number_input("₹100 கொடுத்தது", min_value=0, max_value=curr_b_drawer['100'], step=1, key="ex_out_100")
-                        o_50  = st.number_input("₹50 கொடுத்தது", min_value=0, max_value=curr_b_drawer['50'], step=1, key="ex_out_50")
-                        o_20  = st.number_input("₹20 கொடுத்தது", min_value=0, max_value=curr_b_drawer['20'], step=1, key="ex_out_20")
-                        o_10  = st.number_input("₹10 கொடுத்தது", min_value=0, max_value=curr_b_drawer['10'], step=1, key="ex_out_10")
-                        o_5   = st.number_input("₹5 கொடுத்தது", min_value=0, max_value=curr_b_drawer['5'], step=1, key="ex_out_5")
-                        o_coins = st.number_input("நாணயங்கள் கொடுத்தது (₹)", min_value=0.0, max_value=float(curr_b_drawer['coins']), step=1.0, key="ex_out_coins")
-    
-                        total_cash_out = (o_500*500) + (o_200*200) + (o_100*100) + (o_50*50) + (o_20*20) + (o_10*10) + (o_5*5) + o_coins
-                        st.markdown(f"**கொடுத்த மொத்தப் பணம்:** `₹{total_cash_out:,.2f}`")
-    
-                    with col_ex_in:
-                        st.markdown("##### 📥 கடைக்காரர் திருப்பிக் கொடுத்த மீதி (Cash IN - Return):")
-                        st.caption("கடைக்காரர் மீதியாகத் திருப்பிக் கொடுத்த நோட்டுகள்:")
-                        i_500 = st.number_input("₹500 மீதி பெற்றது", min_value=0, step=1, key="ex_in_500")
-                        i_200 = st.number_input("₹200 மீதி பெற்றது", min_value=0, step=1, key="ex_in_200")
-                        i_100 = st.number_input("₹100 மீதி பெற்றது", min_value=0, step=1, key="ex_in_100")
-                        i_50  = st.number_input("₹50 மீதி பெற்றது", min_value=0, step=1, key="ex_in_50")
-                        i_20  = st.number_input("₹20 மீதி பெற்றது", min_value=0, step=1, key="ex_in_20")
-                        i_10  = st.number_input("₹10 மீதி பெற்றது", min_value=0, step=1, key="ex_in_10")
-                        i_5   = st.number_input("₹5 மீதி பெற்றது", min_value=0, step=1, key="ex_in_5")
-                        i_coins = st.number_input("நாணயங்கள் மீதி பெற்றது (₹)", min_value=0.0, step=1.0, key="ex_in_coins")
-    
-                        total_cash_in = (i_500*500) + (i_200*200) + (i_100*100) + (i_50*50) + (i_20*20) + (i_10*10) + (i_5*5) + i_coins
-                        st.markdown(f"**பெற்ற மீதி மொத்தப் பணம்:** `₹{total_cash_in:,.2f}`")
-    
-                    net_deducted_cash = total_cash_out - total_cash_in
-    
-                    st.markdown("---")
-                    col_m1, col_m2, col_m3 = st.columns(3)
-                    col_m1.metric("உண்மையான செலவு", f"₹{actual_exp_amount:,.2f}")
-                    col_m2.metric("கல்லாவில் குறையும் நிகரப் பணம்", f"₹{net_deducted_cash:,.2f}")
-    
-                    is_tally = (net_deducted_cash == actual_exp_amount)
-                    if is_tally:
-                        col_m3.success("✅ கணக்கீடு சரியானது!")
-                    else:
-                        col_m3.error(f"❌ வித்தியாசம்: ₹{abs(actual_exp_amount - net_deducted_cash):,.2f}")
-    
-                    st.caption("ℹ️ குறிப்பு: ஆப்பரேஷன்ஸ் அங்கீகரித்த பின்னரே கல்லாவில் இருந்து நிகரப் பணம் கழியும்.")
-    
-                    if st.form_submit_button("செலவுப் பதிவை ஆப்பரேஷன்ஸ் ஒப்புதலுக்கு அனுப்புக", type="primary"):
-                        if is_tally and actual_exp_amount > 0 and exp_ref.strip() and exp_desc.strip():
-                            try:
-                                supabase.table("branch_expenses").insert({
-                                    "branch_id": st.session_state.branch_id,
-                                    "expense_date": str(date.today()),
-                                    "expense_head": exp_head,
-                                    "amount": float(actual_exp_amount),
-                                    "voucher_no": exp_ref.strip(),
-                                    "description": exp_desc.strip(),
-                                    "denomination_details": {
-                                        "out": {"500": o_500, "200": o_200, "100": o_100, "50": o_50, "20": o_20, "10": o_10, "5": o_5, "coins": o_coins},
-                                        "in": {"500": i_500, "200": i_200, "100": i_100, "50": i_50, "20": i_20, "10": i_10, "5": i_5, "coins": i_coins},
-                                        "net_deducted": net_deducted_cash
-                                    },
-                                    "created_by": st.session_state.username,
-                                    "status": "Pending_Approval"
-                                }).execute()
-    
-                                st.success(f"✅ ₹{actual_exp_amount:,.2f} செலவுப் பதிவு ஆப்பரேஷன்ஸ் ஒப்புதலுக்கு அனுப்பப்பட்டது!")
-                                st.rerun()
-                            except Exception as e:
-                                st.error(f"பிழை: {e}")
-                        else:
-                            st.error("⚠️ உண்மையான செலவுத் தொகையும், (கொடுத்த பணம் - மீதிப் பணம்) கணக்கீடும் சரியாகப் பொருந்த வேண்டும்.")
-    
-                st.markdown("---")
-                st.subheader("📋 கிளை செலவுகளின் சமீபத்திய நிலை (Expense Logs)")
+            st.dataframe(pd.DataFrame(b_fund_logs), use_container_width=True)
 
-b_exp_logs = []
-if "branch_id" in st.session_state and st.session_state.branch_id is not None:
-        try:
-            # ஒருவேளை branch_id இன்டிஜர் அல்லது யுயுஐடி ஆக இருந்தால் அதற்கு ஏற்ப மாற்றிக் கொள்ளலாம்
-            b_branch_id = int(st.session_state.branch_id) if str(st.session_state.branch_id).isdigit() else st.session_state.branch_id
-            
-            b_exp_logs = (
-                supabase.table("branch_expenses")
-                .select("*")
-                .eq("branch_id", b_branch_id)
-                .order("id", desc=True)
-                .limit(15)
-                .execute()
-                .data or []
-            )
-        except Exception as e:
-            st.error(f"Supabase API பிழை விவரம்: {e}")
-            b_exp_logs = []
-        else:
-            st.warning("⚠️ கிளை ID (Branch ID) காலியாக உள்ளது.")
-    
-        with branch_tab3:
-                st.subheader("⚠️ தலைமை அலுவலக விளக்கங்கள் & மறுப்புகள்")
-                clarification_visits = supabase.table("customer_visits").select("*, customers(name, mobile), transactions(*)").eq("branch_id", st.session_state.branch_id).eq("status", "Needs_Clarification").execute().data or []
-                if not clarification_visits:
-                    st.info("✅ எந்த விளக்கங்களும் நிலுவையில் இல்லை.")
-                else:
-                    for c_item in clarification_visits:
-                        c_cust = c_item.get("customers", {})
-                        with st.expander(f"🚨 {c_item['visit_no']} | {c_cust.get('name')} | ₹{c_item['net_cash_amount']:,.2f}"):
-                            st.error(f"குறிப்பு: {c_item.get('verification_remarks', '-')}")
-                            b_rep = st.text_area("கிளையின் பதில் விளக்கம்:", key=f"rep_{c_item['id']}")
-                            if st.button("பதிலை அனுப்பு", key=f"send_rep_{c_item['id']}", type="primary"):
-                                supabase.table("customer_visits").update({"status": "Submitted_to_Auditor", "verification_remarks": b_rep}).eq("id", c_item["id"]).execute()
-                                st.success("அனுப்பப்பட்டது!")
-                                st.rerun()
-    
-        with branch_tab2:
-                st.subheader("📁 கிளை ஆவணங்கள் பதிவேற்றம் (Upload Docs Desk)")
-                st.caption("தணிக்கைக்கு அனுப்ப வேண்டிய வாடிக்கையாளர் வருகைகள் மற்றும் அவர்களின் வணிக நடவடிக்கைகள்.")
-    
-                branch_pending = (
-                    supabase.table("customer_visits")
-                    .select("*, customers(name, mobile), transactions(*)")
-                    .eq("branch_id", st.session_state.branch_id)
-                    .in_("status", ["Pending_Branch_Docs", "Pending_Calling_Verification"])
-                    .order("id", desc=True)
-                    .execute()
-                    .data or []
-                )
-    
-                if not branch_pending:
-                    st.info("தற்போது ஆவணங்கள் ஏற்ற வேண்டிய வருகைகள் எதுவும் இல்லை.")
-                else:
-                    for b_item in branch_pending:
-                        c_info = b_item.get("customers", {}) or {}
-                        b_txns = b_item.get("transactions", []) or []
-    
-                        with st.expander(f"📄 வருகை எண்: {b_item['visit_no']} | வாடிக்கையாளர்: {c_info.get('name', '-')} (📞 {c_info.get('mobile', '-')}) | நிகரத் தொகை: ₹{float(b_item.get('net_cash_amount', 0)):,.2f}"):
-    
-                            st.markdown("##### 🛒 இந்த வருகையில் மேற்கொள்ளப்பட்ட நடவடிக்கைகள்:")
-                            if b_txns:
-                                for idx, t in enumerate(b_txns, 1):
-                                    st.markdown(f"**{idx}. {t.get('transaction_type', '-')}** | காரணப் பணியாளர்: `{t.get('staff_name', '-')}`")
-                                    st.write(f"   • பட்டுவாடா: ₹{float(t.get('paid_amount', 0)):,.2f} | வரவு: ₹{float(t.get('received_amount', 0)):,.2f}")
-                                    st.write(f"   • குறிப்பு / விவரம்: {t.get('remarks', '-')}")
-                                    st.markdown("")
-                            else:
-                                st.warning("⚠️ இந்த வருகையில் நடவடிக்கைகள் எதுவும் பதிவாகவில்லை.")
-    
-                            st.markdown("---")
-                            up_docs = st.file_uploader(f"ஆவணங்களை இணைக்கவும் ({b_item['visit_no']})", accept_multiple_files=True, key=f"doc_up_{b_item['id']}")
-    
-                            if st.button(f"ஆவணங்களைச் சமர்ப்பித்து தணிக்கைக்கு அனுப்புக ({b_item['visit_no']})", key=f"btn_sub_{b_item['id']}", type="primary"):
-                                if up_docs:
-                                    try:
-                                        links = upload_files_to_supabase(up_docs, b_item["visit_no"])
-                                        supabase.table("customer_visits").update({"status": "Submitted_to_Auditor"}).eq("id", b_item["id"]).execute()
-                                        supabase.table("audit_records").insert({"visit_id": b_item["id"], "document_urls": links, "audit_status": "Pending"}).execute()
-                                        st.success("✅ ஆவணங்கள் வெற்றிகரமாகத் தணிக்கைக்கு அனுப்பப்பட்டுவிட்டன!")
-                                        st.rerun()
-                                    except Exception as e:
-                                        st.error(f"பிழை: {e}")
-                                else:
-                                    st.warning("⚠️ தயவுசெய்து ஆவணங்களைப் பதிவேற்றம் செய்யவும்.")
-    
-        with branch_tab1:
-                staff_res = supabase.table("users").select("name").eq("branch_id", st.session_state.branch_id).eq("is_active", True).execute()
-                current_staff_list = ["Walk-in (நேரடி வருகை)"] + [s["name"] for s in staff_res.data] if staff_res.data else ["Walk-in (நேரடி வருகை)"]
-    
-                if st.session_state.current_visit is None:
-                    st.subheader("படி 1: வாடிக்கையாளர் வருகைப் பதிவு (Visit Token)")
-                    v_type = st.radio("வாடிக்கையாளர் வகை:", ["ஏற்கனவே உள்ள வாடிக்கையாளர் (Existing Customer)", "புதிய வாடிக்கையாளர் பதிவு (New Customer)"], horizontal=True)
-    
-                    if "Existing" in v_type:
-                        search_query = st.text_input("பெயர் / மொபைல் எண் / Customer ID:", placeholder="எ.கா: ராம் அல்லது 98765...", key="live_cust_search")
-                        if len(search_query.strip()) >= 2:
-                            q = search_query.strip()
-                            cust_filter_query = (
-                                supabase.table("customers").select("*").eq("is_active", True)
-                                .neq("kyc_status", "Rejected").neq("kyc_status", "Pending_KYC_Approval")
-                            )
-                            if st.session_state.user_role not in ["Admin", "Auditor", "Operations"]:
-                                cust_filter_query = cust_filter_query.eq("branch_id", st.session_state.branch_id)
-    
-                            matched_custs = cust_filter_query.or_(f"name.ilike.%{q}%,mobile.ilike.%{q}%,customer_code.ilike.%{q}%").limit(20).execute().data or []
-                            if matched_custs:
-                                cust_dropdown_dict = {f"{c['name']} | {c.get('customer_code', '')} | 📞 {c.get('mobile', '')}": c for c in matched_custs}
-                                selected_label = st.selectbox("வாடிக்கையாளர் பட்டியல்:", options=list(cust_dropdown_dict.keys()), key="dd_cust_sel")
-                                selected_cust = cust_dropdown_dict[selected_label]
-    
-                                existing_req_check = (
-                                    supabase.table("customer_update_requests").select("*")
-                                    .eq("customer_id", selected_cust["id"]).eq("status", "Pending_Approval").order("id", desc=True).limit(1).execute().data or []
-                                )
-                                has_pending_update_req = len(existing_req_check) > 0
-    
-                                with st.container(border=True):
-                                    c_col1, c_col2, c_col3 = st.columns([1, 2.5, 1])
-                                    with c_col1:
-                                        if selected_cust.get("photo_url"):
-                                            st.image(selected_cust["photo_url"], width=120)
-                                        else:
-                                            st.info("📷 படம் இல்லை")
-                                    with c_col2:
-                                        st.markdown(f"### {selected_cust['name']} <small style='color:gray;'>({selected_cust.get('customer_code', '')})</small>", unsafe_allow_html=True)
-                                        st.write(f"📞 **முதன்மை:** {selected_cust.get('mobile', '-')} | **கூடுதல்:** {selected_cust.get('mobile2', '-')}")
-                                        st.write(f"👨‍👦 **கார்டியன்:** {selected_cust.get('guardian_name', '-')} | 🏠 **முகவரி:** {selected_cust.get('address', '-')}")
-                                        if has_pending_update_req:
-                                            st.warning(f"⏳ **விவரத் திருத்தக் கோரிக்கை ஆப்பரேஷன்ஸ் ஒப்புதலுக்கு நிலுவையில் உள்ளது!**")
-                                    with c_col3:
-                                        if st.button("வருகையைத் தொடங்கு ➔", key=f"start_v_{selected_cust['id']}", type="primary", use_container_width=True):
-                                            st.session_state.current_visit = {
-                                                "visit_no": generate_short_visit_no(), "customer_id": selected_cust["id"],
-                                                "customer_name": selected_cust["name"], "customer_code": selected_cust.get("customer_code", ""),
-                                                "mobile": selected_cust.get("mobile", ""), "step": "TRANSACTIONS"
-                                            }
-                                            st.rerun()
-    
-                                with st.expander(f"✏️ {selected_cust['name']} விவரங்களில் மாற்றம் செய்ய கோரிக்கை அனுப்புக"):
-                                    if has_pending_update_req:
-                                        st.error("🚫 ஏற்கனவே அனுப்பிய விவரத் திருத்தக் கோரிக்கை ஆப்பரேஷன்ஸ் ஒப்புதலுக்காக நிலுவையில் உள்ளது!")
-                                    else:
-                                        with st.form(f"branch_req_cust_update_{selected_cust['id']}", clear_on_submit=True):
-                                            u_c1, u_c2 = st.columns(2)
-                                            with u_c1:
-                                                req_name = st.text_input("பெயர்", value=selected_cust.get("name", ""))
-                                                req_guard = st.text_input("கார்டியன் பெயர்", value=selected_cust.get("guardian_name", "") or "")
-                                                req_mob = st.text_input("புதிய முதன்மை மொபைல் எண்", value=selected_cust.get("mobile", ""))
-                                                req_mob2 = st.text_input("கூடுதல் மொபைல் எண்", value=selected_cust.get("mobile2", "") or "")
-                                            with u_c2:
-                                                req_addr = st.text_area("புதிய முகவரி", value=selected_cust.get("address", "") or "", height=80)
-                                                req_reason = st.text_input("விவர மாற்றத்திற்கான காரணம் *:", placeholder="எ.கா: முகவரி மாற்றம்")
-    
-                                            doc_r1, doc_r2, doc_r3 = st.columns(3)
-                                            with doc_r1:
-                                                req_photo = st.file_uploader("புதிய புகைப்படம்:", type=["jpg", "jpeg", "png"], key=f"r_p_{selected_cust['id']}")
-                                            with doc_r2:
-                                                req_id_doc = st.file_uploader("புதிய அடையாள ஆவணம்:", type=["jpg", "jpeg", "png", "pdf"], key=f"r_id_{selected_cust['id']}")
-                                            with doc_r3:
-                                                req_proof = st.file_uploader("மாற்றத்திற்கான ஆதாரம்:", type=["jpg", "jpeg", "png", "pdf"], key=f"r_prf_{selected_cust['id']}")
-    
-                                            if st.form_submit_button("ஆப்பரேஷன்ஸ் ஒப்புதலுக்கு அனுப்புக", type="primary"):
-                                                if req_reason.strip():
-                                                    new_photo_link = upload_single_file(req_photo, "customer_photos") if req_photo else selected_cust.get("photo_url")
-                                                    new_id_link = upload_single_file(req_id_doc, "customer_id_proofs") if req_id_doc else selected_cust.get("id_proof_url")
-                                                    proof_link = upload_single_file(req_proof, "update_proofs") if req_proof else None
-    
-                                                    supabase.table("customer_update_requests").insert({
-                                                        "customer_id": selected_cust["id"],
-                                                        "branch_id": st.session_state.branch_id,
-                                                        "requested_by": st.session_state.username,
-                                                        "updated_data": {
-                                                            "name": req_name.strip(), "guardian_name": req_guard.strip(),
-                                                            "mobile": req_mob.strip(), "mobile2": req_mob2.strip(),
-                                                            "address": req_addr.strip(), "photo_url": new_photo_link, "id_proof_url": new_id_link
-                                                        },
-                                                        "change_reason": req_reason.strip(), "proof_document_url": proof_link, "status": "Pending_Approval"
-                                                    }).execute()
-                                                    st.success("✅ கோரிக்கை ஆப்பரேஷன்ஸ் குழுவுக்கு அனுப்பப்பட்டது!")
-                                                    st.rerun()
-    
-                    else:
-                        st.markdown("##### 📝 புதிய வாடிக்கையாளர் பதிவுப் படிவம் (New KYC Registration)")
-                        with st.form("new_customer_form", clear_on_submit=True):
-                            col_n1, col_n2, col_n3 = st.columns(3)
-                            with col_n1:
-                                new_name = st.text_input("வாடிக்கையாளர் பெயர் *")
-                                new_guardian = st.text_input("கார்டியன் / தந்தை / கணவர் பெயர்")
-                                new_dob = st.date_input("பிறந்த தேதி", min_value=datetime(1940, 1, 1), max_value=datetime.today())
-                                new_gender = st.selectbox("பாலினம்", ["ஆண் (Male)", "பெண் (Female)", "மற்றவை (Other)"])
-                                new_photo = st.file_uploader("1. வாடிக்கையாளர் புகைப்படம் *", type=["jpg", "jpeg", "png"])
-                            with col_n2:
-                                new_mob1 = st.text_input("முதன்மை மொபைல் எண் *")
-                                new_mob2 = st.text_input("கூடுதல் மொபைல் எண்")
-                                new_id_no = st.text_input("அடையாள எண் (ID Card Number) *")
-                                new_id_doc = st.file_uploader("2. அடையாள அட்டை ஆவணம் *", type=["jpg", "jpeg", "png", "pdf"])
-                            with col_n3:
-                                new_address = st.text_area("முழு முகவரி *", height=85)
-                                new_nominee = st.text_input("நாமினி பெயர்")
-                                new_relation = st.text_input("உறவுமுறை")
-                                new_addr_doc = st.file_uploader("3. முகவரி சான்று ஆவணம் *", type=["jpg", "jpeg", "png", "pdf"])
-    
-                            if st.form_submit_button("வாடிக்கையாளரைப் பதிவு செய்து ஒப்புதலுக்கு அனுப்புக", type="primary"):
-                                if new_name.strip() and new_mob1.strip() and new_address.strip():
-                                    photo_url = upload_single_file(new_photo, "customer_photos")
-                                    id_doc_url = upload_single_file(new_id_doc, "customer_id_proofs")
-                                    addr_doc_url = upload_single_file(new_addr_doc, "customer_address_proofs")
-    
-                                    tcode = f"CUST-{datetime.now().strftime('%m%d%H%M%S')}"
-                                    supabase.table("customers").insert({
-                                        "branch_id": st.session_state.branch_id, "customer_code": tcode,
-                                        "name": new_name.strip(), "guardian_name": new_guardian.strip(),
-                                        "dob": str(new_dob), "gender": new_gender, "mobile": new_mob1.strip(), "mobile2": new_mob2.strip(),
-                                        "address": new_address.strip(), "nominee_name": new_nominee.strip(), "nominee_relation": new_relation.strip(),
-                                        "photo_url": photo_url, "id_proof_url": id_doc_url, "address_proof_url": addr_doc_url,
-                                        "kyc_status": "Pending_KYC_Approval", "is_active": False
-                                    }).execute()
-                                    st.success(f"✅ வாடிக்கையாளர் {new_name} பதிவு செய்யப்பட்டு ஒப்புதலுக்கு அனுப்பப்பட்டது!")
-                                    st.rerun()
-    
-                elif st.session_state.current_visit["step"] == "TRANSACTIONS":
-                    visit = st.session_state.current_visit
-                    st.success(f"வாடிக்கையாளர்: **{visit['customer_name']}** (வருகை எண்: **{visit['visit_no']}**)")
-                    st.subheader("படி 2: வணிக நடவடிக்கைகள் சேர்த்தல்")
-    
-                    active_g_schemes = supabase.table("gold_loan_schemes").select("*").eq("is_active", True).execute().data or []
-                    active_fd_schemes = supabase.table("fd_schemes").select("*").eq("is_active", True).execute().data or []
-                    active_rd_schemes = supabase.table("rd_schemes").select("*").eq("is_active", True).execute().data or []
-    
-                    g_scheme_map = {s["scheme_name"]: s for s in active_g_schemes}
-                    gold_scheme_options = list(g_scheme_map.keys()) if g_scheme_map else ["General 12%"]
-                    fd_scheme_options = [s["scheme_name"] for s in active_fd_schemes] if active_fd_schemes else ["Standard FD 9.5%"]
-                    rd_scheme_options = [s["scheme_name"] for s in active_rd_schemes] if active_rd_schemes else ["Standard RD 10%"]
-    
-                    txn_category = st.selectbox(
-                        "நடவடிக்கை வகை:",
-                        [
-                            "Pledge (புதிய நகைக் கடன்)", "GL Release (அடமானம் மீட்டல்)",
-                            "Interest Payment (வட்டி வரவு)", "Part Payment (அசல் வரவு)",
-                            "Take Over (பிற நிறுவன கடன் மீட்டல்)", "RD Open (புதிய RD சேமிப்பு)",
-                            "RD Due (RD தவணை)", "RD Closure (RD முதிர்வு)",
-                            "FD Open (புதிய வைப்பு நிதி)", "FD Interest (FD வட்டி)",
-                            "FD Closure (FD முதிர்வு)", "GP (Gold Purchase)", "GS (Gold Sale)"
-                        ],
-                        key="dyn_txn_sel"
-                    )
-    
-                    with st.form("dynamic_txn_form", clear_on_submit=True):
-                        col_st1, col_st2 = st.columns(2)
-                        with col_st1:
-                            staff = st.selectbox("காரணப் பணியாளர்:", current_staff_list)
-                        with col_st2:
-                            custom_remarks = st.text_input("கூடுதல் குறிப்பு:", placeholder="எ.கா: சிறப்பு தள்ளுபடி")
-    
-                        st.markdown("---")
-                        paid_amt, received_amt, detail_summary = 0.0, 0.0, []
-                        extra_meta_data = {}
-    
-                        if txn_category == "Pledge (புதிய நகைக் கடன்)":
-                            p_col1, p_col2, p_col3 = st.columns(3)
-                            with p_col1:
-                                new_gl_no = st.text_input("புதிய கடன் எண் (GL No) *")
-                                scheme_name = st.selectbox("அட்மின் நகைக் கடன் திட்டம் (Scheme) *", gold_scheme_options)
-                                sel_scheme_obj = g_scheme_map.get(scheme_name, {})
-                                cur_rpg = float(sel_scheme_obj.get("rate_per_gram", 0) or 0)
-                                if cur_rpg > 0:
-                                    st.info(f"💎 **இந்த ஸ்கீமின் RPG:** `₹{cur_rpg:,.2f} / gram`")
-                            with p_col2:
-                                gross_wt = st.number_input("மொத்த எடை (Gross Weight - gms) *", min_value=0.0, step=0.1)
-                                net_wt = st.number_input("நிகர எடை (Net Weight - gms) *", min_value=0.0, step=0.1)
-                                item_count = st.number_input("நகை எண்ணிக்கை", min_value=1, step=1)
-                            with p_col3:
-                                max_eligible_calc = net_wt * cur_rpg if cur_rpg > 0 else 0.0
-                                if cur_rpg > 0 and net_wt > 0:
-                                    st.success(f"⚖️ அதிகபட்ச கடன்: **₹{max_eligible_calc:,.2f}**")
-                                paid_amt = st.number_input("கடன் தொகை (Paid ₹) *", min_value=0.0, step=500.0)
-                            detail_summary = [f"GL: {new_gl_no}", f"ஸ்கீம்: {scheme_name}", f"RPG: ₹{cur_rpg}", f"எடை: {net_wt}g"]
-    
-                        elif txn_category == "GL Release (அடமானம் மீட்டல்)":
-                            r_col1, r_col2 = st.columns(2)
-                            with r_col1:
-                                rel_gl_no = st.text_input("மீட்கப்படும் கடன் எண் *")
-                                principal_amt = st.number_input("அசல் தொகை (₹) *", min_value=0.0, step=500.0)
-                            with r_col2:
-                                interest_amt = st.number_input("வட்டித் தொகை (₹) *", min_value=0.0, step=50.0)
-                                other_charges = st.number_input("இதர கட்டணம் (₹)", min_value=0.0, step=10.0)
-                            received_amt = principal_amt + interest_amt + other_charges
-                            detail_summary = [f"GL: {rel_gl_no}", f"அசல்: ₹{principal_amt}", f"வட்டி: ₹{interest_amt}"]
-    
-                        elif txn_category == "Interest Payment (வட்டி வரவு)":
-                            i_col1, i_col2 = st.columns(2)
-                            with i_col1:
-                                part_gl_no = st.text_input("கடன் எண் *")
-                            with i_col2:
-                                received_amt = st.number_input("வட்டித் தொகை (₹) *", min_value=0.0, step=100.0)
-                            detail_summary = [f"GL: {part_gl_no}", f"வட்டி: ₹{received_amt}"]
-    
-                        elif txn_category == "Part Payment (அசல் வரவு)":
-                            pp_c1, pp_c2, pp_c3 = st.columns(3)
-                            with pp_c1:
-                                part_gl_no = st.text_input("கடன் எண் *")
-                            with pp_c2:
-                                part_principal = st.number_input("அசல் வரவு (₹) *", min_value=0.0, step=100.0)
-                            with pp_c3:
-                                part_interest = st.number_input("வட்டி வரவு (₹)", min_value=0.0, step=50.0)
-                            received_amt = part_principal + part_interest
-                            detail_summary = [f"GL: {part_gl_no}", f"அசல்: ₹{part_principal}", f"வட்டி: ₹{part_interest}"]
-                            extra_meta_data = {"principal": part_principal, "interest": part_interest}
-    
-                        elif txn_category == "Take Over (பிற நிறுவன கடன் மீட்டல்)":
-                            to_col1, to_col2 = st.columns(2)
-                            with to_col1:
-                                bank_source = st.text_input("முந்தைய நிறுவனம் *")
-                                prev_loan_no = st.text_input("முந்தைய லோன் எண் *")
-                            with to_col2:
-                                paid_amt = st.number_input("செலுத்திய தொகை (₹) *", min_value=0.0, step=500.0)
-                            detail_summary = [f"வங்கி: {bank_source}", f"கடன் எண்: {prev_loan_no}"]
-    
-                        elif txn_category == "FD Open (புதிய வைப்பு நிதி)":
-                            st.markdown("##### 📑 புதிய FD கணக்கு விவரங்கள் & நாமினி")
-                            fd_c1, fd_c2 = st.columns(2)
-                            with fd_c1:
-                                fd_acc_no = st.text_input("FD கணக்கு எண் *")
-                                fd_sel_scheme = st.selectbox("அட்மின் FD திட்டம் (Scheme) *", fd_scheme_options)
-                                received_amt = st.number_input("வைப்புத் தொகை (Deposit ₹) *", min_value=0.0, step=1000.0)
-                                fd_nominee = st.text_input("நாமினி பெயர் *")
-                            with fd_c2:
-                                fd_relation = st.text_input("உறவுமுறை *")
-                                fd_age = st.number_input("வயது *", min_value=1, max_value=120, value=30)
-                                fd_address = st.text_area("நாமினி முகவரி *", height=82)
-                            detail_summary = [f"FD No: {fd_acc_no}", f"Scheme: {fd_sel_scheme}", f"Dep: ₹{received_amt}", f"Nominee: {fd_nominee}"]
-                            extra_meta_data = {"account_no": fd_acc_no, "deposit_amount": received_amt, "nominee": fd_nominee, "relation": fd_relation, "age": fd_age, "address": fd_address}
-    
-                        elif txn_category == "RD Open (புதிய RD சேமிப்பு)":
-                            st.markdown("##### 📈 புதிய RD கணக்கு விவரங்கள் & நாமினி")
-                            rd_c1, rd_c2 = st.columns(2)
-                            with rd_c1:
-                                rd_acc_no = st.text_input("RD கணக்கு எண் *")
-                                rd_sel_scheme = st.selectbox("அட்மின் RD திட்டம் (Scheme) *", rd_scheme_options)
-                                received_amt = st.number_input("முதல் தவணைத் தொகை (Installment ₹) *", min_value=0.0, step=500.0)
-                                rd_nominee = st.text_input("நாமினி பெயர் *")
-                            with rd_c2:
-                                rd_relation = st.text_input("உறவுமுறை *")
-                                rd_age = st.number_input("வயது *", min_value=1, max_value=120, value=30, key="rd_age_in")
-                                rd_address = st.text_area("நாமினி முகவரி *", height=82, key="rd_addr_in")
-                            detail_summary = [f"RD No: {rd_acc_no}", f"Scheme: {rd_sel_scheme}", f"Inst: ₹{received_amt}", f"Nominee: {rd_nominee}"]
-                            extra_meta_data = {"account_no": rd_acc_no, "installment_amount": received_amt, "nominee": rd_nominee, "relation": rd_relation, "age": rd_age, "address": rd_address}
-    
-                        elif "RD" in txn_category or "FD" in txn_category:
-                            d_col1, d_col2 = st.columns(2)
-                            with d_col1:
-                                acc_no = st.text_input("கணக்கு எண் *")
-                            with d_col2:
-                                if "Closure" in txn_category or "Interest" in txn_category:
-                                    paid_amt = st.number_input("வழங்கிய தொகை (₹) *", min_value=0.0, step=100.0)
-                                else:
-                                    received_amt = st.number_input("பெற்ற தொகை (₹) *", min_value=0.0, step=100.0)
-                            detail_summary = [f"A/c: {acc_no}"]
-    
-                        elif txn_category == "GP (Gold Purchase)":
-                            st.markdown("##### 🪙 தங்கம் வாங்குதல் (Gold Purchase) & சாட்சிகள் விவரம்")
-                            gp_c1, gp_c2, gp_c3 = st.columns(3)
-                            with gp_c1:
-                                gp_no = st.text_input("GP எண் *")
-                                gp_item = st.text_input("நகை விபரம் *")
-                                gross_wt = st.number_input("மொத்த எடை (Grams) *", min_value=0.0, step=0.1)
-                            with gp_c2:
-                                net_wt = st.number_input("நிகர எடை (Grams) *", min_value=0.0, step=0.1)
-                                paid_amt = st.number_input("மொத்த தொகை (Paid ₹) *", min_value=0.0, step=500.0)
-                            with gp_c3:
-                                st.write("")
-    
-                            st.markdown("###### 👥 தெரிந்த நபர்கள் (Witnesses / Known Persons):")
-                            w_c1, w_c2 = st.columns(2)
-                            with w_c1:
-                                st.markdown("**தெரிந்த நபர் 1:**")
-                                w1_name = st.text_input("பெயர் 1 *")
-                                w1_addr = st.text_area("முகவரி 1 *", height=68, key="w1_a")
-                                w1_mob = st.text_input("தொலைபேசி எண் 1 *", key="w1_m")
-                            with w_c2:
-                                st.markdown("**தெரிந்த நபர் 2:**")
-                                w2_name = st.text_input("பெயர் 2 *")
-                                w2_addr = st.text_area("முகவரி 2 *", height=68, key="w2_a")
-                                w2_mob = st.text_input("தொலைபேசி எண் 2 *", key="w2_m")
-    
-                            detail_summary = [f"GP No: {gp_no}", f"Item: {gp_item}", f"Wt: {net_wt}g", f"Amt: ₹{paid_amt}"]
-                            extra_meta_data = {
-                                "gp_no": gp_no, "item_details": gp_item, "gross_weight": gross_wt, "net_weight": net_wt,
-                                "witness_1": {"name": w1_name, "address": w1_addr, "mobile": w1_mob},
-                                "witness_2": {"name": w2_name, "address": w2_addr, "mobile": w2_mob}
-                            }
-    
-                        elif txn_category == "GS (Gold Sale)":
-                            gs_col1, gs_col2 = st.columns(2)
-                            with gs_col1:
-                                gs_bill_no = st.text_input("விற்பனை பில் எண் *")
-                                gs_item_name = st.text_input("பொருள் பெயர்")
-                                gs_wt = st.number_input("எடை (Grams) *", min_value=0.0, step=0.1, key="gs_w")
-                            with gs_col2:
-                                received_amt = st.number_input("பெற்ற தொகை (Received ₹) *", min_value=0.0, step=500.0)
-                            detail_summary = [f"பில்: {gs_bill_no}", f"பொருள்: {gs_item_name}", f"எடை: {gs_wt}g"]
-    
-with st.form("dynamic_txn_form", clear_on_submit=True):
-    # இதர இன்புட் ஃபீல்டுகள்...
-    
-    # form_submit_button எப்போதுமே இந்த indented block-க்குள் இருக்க வேண்டும்:
-    if st.form_submit_button("➕ பட்டியலில் சேர் (Add to Cart)", type="primary"):
-        if paid_amt > 0 or received_amt > 0:
-            # லாஜிக் கோடுகள்...
-            st.success("சேர்க்கப்பட்டது!")
-            st.rerun()
-        else:
-            st.error("தொகையை உள்ளிடவும்.")
-
-if st.session_state.transactions_cart:
-        st.markdown("### 🛒 நடவடிக்கைகள் பட்டியல்:")
-        df_cart = pd.DataFrame(st.session_state.transactions_cart)
-        st.dataframe(df_cart, use_container_width=True)
-    
-        total_paid = df_cart["paid_amount"].sum()
-        total_received = df_cart["received_amount"].sum()
-        net_amount = total_paid - total_received
-    
-        c1, c2, c3 = st.columns(3)
-        c1.metric("மொத்த பட்டுவாடா", f"₹{total_paid:,.2f}")
-        c2.metric("மொத்த வரவு", f"₹{total_received:,.2f}")
-        c3.metric("நிகரத் தொகை", f"₹{abs(net_amount):,.2f}")
-    
-        cart_b1, cart_b2 = st.columns([4, 1])
-        with cart_b1:
-            if st.button("பணம் செலுத்தும் முறை மற்றும் OTP பிரிவிற்குச் செல் ➔", type="primary"):
-                st.session_state.current_visit["net_amount"] = net_amount
-                st.session_state.current_visit["total_paid"] = total_paid
-                st.session_state.current_visit["total_received"] = total_received
-                st.session_state.current_visit["step"] = "CASH_OTP"
-                st.rerun()
-        with cart_b2:
-            if st.button("பட்டியலை அழி"):
-                st.session_state.transactions_cart = []
-                st.rerun()
+    with branch_tab6:
+        render_staff_attribution_report(selected_branch_id=st.session_state.branch_id, key_suffix="branch_main_report")
     
 # -----------------------------------------------------------------
 # Step 3: பணப் பரிமாற்றம், ரூபாய் நோட்டுகள் & OTP சரிபார்ப்பு
