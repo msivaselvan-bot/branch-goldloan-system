@@ -1268,17 +1268,11 @@ if st.session_state.user_role == "Admin":
             # tab10-க்கான தனித்துவமான key_suffix உடன் கூடிய ஃபங்ஷன் அழைப்பு
             render_staff_attribution_report(selected_branch_id=filter_b_id, key_suffix="tab10_report")
 
-else:
-    # சாதாரண ஊழியர்களுக்கு (Staff) அட்மின் பேனல் தெரியாமல் இருக்க வேண்டிய திரை
-    st.info("👋 வணக்கம்! நீங்கள் கிளைப் பணியாளராக (Staff) உள்நுழைந்துள்ளீர்கள். கிளைக்கான கணக்கீட்டுப் பகுதிகள் கீழே உள்ளன.")
-    
-    # ஸ்டாஃப் பயன்படுத்த வேண்டிய மற்ற அம்சங்களை இங்கே கொடுக்கலாம்
-
-
 # ----------------------------------------------------
 # B. ஆப்பரேஷன்ஸ் திரை (OPERATIONS DESK)
 # ----------------------------------------------------
-if st.session_state.get("user_role") == "Operations":
+elif user_role == "Operations":
+    # நீங்கள் மேலே அனுப்பிய முழுமையான Operations Desk கோடு இங்கே அப்படியே வரும்:
     st.header("📞 ஆப்பரேஷன்ஸ் மேசை (Operations Desk)")
     ops_tab1, ops_tab2, ops_tab3, ops_tab4, ops_tab5 = st.tabs([
         "🏦 நிதிப் பரிமாற்ற ஒப்புதல்", "👤 புதிய வாடிக்கையாளர் KYC",
