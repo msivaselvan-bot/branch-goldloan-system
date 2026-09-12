@@ -983,28 +983,37 @@ else:
             if uploaded_cust_file and st.button("பதிவேற்றத்தைத் தொடங்கு", type="primary"):
                 try:
                     df_raw = pd.read_csv(uploaded_cust_file, skiprows=2) if uploaded_cust_file.name.endswith(".csv") else pd.read_excel(uploaded_cust_file, skiprows=2)
-                    df_cust = df_raw.dropna(subset=["Full Name", "Mobile No"]).copy()
                     
+                    # காலம்களின் பெயர்களைச் சீரமைத்தல் (Lowercase)
+                    df_raw.columns = [str(c).strip().lower() for c in df_raw.columns]
+                    
+                    # பெயர் மற்றும் மொபைல் எண்களுக்கான காலம்களைத் தேடுதல்
+                    name_col = next((c for c in df_raw.columns if 'name' in c or 'பெயர்' in c), df_raw.columns[0])
+                    mob_col = next((c for c in df_raw.columns if 'mobile' in c or 'phone' in c or 'மொபைல்' in c), df_raw.columns[1] if len(df_raw.columns) > 1 else df_raw.columns[0])
+                    addr_col = next((c for c in df_raw.columns if 'address' in c or 'முகவரி' in c), None)
+                    
+                    df_cust = df_raw.dropna(subset=[name_col, mob_col]).copy()
                     total_rows = len(df_cust)
+                    
                     progress_bar = st.progress(0)
                     success_count = 0
                     
                     st.info(f"⏳ மொத்தம் {total_rows} வாடிக்கையாளர்கள் டேட்டாபேஸில் பதிவிடப்படுகிறார்கள்...")
                     
                     for idx, row in enumerate(df_cust.itertuples(), 1):
-                        name = str(getattr(row, "Full Name", "")).strip()
-                        mobile = str(getattr(row, "Mobile No", "")).strip()
+                        name = str(getattr(row, name_col, "")).strip()
+                        mobile = "".join(filter(str.isdigit, str(getattr(row, mob_col, ""))))[-10:]
+                        address = str(getattr(row, addr_col, "Branch Import")) if addr_col else "Branch Import"
                         
-                        if name and mobile:
+                        if name and len(mobile) >= 10:
                             tcode = f"IMP-{datetime.now().strftime('%m%d')}-{idx:04d}"
                             
-                            # Supabase-ல் வாடிக்கையாளரைச் சேர்த்தல்
                             supabase.table("customers").insert({
                                 "branch_id": st.session_state.branch_id,
                                 "customer_code": tcode,
                                 "name": name,
                                 "mobile": mobile,
-                                "address": str(getattr(row, "Address", "Branch Import")),
+                                "address": address,
                                 "kyc_status": "Approved",
                                 "is_active": True
                             }).execute()
