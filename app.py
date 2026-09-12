@@ -624,44 +624,30 @@ if not st.session_state.logged_in:
             if submitted:
                 if username.strip() and password.strip():
                     try:
-                        # மிக எளிய முறையில் டேட்டாபேஸை மட்டும் சரிபார்த்தல்
+                        # டேட்டாபேஸில் இருந்து யூசரைத் தேடுதல்
                         res = supabase.table("users").select("*").eq("username", username.strip()).execute()
                         
                         if res.data:
                             user_info = res.data[0]
-                            db_pass = str(user_info.get("password_hash") or user_info.get("password", ""))
+                            db_pass = str(user_info.get("password_hash") or "").strip()
                             
                             if db_pass == password.strip():
-                                if not user_info.get("is_active", True):
-                                    st.error("இந்தப் பயனர் கணக்கு முடக்கப்பட்டுள்ளது!")
-                                else:
-                                    role = user_info["role"]
-                                    b_id = user_info.get("branch_id")
-                                    
-                                    if role in ["Admin", "Auditor", "Operations"]:
-                                        b_name = f"Head Office / {role}"
-                                    else:
-                                        b_name = "ஒதுக்கப்படாத கிளை"
-                                        if b_id:
-                                            b_res = supabase.table("branches").select("branch_name").eq("id", b_id).execute()
-                                            if b_res.data:
-                                                b_name = b_res.data[0].get("branch_name", "கிளை")
-
-                                    st.session_state.logged_in = True
-                                    st.session_state.user_role = role
-                                    st.session_state.branch = b_name
-                                    st.session_state.branch_id = b_id
-                                    st.session_state.username = user_info["name"]
-                                    st.session_state.profile_image = user_info.get("profile_image_url")
-                                    st.rerun()
+                                st.session_state.logged_in = True
+                                st.session_state.user_role = str(user_info.get("role", "Staff"))
+                                st.session_state.branch = "Head Office / Admin"
+                                st.session_state.branch_id = user_info.get("branch_id")
+                                st.session_state.username = user_info.get("name", "Admin")
+                                st.session_state.profile_image = user_info.get("profile_image_url")
+                                st.success("வெற்றிகரமாக உள்நுழைந்து விட்டது!")
+                                st.rerun()
                             else:
                                 st.error("தவறான கடவுச்சொல்!")
                         else:
                             st.error("தவறான பயனர் பெயர்!")
                     except Exception as e:
-                        st.error(f"இணைப்புப் பிழை: {e}")
+                        st.error(f"பிழை: {e}")
                 else:
-                    st.warning("விவரங்களை உள்ளிடவும்.")
+                    st.warning("தயவுசெய்து பயனர் பெயர் மற்றும் கடவுச்சொல்லை உள்ளிடவும்.")
 
 # ==========================================
 # 6. முதன்மை திரை
