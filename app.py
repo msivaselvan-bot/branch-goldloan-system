@@ -1872,7 +1872,7 @@ else:
                 final_amount = st.number_input("பெற்ற தொகை (Received Amount)", min_value=0.0, key="gs_amt")
             ornament_file = st.file_uploader("நகை படம் (Ornament Photo)", type=["jpg", "jpeg", "png"], key="gs_img")
 
-        if st.form_submit_button("➕ பட்டியலில் சேர் (Add to Cart)", type="primary"):
+        if st.button("➕ பட்டியலில் சேர் (Add to Cart)", type="primary"):
                 if paid_amt > 0 or received_amt > 0 or final_amount > 0:
                     all_remarks = " | ".join(detail_summary) if 'detail_summary' in locals() and detail_summary else ""
                     if 'custom_remarks' in locals() and custom_remarks.strip():
