@@ -5,10 +5,32 @@ import requests
 import pandas as pd
 import streamlit as st
 from supabase import Client, create_client
+import uuid
 
 # 1. பக்க வடிவமைப்பு
 st.set_page_config(page_title="Branch Operations System", layout="wide")
-
+# ==============================================================================
+# நகை படம் பதிவேற்றும் செயல்பாடு (Supabase Storage Bucket: ornaments)
+# ==============================================================================
+def upload_ornament_image(file_obj):
+    if not file_obj:
+        return None
+    try:
+        bucket_name = "ornaments"
+        file_ext = file_obj.name.split(".")[-1]
+        file_path = f"ornament_{datetime.now().strftime('%Y%m%d%H%M%S')}_{uuid.uuid4().hex[:6]}.{file_ext}"
+        
+        # ornaments பக்கெட்டில் பதிவேற்றுதல்
+        supabase.storage.from_(bucket_name).upload(
+            path=file_path,
+            file=file_obj.getvalue(),
+            file_options={"content-type": file_obj.type, "upsert": "true"},
+        )
+        # பொதுவான URL எடுத்தல்
+        return supabase.storage.from_(bucket_name).get_public_url(file_path)
+    except Exception as e:
+        st.warning(f"நகை படம் பதிவேற்றுவதில் சிக்கல்: {e}")
+        return None
 # ==============================================================================
 # ஹை-லுக் ஆப் தீம் (Native App Feel - Lavender, Deep Violet & Luxury Gold)
 # ==============================================================================
