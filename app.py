@@ -5,7 +5,27 @@ import requests
 import pandas as pd
 import streamlit as st
 from supabase import Client, create_client
+import uuid
 
+def upload_ornament_image(uploaded_file):
+    """நகைப் படத்தை Supabase ornaments பக்கெட்டில் பதிவேற்றும் செயல்பாடு"""
+    if uploaded_file is None:
+        return None
+    try:
+        file_ext = uploaded_file.name.split(".")[-1]
+        file_name = f"ornament_{uuid.uuid4().hex[:8]}.{file_ext}"
+        file_bytes = uploaded_file.getvalue()
+        
+        # ornaments பக்கெட்டில் பதிவேற்றுதல்
+        supabase.storage.from_("ornaments").upload(file_name, file_bytes, {"content-type": uploaded_file.type})
+        
+        # பொதுவான URL பெறுதல்
+        public_url = supabase.storage.from_("ornaments").get_public_url(file_name)
+        return public_url
+    except Exception as e:
+        st.warning(f"படம் பதிவேற்றுவதில் சிக்கல்: {e}")
+        return None
+        
 # 1. பக்க வடிவமைப்பு
 st.set_page_config(page_title="Branch Operations System", layout="wide")
 
