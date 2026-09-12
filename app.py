@@ -982,16 +982,23 @@ else:
             
             if uploaded_cust_file:
                 try:
-                    df_raw = pd.read_csv(uploaded_cust_file) if uploaded_cust_file.name.endswith(".csv") else pd.read_excel(uploaded_cust_file)
+                    # இரண்டாவது வரியை (Row index 1) ஹெட்டராகப் பயன்படுத்துதல்
+                    if uploaded_cust_file.name.endswith(".csv"):
+                        df_raw = pd.read_csv(uploaded_cust_file, header=1)
+                    else:
+                        df_raw = pd.read_excel(uploaded_cust_file, header=1)
+                    
                     st.write(f"கோப்பில் உள்ள மொத்த வரிசைகள் (Total Rows): {len(df_raw)}")
-                    st.dataframe(df_raw.head(3)) # தரவுகள் சரியாகப் படிக்கப்படுகிறதா எனப் பார்க்க
+                    st.dataframe(df_raw.head(3)) # சரியான ஹெட்டர் வந்துவிட்டதா எனப் பார்க்க
                     
                     if st.button("பதிவேற்றத்தைத் தொடங்கு", type="primary"):
+                        # காலம்களின் பெயர்களைச் சீரமைத்தல்
                         df_raw.columns = [str(c).strip().lower() for c in df_raw.columns]
-                        name_col = df_raw.columns[0]
-                        mob_col = df_raw.columns[1] if len(df_raw.columns) > 1 else df_raw.columns[0]
                         
-                        # Branch ID சரிபார்த்தல் (Admin-க்கு branch_id இல்லாவிட்டால் முதல் கிளையை எடுத்துக்கொள்ளும்)
+                        # Full Name மற்றும் Mobile No காலம்களைத் துல்லியமாகத் கண்டறிதல்
+                        name_col = next((c for c in df_raw.columns if 'full name' in c or 'name' in c or 'பெயர்' in c), df_raw.columns[1] if len(df_raw.columns) > 1 else df_raw.columns[0])
+                        mob_col = next((c for c in df_raw.columns if 'mobile' in c or 'phone' in c or 'மொபைல்' in c), df_raw.columns[6] if len(df_raw.columns) > 6 else df_raw.columns[0])
+                        
                         b_id = st.session_state.get("branch_id")
                         if not b_id:
                             b_res = supabase.table("branches").select("id").limit(1).execute()
@@ -1003,11 +1010,17 @@ else:
                         total_rows = len(df_raw)
                         
                         for idx, row in enumerate(df_raw.itertuples(), 1):
-                            name = str(getattr(row, name_col, "")).strip()
-                            raw_mob = str(getattr(row, mob_col, "")) if len(df_raw.columns) > 1 else ""
+                            name = str(getattr(row, name_col.replace(' ', '_'), "")).strip() if hasattr(row, name_col.replace(' ', '_')) else str(row[2] if len(row) > 2 else "").strip()
+                            
+                            # பாதுகாப்பான முறையில் வேல்யூ எடுப்பது
+                            try:
+                                raw_mob = str(getattr(row, mob_col.replace(' ', '_'), ""))
+                            except:
+                                raw_mob = ""
+                                
                             mobile = "".join(filter(str.isdigit, raw_mob))[-10:]
                             
-                            if name and name.lower() != 'nan' and name != name_col:
+                            if name and name.lower() != 'nan' and not name.startswith('Customer'):
                                 tcode = f"IMP-{datetime.now().strftime('%m%d')}-{idx:04d}"
                                 
                                 supabase.table("customers").insert({
