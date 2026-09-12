@@ -632,13 +632,26 @@ if not st.session_state.logged_in:
                             db_pass = str(user_info.get("password_hash") or "").strip()
                             
                             if db_pass == password.strip():
+                                role = user_info["role"]
+                                b_id = user_info.get("branch_id")
+                                
+                                # கிளைப் பெயரைத் துல்லியமாகத் தீர்மானித்தல்
+                                if role in ["Admin", "Auditor", "Operations"]:
+                                    b_name = f"Head Office / {role}"
+                                else:
+                                    b_name = "ஒதுக்கப்படாத கிளை"
+                                    if b_id:
+                                        # branches அட்டவணையில் இருந்து உண்மையான கிளைப் பெயரை எடுத்தல்
+                                        b_res = supabase.table("branches").select("branch_name").eq("id", b_id).execute()
+                                        if b_res.data:
+                                            b_name = b_res.data[0].get("branch_name", "கிளை")
+
                                 st.session_state.logged_in = True
-                                st.session_state.user_role = str(user_info.get("role", "Staff"))
-                                st.session_state.branch = "Head Office / Admin"
-                                st.session_state.branch_id = user_info.get("branch_id")
-                                st.session_state.username = user_info.get("name", "Admin")
+                                st.session_state.user_role = role
+                                st.session_state.branch = b_name  # சரியான கிளைப் பெயர் இங்கே பதிவாகும்
+                                st.session_state.branch_id = b_id
+                                st.session_state.username = user_info["name"]
                                 st.session_state.profile_image = user_info.get("profile_image_url")
-                                st.success("வெற்றிகரமாக உள்நுழைந்து விட்டது!")
                                 st.rerun()
                             else:
                                 st.error("தவறான கடவுச்சொல்!")
