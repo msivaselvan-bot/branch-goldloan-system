@@ -7,6 +7,16 @@ import streamlit as st
 from supabase import Client, create_client
 import uuid
 
+# 1. பக்க வடிவமைப்பு (இதுவே எப்போதும் முதல் Streamlit கட்டளையாக இருக்க வேண்டும்)
+st.set_page_config(page_title="Branch Operations System", layout="wide")
+
+# 2. Supabase இணைப்பு (உங்களது URL & KEY இருக்கும் வரிகள்)
+# (உதாரணமாக உங்கள் கோடில் இருக்கும் அந்த வரிகளை இங்கே வைக்கவும்)
+# SUPABASE_URL = "..."
+# SUPABASE_KEY = "..."
+# supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+
+# 3. நகை படம் பதிவேற்றும் செயல்பாடு
 def upload_ornament_image(uploaded_file):
     """நகைப் படத்தை Supabase ornaments பக்கெட்டில் பதிவேற்றும் செயல்பாடு"""
     if uploaded_file is None:
@@ -25,9 +35,6 @@ def upload_ornament_image(uploaded_file):
     except Exception as e:
         st.warning(f"படம் பதிவேற்றுவதில் சிக்கல்: {e}")
         return None
-
-# 1. பக்க வடிவமைப்பு
-st.set_page_config(page_title="Branch Operations System", layout="wide")
 
 # ==============================================================================
 # ஹை-லுக் ஆப் தீம் (Native App Feel - Lavender, Deep Violet & Luxury Gold)
