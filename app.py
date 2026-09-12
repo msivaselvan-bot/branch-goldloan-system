@@ -992,15 +992,15 @@ else:
         with tab5:
             st.subheader("📥 கிளை வாரியான பழைய வாடிக்கையாளர் இறக்குமதி (Branch-wise Bulk Import)")
             
-            # டேட்டாபேஸில் உள்ள கிளைகளைப் பட்டியலிட்டுத் தேர்வு செய்தல்
-            branch_res = supabase.table("branches").select("id, branch_name").eq("is_active", True).execute()
+            # அட்டவணையில் உள்ள அனைத்து கிளைகளையும் நேரடியாகப் பெறுதல்
+            branch_res = supabase.table("branches").select("id, branch_name").execute()
             branch_dict = {b["branch_name"]: b["id"] for b in branch_res.data} if branch_res.data else {}
             
             if branch_dict:
                 chosen_branch_name = st.selectbox("எந்தக் கிளைக்கான பட்டியல் இது? (Select Branch)", list(branch_dict.keys()))
                 target_branch_id = branch_dict[chosen_branch_name]
             else:
-                st.warning("செயலில் உள்ள கிளைகள் எதுவும் இல்லை!")
+                st.warning("கிளைகள் எதுவும் கிடைக்கவில்லை!")
                 target_branch_id = None
 
             uploaded_cust_file = st.file_uploader("கோப்பைத் தேர்வு செய்யவும் (Excel/CSV)", type=["xls", "xlsx", "csv"])
@@ -1035,11 +1035,10 @@ else:
                             if name and name.lower() != 'nan' and len(mobile) == 10:
                                 tcode = f"IMP-{datetime.now().strftime('%m%d')}-{idx+1:04d}"
                                 
-                                # அந்த மொபைல் எண் ஏற்கனவே உள்ளதா எனச் சரிபார்த்தல்
                                 existing = supabase.table("customers").select("id").eq("mobile", mobile).execute()
                                 if not existing.data:
                                     supabase.table("customers").insert({
-                                        "branch_id": target_branch_id,  # நீங்கள் தேர்ந்தெடுத்த கிளை ஐடி
+                                        "branch_id": target_branch_id,
                                         "customer_code": tcode,
                                         "name": name,
                                         "mobile": mobile,
