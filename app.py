@@ -990,31 +990,35 @@ else:
                         st.rerun()
 
         with tab5:
-            st.subheader("📥 பழைய வாடிக்கையாளர் இறக்குமதி (Bulk Import)")
-            uploaded_cust_file = st.file_uploader("கோப்பைத் தேர்வு செய்யவும்", type=["xls", "xlsx", "csv"])
+            st.subheader("📥 கிளை வாரியான பழைய வாடிக்கையாளர் இறக்குமதி (Branch-wise Bulk Import)")
             
-            if uploaded_cust_file:
+            # டேட்டாபேஸில் உள்ள கிளைகளைப் பட்டியலிட்டுத் தேர்வு செய்தல்
+            branch_res = supabase.table("branches").select("id, branch_name").eq("is_active", True).execute()
+            branch_dict = {b["branch_name"]: b["id"] for b in branch_res.data} if branch_res.data else {}
+            
+            if branch_dict:
+                chosen_branch_name = st.selectbox("எந்தக் கிளைக்கான பட்டியல் இது? (Select Branch)", list(branch_dict.keys()))
+                target_branch_id = branch_dict[chosen_branch_name]
+            else:
+                st.warning("செயலில் உள்ள கிளைகள் எதுவும் இல்லை!")
+                target_branch_id = None
+
+            uploaded_cust_file = st.file_uploader("கோப்பைத் தேர்வு செய்யவும் (Excel/CSV)", type=["xls", "xlsx", "csv"])
+            
+            if uploaded_cust_file and target_branch_id:
                 try:
                     if uploaded_cust_file.name.endswith(".csv"):
                         df_raw = pd.read_csv(uploaded_cust_file, header=0)
                     else:
                         df_raw = pd.read_excel(uploaded_cust_file, header=0)
                     
-                    st.write(f"கோப்பில் உள்ள மொத்த வரிசைகள் (Total Rows): {len(df_raw)}")
+                    st.write(f"தேர்ந்தெடுக்கப்பட்ட கிளை: **{chosen_branch_name}** | மொத்த வரிசைகள்: {len(df_raw)}")
                     st.dataframe(df_raw.head(3))
                     
                     if st.button("பதிவேற்றத்தைத் தொடங்கு", type="primary"):
                         cols = list(df_raw.columns)
-                        
-                        # சரியான பெயர் மற்றும் மொபைல் காலம்களைத் கண்டறிதல்
                         name_col_name = next((c for c in cols if 'name' in str(c).lower() or 'பெயர்' in str(c)), cols[2] if len(cols) > 2 else cols[0])
                         mob_col_name = next((c for c in cols if 'mobile' in str(c).lower() or 'phone' in str(c) or 'மொபைல்' in str(c)), cols[7] if len(cols) > 7 else cols[1])
-                        
-                        b_id = st.session_state.get("branch_id")
-                        if not b_id:
-                            b_res = supabase.table("branches").select("id").limit(1).execute()
-                            if b_res.data:
-                                b_id = b_res.data[0]["id"]
                         
                         progress_bar = st.progress(0)
                         success_count = 0
@@ -1031,14 +1035,15 @@ else:
                             if name and name.lower() != 'nan' and len(mobile) == 10:
                                 tcode = f"IMP-{datetime.now().strftime('%m%d')}-{idx+1:04d}"
                                 
+                                # அந்த மொபைல் எண் ஏற்கனவே உள்ளதா எனச் சரிபார்த்தல்
                                 existing = supabase.table("customers").select("id").eq("mobile", mobile).execute()
                                 if not existing.data:
                                     supabase.table("customers").insert({
-                                        "branch_id": b_id,
+                                        "branch_id": target_branch_id,  # நீங்கள் தேர்ந்தெடுத்த கிளை ஐடி
                                         "customer_code": tcode,
                                         "name": name,
                                         "mobile": mobile,
-                                        "address": "Branch Import",
+                                        "address": chosen_branch_name,
                                         "kyc_status": "Approved",
                                         "is_active": True
                                     }).execute()
@@ -1047,19 +1052,9 @@ else:
                             if total_rows > 0:
                                 progress_bar.progress(min((idx + 1) / total_rows, 1.0))
                         
-                        st.success(f"✅ வெற்றிகரமாக {success_count} வாடிக்கையாளர்கள் டேட்டாபேஸில் பதிவு செய்யப்பட்டுவிட்டனர்!")
+                        st.success(f"✅ {chosen_branch_name} கிளைக்கு வெற்றிகரமாக {success_count} வாடிக்கையாளர்கள் பதிவு செய்யப்பட்டுவிட்டனர்!")
                 except Exception as e:
                     st.error(f"இறக்குமதி செய்வதில் பிழை: {e}")
-
-        with tab6:
-            st.subheader("🗂️ வாடிக்கையாளர் பட்டியல் & திருத்தம்")
-            cq = supabase.table("customers").select("*, branches(branch_name)").order("id", desc=True).limit(100)
-            cust_list_data = cq.execute().data or []
-            if cust_list_data:
-                st.dataframe(pd.DataFrame([{
-                    "ID": c["id"], "Code": c.get("customer_code", "-"), "பெயர்": c["name"], "மொபைல்": c["mobile"],
-                    "கிளை": c.get("branches", {}).get("branch_name", "பொது"), "KYC நிலை": c.get("kyc_status", "Approved")
-                } for c in cust_list_data]), use_container_width=True)
 
         with tab7:
             st.subheader("📊 வருகை & பரிவர்த்தனை மேலாண்மை")
