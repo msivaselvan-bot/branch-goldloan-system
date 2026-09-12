@@ -5,36 +5,9 @@ import requests
 import pandas as pd
 import streamlit as st
 from supabase import Client, create_client
-import uuid
 
-# 1. பக்க வடிவமைப்பு (இதுவே எப்போதும் முதல் Streamlit கட்டளையாக இருக்க வேண்டும்)
+# 1. பக்க வடிவமைப்பு
 st.set_page_config(page_title="Branch Operations System", layout="wide")
-
-# 2. Supabase இணைப்பு (உங்களது URL & KEY இருக்கும் வரிகள்)
-# (உதாரணமாக உங்கள் கோடில் இருக்கும் அந்த வரிகளை இங்கே வைக்கவும்)
-# SUPABASE_URL = "..."
-# SUPABASE_KEY = "..."
-# supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
-
-# 3. நகை படம் பதிவேற்றும் செயல்பாடு
-def upload_ornament_image(uploaded_file):
-    """நகைப் படத்தை Supabase ornaments பக்கெட்டில் பதிவேற்றும் செயல்பாடு"""
-    if uploaded_file is None:
-        return None
-    try:
-        file_ext = uploaded_file.name.split(".")[-1]
-        file_name = f"ornament_{uuid.uuid4().hex[:8]}.{file_ext}"
-        file_bytes = uploaded_file.getvalue()
-        
-        # ornaments பக்கெட்டில் பதிவேற்றுதல்
-        supabase.storage.from_("ornaments").upload(file_name, file_bytes, {"content-type": uploaded_file.type})
-        
-        # பொதுவான URL பெறுதல்
-        public_url = supabase.storage.from_("ornaments").get_public_url(file_name)
-        return public_url
-    except Exception as e:
-        st.warning(f"படம் பதிவேற்றுவதில் சிக்கல்: {e}")
-        return None
 
 # ==============================================================================
 # ஹை-லுக் ஆப் தீம் (Native App Feel - Lavender, Deep Violet & Luxury Gold)
@@ -1678,29 +1651,13 @@ else:
                                     if has_pending_update_req:
                                         st.warning(f"⏳ **விவரத் திருத்தக் கோரிக்கை ஆப்பரேஷன்ஸ் ஒப்புதலுக்கு நிலுவையில் உள்ளது!**")
                                 with c_col3:
-                                    if st.button("வருகை பதிவு செய் & படி 2-க்குச் செல்"):
-                                        # 1. டேட்டாபேஸில் வருகைப் பதிவு (Visit) உருவாக்கம்
-                                        visit_data = {
-                                            "branch_id": st.session_state.branch_id,
-                                            "customer_id": selected_cust_id,
-                                            "visit_no": generated_visit_no,
-                                            "created_by": st.session_state.username
+                                    if st.button("வருகையைத் தொடங்கு ➔", key=f"start_v_{selected_cust['id']}", type="primary", use_container_width=True):
+                                        st.session_state.current_visit = {
+                                            "visit_no": generate_short_visit_no(), "customer_id": selected_cust["id"],
+                                            "customer_name": selected_cust["name"], "customer_code": selected_cust.get("customer_code", ""),
+                                            "mobile": selected_cust.get("mobile", ""), "step": "TRANSACTIONS"
                                         }
-                                        res = supabase.table("customer_visits").insert(visit_data).execute()
-                                        
-                                        if res.data:
-                                            created_visit = res.data[0]
-                                            
-                                            # 🔑 மிக முக்கியமானது: Step-ஐ TRANSACTIONS என மாற்றுவது
-                                            st.session_state.current_visit = {
-                                                "visit_id": created_visit["id"],
-                                                "visit_no": created_visit["visit_no"],
-                                                "customer_id": selected_cust_id,
-                                                "customer_name": selected_cust_name,
-                                                "step": "TRANSACTIONS"  # <--- இதுதான் படி 2-க்குத் தாவுவதற்கு உதவும்!
-                                            }
-                                            st.success("வருகை பதிவு வெற்றிகரமாக உருவாக்கப்பட்டது!")
-                                            st.rerun()
+                                        st.rerun()
 
                             with st.expander(f"✏️ {selected_cust['name']} விவரங்களில் மாற்றம் செய்ய கோரிக்கை அனுப்புக"):
                                 if has_pending_update_req:
@@ -1784,386 +1741,397 @@ else:
                                 st.success(f"✅ வாடிக்கையாளர் {new_name} பதிவு செய்யப்பட்டு ஒப்புதலுக்கு அனுப்பப்பட்டது!")
                                 st.rerun()
 
-                        0 Maturity)", "ஜீபி (Gold Purchase - GP)"] else 0.0,
-                                        "received_amount": float(final_amount) if txn_type in ["அசல் வரவு (Principal Repayment)", "ஆர்டி ஓப்பன் (RD Open)", "எப்டி ஓப்பன் (FD Open)", "ஜிஎஸ் (Gold Sale - GS)"] else 0.0,
-                                        "ornament_details": ornament_details,
-                                        "other_charges": float(other_charges),
-                                        "ornament_image_url": img_url,
-                                        "total_weight": float(total_weight),
-                                        "net_weight": float(net_weight),
-                                        "gp_number": gp_number,
-                                        "ref1_name": ref1_name,
-                                        "ref1_phone": ref1_phone,
-                                        "ref2_name": ref2_name,
-                                        "ref2_phone": ref2_phone,
-                                        "principal_amount": float(principal_amount),
-                                        "interest_amount": float(interest_amount),
-                                        "nominee_name": nominee_name,
-                                        "nominee_relation": nominee_relation,
-                                        "nominee_address": nominee_address,
-                                    })
-                                    st.success("✅யை உள்ளிடவும்.")
+            elif st.session_state.current_visit["step"] == "TRANSACTIONS":
+                visit = st.session_state.current_visit
+                st.success(f"வாடிக்கையாளர்: **{visit['customer_name']}** (வருகை எண்: **{visit['visit_no']}**)")
+                st.subheader("படி 2: வணிக நடவடிக்கைகள் சேர்த்தல்")
 
-                                # மாறிகளைத் தொடக்கத்தில் காலியாக வரையறுத்தல்
-                                ornament_details = None
-                                other_charges = 0.0
-                                total_weight = 0.0
-                                net_weight = 0.0
-                                gp_number = None
-                                ref1_name, ref1_phone = None, None
-                                ref2_name, ref2_phone = None, None
-                                principal_amount = 0.0
-                                interest_amount = 0.0
-                                final_amount = 0.0
-                                nominee_name, nominee_relation, nominee_address = None, None, None
-                                ornament_file = None
+                active_g_schemes = supabase.table("gold_loan_schemes").select("*").eq("is_active", True).execute().data or []
+                active_fd_schemes = supabase.table("fd_schemes").select("*").eq("is_active", True).execute().data or []
+                active_rd_schemes = supabase.table("rd_schemes").select("*").eq("is_active", True).execute().data or []
 
-                                # --- நிபந்தனை வாரியான ஃபீல்டுகள் ---
+                g_scheme_map = {s["scheme_name"]: s for s in active_g_schemes}
+                gold_scheme_options = list(g_scheme_map.keys()) if g_scheme_map else ["General 12%"]
+                fd_scheme_options = [s["scheme_name"] for s in active_fd_schemes] if active_fd_schemes else ["Standard FD 9.5%"]
+                rd_scheme_options = [s["scheme_name"] for s in active_rd_schemes] if active_rd_schemes else ["Standard RD 10%"]
 
-                            if txn_type == "நகைக்கடன் (Pledge)":
-                                ornament_details = st.text_area("நகை விபரம் (Ornament Details)")
-                                col1, col2 = st.columns(2)
-                                with col1:
-                                    total_weight = st.number_input("மொத்த எடை (Gross Wt - g)", min_value=0.0, format="%.3f")
-                                    final_amount = st.number_input("கடன் தொகை (Loan Amount)", min_value=0.0)
-                                with col2:
-                                    net_weight = st.number_input("நிகர எடை (Net Wt - g)", min_value=0.0, format="%.3f")
-                                    other_charges = st.number_input("இதர கட்டணங்கள் (Other Charges)", min_value=0.0)
-                                ornament_file = st.file_uploader("நகை படம் (Ornament Photo)", type=["jpg", "jpeg", "png"], key="pledge_img")
+                txn_category = st.selectbox(
+                    "நடவடிக்கை வகை:",
+                    [
+                        "Pledge (புதிய நகைக் கடன்)", "GL Release (அடமானம் மீட்டல்)",
+                        "Interest Payment (வட்டி வரவு)", "Part Payment (அசல் வரவு)",
+                        "Take Over (பிற நிறுவன கடன் மீட்டல்)", "RD Open (புதிய RD சேமிப்பு)",
+                        "RD Due (RD தவணை)", "RD Closure (RD முதிர்வு)",
+                        "FD Open (புதிய வைப்பு நிதி)", "FD Interest (FD வட்டி)",
+                        "FD Closure (FD முதிர்வு)", "GP (Gold Purchase)", "GS (Gold Sale)"
+                    ],
+                    key="dyn_txn_sel"
+                )
 
-                            elif txn_type == "அசல் வரவு (Principal Repayment)":
-                                col1, col2 = st.columns(2)
-                                with col1:
-                                    principal_amount = st.number_input("அசல் தொகை (Principal Amount)", min_value=0.0)
-                                with col2:
-                                    interest_amount = st.number_input("வட்டி தொகை (Interest Amount)", min_value=0.0)
-                                final_amount = principal_amount + interest_amount
-                                st.info(f"மொத்த வரவுத் தொகை: ₹{final_amount:,.2f}")
+                with st.form("dynamic_txn_form", clear_on_submit=True):
+                    col_st1, col_st2 = st.columns(2)
+                    with col_st1:
+                        staff = st.selectbox("காரணப் பணியாளர்:", current_staff_list)
+                    with col_st2:
+                        custom_remarks = st.text_input("கூடுதல் குறிப்பு:", placeholder="எ.கா: சிறப்பு தள்ளுபடி")
 
-                            elif txn_type in ["ஆர்டி ஓப்பன் (RD Open)", "எப்டி ஓப்பன் (FD Open)"]:
-                                final_amount = st.number_input("வைப்புத் தொகை (Deposit Amount)", min_value=0.0)
-                                st.markdown("##### நாமினி விவரங்கள் (Nominee Details)")
-                                nominee_name = st.text_input("நாமினி பெயர் (Nominee Name)")
-                                col1, col2 = st.columns(2)
-                                with col1:
-                                    nominee_relation = st.text_input("உறவுமுறை (Relationship)")
-                                with col2:
-                                    nominee_address = st.text_area("நாமினி முகவரி (Nominee Address)")
+                    st.markdown("---")
+                    paid_amt, received_amt, detail_summary = 0.0, 0.0, []
 
-                            elif txn_type in ["ஆர்டி முதிர்வு (RD Maturity)", "எப்டி முதிர்வு (FD Maturity)"]:
-                                col1, col2 = st.columns(2)
-                                with col1:
-                                    principal_amount = st.number_input("முதலீடு செய்த/கட்டிய தொகை (Principal)", min_value=0.0)
-                                with col2:
-                                    interest_amount = st.number_input("வட்டி தொகை (Interest)", min_value=0.0)
-                                final_amount = principal_amount + interest_amount
-                                st.success(f"வாடிக்கையாளருக்கு வழங்கப்படும் மொத்த தொகை: ₹{final_amount:,.2f}")
+                    if txn_category == "Pledge (புதிய நகைக் கடன்)":
+                        p_col1, p_col2, p_col3 = st.columns(3)
+                        with p_col1:
+                            new_gl_no = st.text_input("புதிய கடன் எண் (GL No) *")
+                            scheme_name = st.selectbox("அட்மின் நகைக் கடன் திட்டம் (Scheme) *", gold_scheme_options)
+                            sel_scheme_obj = g_scheme_map.get(scheme_name, {})
+                            cur_rpg = float(sel_scheme_obj.get("rate_per_gram", 0) or 0)
+                            if cur_rpg > 0:
+                                st.info(f"💎 **இந்த ஸ்கீமின் RPG:** `₹{cur_rpg:,.2f} / gram`")
+                        with p_col2:
+                            gross_wt = st.number_input("மொத்த எடை (Gross Weight - gms) *", min_value=0.0, step=0.1)
+                            net_wt = st.number_input("நிகர எடை (Net Weight - gms) *", min_value=0.0, step=0.1)
+                            item_count = st.number_input("நகை எண்ணிக்கை", min_value=1, step=1)
+                        with p_col3:
+                            max_eligible_calc = net_wt * cur_rpg if cur_rpg > 0 else 0.0
+                            if cur_rpg > 0 and net_wt > 0:
+                                st.success(f"⚖️ அதிகபட்ச கடன்: **₹{max_eligible_calc:,.2f}**")
+                            paid_amt = st.number_input("கடன் தொகை (Paid ₹) *", min_value=0.0, step=500.0)
+                        detail_summary = [f"GL: {new_gl_no}", f"ஸ்கீம்: {scheme_name}", f"RPG: ₹{cur_rpg}", f"எடை: {net_wt}g"]
 
-                            elif txn_type == "ஜீபி (Gold Purchase - GP)":
-                                gp_number = st.text_input("GP எண் (GP Number)")
-                                ornament_details = st.text_area("நகை விபரம் (Ornament Details)")
-                                col1, col2, col3 = st.columns(3)
-                                with col1:
-                                    total_weight = st.number_input("மொத்த எடை (g)", min_value=0.0, format="%.3f", key="gp_gw")
-                                with col2:
-                                    net_weight = st.number_input("நிகர எடை (g)", min_value=0.0, format="%.3f", key="gp_nw")
-                                with col3:
-                                    final_amount = st.number_input("கொடுக்கப்பட்ட தொகை (Amount)", min_value=0.0, key="gp_amt")
-                                ornament_file = st.file_uploader("நகை படம் (Ornament Photo)", type=["jpg", "jpeg", "png"], key="gp_img")
+                    elif txn_category == "GL Release (அடமானம் மீட்டல்)":
+                        r_col1, r_col2 = st.columns(2)
+                        with r_col1:
+                            rel_gl_no = st.text_input("மீட்கப்படும் கடன் எண் *")
+                            principal_amt = st.number_input("அசல் தொகை (₹) *", min_value=0.0, step=500.0)
+                        with r_col2:
+                            interest_amt = st.number_input("வட்டித் தொகை (₹) *", min_value=0.0, step=50.0)
+                            other_charges = st.number_input("இதர கட்டணம் (₹)", min_value=0.0, step=10.0)
+                        received_amt = principal_amt + interest_amt + other_charges
+                        detail_summary = [f"GL: {rel_gl_no}", f"அசல்: ₹{principal_amt}", f"வட்டி: ₹{interest_amt}"]
 
-                                st.markdown("##### பரிந்துரைப்பாளர் விவரங்கள் (References)")
-                                rcol1, rcol2 = st.columns(2)
-                                with rcol1:
-                                    ref1_name = st.text_input("Reference 1 - பெயர்")
-                                    ref1_phone = st.text_input("Reference 1 - தொலைபேசி எண்")
-                                with rcol2:
-                                    ref2_name = st.text_input("Reference 2 - பெயர்")
-                                    ref2_phone = st.text_input("Reference 2 - தொலைபேசி எண்")
+                    elif txn_category in ["Interest Payment (வட்டி வரவு)", "Part Payment (அசல் வரவு)"]:
+                        i_col1, i_col2 = st.columns(2)
+                        with i_col1:
+                            part_gl_no = st.text_input("கடன் எண் *")
+                        with i_col2:
+                            received_amt = st.number_input("செலுத்திய தொகை (₹) *", min_value=0.0, step=100.0)
+                        detail_summary = [f"GL: {part_gl_no}", f"அசல்: ₹{received_amt}" if "Part Payment" in txn_category else f"வட்டி: ₹{received_amt}"]
 
-                            elif txn_type == "ஜிஎஸ் (Gold Sale - GS)":
-                                ornament_details = st.text_area("நகை விபரம் (Ornament Details)", key="gs_det")
-                                col1, col2, col3 = st.columns(3)
-                                with col1:
-                                    total_weight = st.number_input("மொத்த எடை (g)", min_value=0.0, format="%.3f", key="gs_gw")
-                                with col2:
-                                    net_weight = st.number_input("நிகர எடை (g)", min_value=0.0, format="%.3f", key="gs_nw")
-                                with col3:
-                                    final_amount = st.number_input("பெற்ற தொகை (Received Amount)", min_value=0.0, key="gs_amt")
-                                ornament_file = st.file_uploader("நகை படம் (Ornament Photo)", type=["jpg", "jpeg", "png"], key="gs_img")
+                    elif txn_category == "Take Over (பிற நிறுவன கடன் மீட்டல்)":
+                        to_col1, to_col2 = st.columns(2)
+                        with to_col1:
+                            bank_source = st.text_input("முந்தைய நிறுவனம் *")
+                            prev_loan_no = st.text_input("முந்தைய லோன் எண் *")
+                        with to_col2:
+                            paid_amt = st.number_input("செலுத்திய தொகை (₹) *", min_value=0.0, step=500.0)
+                        detail_summary = [f"வங்கி: {bank_source}", f"கடன் எண்: {prev_loan_no}"]
 
-                            # பட்டியலில் சேர்க்கும் பட்டன்
-                            if st.button("➕ பட்டியலில் சேர் (Add to Cart)", type="primary"):
-                                if final_amount > 0:
-                                    img_url = upload_ornament_image(ornament_file) if ornament_file else None
+                    elif txn_category == "FD Open (புதிய வைப்பு நிதி)":
+                        f_col1, f_col2 = st.columns(2)
+                        with f_col1:
+                            fd_acc_no = st.text_input("புதிய FD கணக்கு எண் *")
+                            fd_sel_scheme = st.selectbox("அட்மின் FD திட்டம் (Scheme) *", fd_scheme_options)
+                        with f_col2:
+                            received_amt = st.number_input("வைப்புத் தொகை (Deposit ₹) *", min_value=0.0, step=1000.0)
+                        detail_summary = [f"FD No: {fd_acc_no}", f"Scheme: {fd_sel_scheme}"]
 
-                                    st.session_state.transactions_cart.append({
-                                        "transaction_type": txn_type,
-                                        "staff_name": st.session_state.username,
-                                        "amount": float(final_amount),
-                                        "paid_amount": float(final_amount) if txn_type in ["நகைக்கடன் (Pledge)", "ஆர்டி முதிர்வு (RD Maturity)", "எப்டி முதிர்வு (FD Maturity)", "ஜீபி (Gold Purchase - GP)"] else 0.0,
-                                        "received_amount": float(final_amount) if txn_type in ["அசல் வரவு (Principal Repayment)", "ஆர்டி ஓப்பன் (RD Open)", "எப்டி ஓப்பன் (FD Open)", "ஜிஎஸ் (Gold Sale - GS)"] else 0.0,
-                                        "ornament_details": ornament_details,
-                                        "other_charges": float(other_charges),
-                                        "ornament_image_url": img_url,
-                                        "total_weight": float(total_weight),
-                                        "net_weight": float(net_weight),
-                                        "gp_number": gp_number,
-                                        "ref1_name": ref1_name,
-                                        "ref1_phone": ref1_phone,
-                                        "ref2_name": ref2_name,
-                                        "ref2_phone": ref2_phone,
-                                        "principal_amount": float(principal_amount),
-                                        "interest_amount": float(interest_amount),
-                                        "nominee_name": nominee_name,
-                                        "nominee_relation": nominee_relation,
-                                        "nominee_address": nominee_address,
-                                    })
-                                    st.success("✅ பரிவர்த்தனை கார்ட்டில் சேர்க்கப்பட்டது!")
-                                    st.rerun()
-                                else:
-                                    st.error("தொகையை உள்ளிடவும்.")
+                    elif txn_category == "RD Open (புதிய RD சேமிப்பு)":
+                        rd_col1, rd_col2 = st.columns(2)
+                        with rd_col1:
+                            rd_acc_no = st.text_input("புதிய RD கணக்கு எண் *")
+                            rd_sel_scheme = st.selectbox("அட்மின் RD திட்டம் (Scheme) *", rd_scheme_options)
+                        with rd_col2:
+                            received_amt = st.number_input("முதல் தவணைத் தொகை (Installment ₹) *", min_value=0.0, step=500.0)
+                        detail_summary = [f"RD No: {rd_acc_no}", f"Scheme: {rd_sel_scheme}"]
 
-                            if st.session_state.transactions_cart:
-                                st.markdown("### 🛒 நடவடிக்கைகள் பட்டியல்:")
-                                df_cart = pd.DataFrame(st.session_state.transactions_cart)
-                                st.dataframe(df_cart, use_container_width=True)
+                    elif "RD" in txn_category or "FD" in txn_category:
+                        d_col1, d_col2 = st.columns(2)
+                        with d_col1:
+                            acc_no = st.text_input("கணக்கு எண் *")
+                        with d_col2:
+                            if "Closure" in txn_category or "Interest" in txn_category:
+                                paid_amt = st.number_input("வழங்கிய தொகை (₹) *", min_value=0.0, step=100.0)
+                            else:
+                                received_amt = st.number_input("பெற்ற தொகை (₹) *", min_value=0.0, step=100.0)
+                        detail_summary = [f"A/c: {acc_no}"]
 
-                                total_paid = df_cart["paid_amount"].sum()
-                                total_received = df_cart["received_amount"].sum()
-                                net_amount = total_paid - total_received
+                    elif txn_category == "GP (Gold Purchase)":
+                        gp_col1, gp_col2 = st.columns(2)
+                        with gp_col1:
+                            gp_wt = st.number_input("நகை எடை (Grams) *", min_value=0.0, step=0.1)
+                            gp_purity = st.selectbox("தரம்", ["916 (22K)", "KDM", "999 (24K)", "750 (18K)"])
+                        with gp_col2:
+                            paid_amt = st.number_input("வழங்கிய தொகை (Paid ₹) *", min_value=0.0, step=500.0)
+                        detail_summary = [f"எடை: {gp_wt}g", f"தரம்: {gp_purity}"]
 
-                                c1, c2, c3 = st.columns(3)
-                                c1.metric("மொத்த பட்டுவாடா", f"₹{total_paid:,.2f}")
-                                c2.metric("மொத்த வரவு", f"₹{total_received:,.2f}")
-                                c3.metric("நிகரத் தொகை", f"₹{abs(net_amount):,.2f}")
+                    elif txn_category == "GS (Gold Sale)":
+                        gs_col1, gs_col2 = st.columns(2)
+                        with gs_col1:
+                            gs_bill_no = st.text_input("விற்பனை பில் எண் *")
+                            gs_item_name = st.text_input("பொருள் பெயர்")
+                            gs_wt = st.number_input("எடை (Grams) *", min_value=0.0, step=0.1, key="gs_w")
+                        with gs_col2:
+                            received_amt = st.number_input("பெற்ற தொகை (Received ₹) *", min_value=0.0, step=500.0)
+                        detail_summary = [f"பில்: {gs_bill_no}", f"பொருள்: {gs_item_name}", f"எடை: {gs_wt}g"]
 
-                                cart_b1, cart_b2 = st.columns([4, 1])
-                                with cart_b1:
-                                    if st.button("பணம் செலுத்தும் முறை மற்றும் OTP பிரிவிற்குச் செல் ➔", type="primary"):
-                                        st.session_state.current_visit["net_amount"] = net_amount
-                                        st.session_state.current_visit["total_paid"] = total_paid
-                                        st.session_state.current_visit["total_received"] = total_received
-                                        st.session_state.current_visit["step"] = "CASH_OTP"
-                                        st.rerun()
-                                with cart_b2:
-                                    if st.button("பட்டியலை அழி"):
-                                        st.session_state.transactions_cart = []
-                                        st.rerun()
+                    if st.form_submit_button("➕ பட்டியலில் சேர் (Add to Cart)", type="primary"):
+                        if paid_amt > 0 or received_amt > 0:
+                            all_remarks = " | ".join(detail_summary)
+                            if custom_remarks.strip():
+                                all_remarks += f" ({custom_remarks.strip()})"
+                            st.session_state.transactions_cart.append({
+                                "transaction_type": txn_category,
+                                "staff_name": staff,
+                                "paid_amount": float(paid_amt),
+                                "received_amount": float(received_amt),
+                                "remarks": all_remarks,
+                            })
+                            st.success(f"'{txn_category}' சேர்க்கப்பட்டது!")
+                            st.rerun()
+                        else:
+                            st.error("தொகையை உள்ளிடவும்.")
+
+                if st.session_state.transactions_cart:
+                    st.markdown("### 🛒 நடவடிக்கைகள் பட்டியல்:")
+                    df_cart = pd.DataFrame(st.session_state.transactions_cart)
+                    st.dataframe(df_cart, use_container_width=True)
+
+                    total_paid = df_cart["paid_amount"].sum()
+                    total_received = df_cart["received_amount"].sum()
+                    net_amount = total_paid - total_received
+
+                    c1, c2, c3 = st.columns(3)
+                    c1.metric("மொத்த பட்டுவாடா", f"₹{total_paid:,.2f}")
+                    c2.metric("மொத்த வரவு", f"₹{total_received:,.2f}")
+                    c3.metric("நிகரத் தொகை", f"₹{abs(net_amount):,.2f}")
+
+                    cart_b1, cart_b2 = st.columns([4, 1])
+                    with cart_b1:
+                        if st.button("பணம் செலுத்தும் முறை மற்றும் OTP பிரிவிற்குச் செல் ➔", type="primary"):
+                            st.session_state.current_visit["net_amount"] = net_amount
+                            st.session_state.current_visit["total_paid"] = total_paid
+                            st.session_state.current_visit["total_received"] = total_received
+                            st.session_state.current_visit["step"] = "CASH_OTP"
+                            st.rerun()
+                    with cart_b2:
+                        if st.button("பட்டியலை அழி"):
+                            st.session_state.transactions_cart = []
+                            st.rerun()
 
             # -----------------------------------------------------------------
             # Step 3: பணப் பரிமாற்றம், 8 ரூபாய் நோட்டுகள் & OTP சரிபார்ப்பு
             # -----------------------------------------------------------------
-                                    elif st.session_state.get("current_visit") and st.session_state.current_visit.get("step") == "CASH_OTP":
-                                        visit = st.session_state.current_visit
-                                        net_target = visit.get("net_amount", 0.0)
-                                        total_needed_abs = abs(net_target)
-                                        current_drawer = get_current_branch_cash_drawer(st.session_state.branch_id)
-                                        otp_already_sent = "generated_otp" in st.session_state and st.session_state.generated_otp is not None
+            elif st.session_state.current_visit["step"] == "CASH_OTP":
+                visit = st.session_state.current_visit
+                net_target = visit["net_amount"]
+                total_needed_abs = abs(net_target)
+                current_drawer = get_current_branch_cash_drawer(st.session_state.branch_id)
+                otp_already_sent = "generated_otp" in st.session_state and st.session_state.generated_otp is not None
 
-                                        st.subheader("படி 3: பணப் பரிமாற்ற முறை & நோட்டுகள் / மீதித் தொகை கணக்கீடு")
-                                        dr_text = (
-                                                f"💸 வாடிக்கையாளருக்கு வழங்க வேண்டிய நிகரத் தொகை (Pay-OUT): ₹{net_target:,.2f}"
-                                                if net_target > 0
-                                                else f"💰 வாடிக்கையாளரிடம் பெற வேண்டிய நிகரத் தொகை (Pay-IN): ₹{total_needed_abs:,.2f}"
-                                            )
-                                        st.info(f"**{hdr_text}** (வாடிக்கையாளர்: {visit['customer_name']})")
+                st.subheader("படி 3: பணப் பரிமாற்ற முறை & நோட்டுகள் / மீதித் தொகை கணக்கீடு")
+                hdr_text = (
+                    f"💸 வாடிக்கையாளருக்கு வழங்க வேண்டிய நிகரத் தொகை (Pay-OUT): ₹{net_target:,.2f}"
+                    if net_target > 0
+                    else f"💰 வாடிக்கையாளரிடம் பெற வேண்டிய நிகரத் தொகை (Pay-IN): ₹{total_needed_abs:,.2f}"
+                )
+                st.info(f"**{hdr_text}** (வாடிக்கையாளர்: {visit['customer_name']})")
 
-                                        with st.container(border=True):
-                                                st.markdown("#### 💳 பணம் செலுத்தும் / பெறும் வழிகள் (Payment Split)")
-                                                pm_c1, pm_c2, pm_c3 = st.columns(3)
-                                                with pm_c1:
-                                                    pay_option = st.selectbox(
-                                                        "பரிமாற்ற வகை:",
-                                                        ["முழுவதும் ரொக்கம் (100% Cash)", "முழுவதும் வங்கி / UPI (100% Online)", "பகுதி ரொக்கம் + பகுதி வங்கி (Split)"],
-                                                        disabled=otp_already_sent,
-                                                        key="pay_option_select"
-                                                    )
+                with st.container(border=True):
+                    st.markdown("#### 💳 பணம் செலுத்தும் / பெறும் வழிகள் (Payment Split)")
+                    pm_c1, pm_c2, pm_c3 = st.columns(3)
+                    with pm_c1:
+                        pay_option = st.selectbox(
+                            "பரிமாற்ற வகை:",
+                            ["முழுவதும் ரொக்கம் (100% Cash)", "முழுவதும் வங்கி / UPI (100% Online)", "பகுதி ரொக்கம் + பகுதி வங்கி (Split)"],
+                            disabled=otp_already_sent,
+                            key="pay_option_select"
+                        )
 
-                                                with pm_c2:
-                                                    if pay_option == "முழுவதும் ரொக்கம் (100% Cash)":
-                                                        cash_portion = total_needed_abs
-                                                        bank_portion = 0.0
-                                                    elif pay_option == "முழுவதும் வங்கி / UPI (100% Online)":
-                                                        cash_portion = 0.0
-                                                        bank_portion = total_needed_abs
-                                                    else:
-                                                        cash_portion = st.number_input(
-                                                            "ரொக்கப் பகுதி (₹):",
-                                                            min_value=0.0,
-                                                            max_value=float(total_needed_abs),
-                                                            step=500.0,
-                                                            disabled=otp_already_sent,
-                                                            key="cash_portion_input"
-                                                        )
-                                                        bank_portion = total_needed_abs - cash_portion
-                                                    st.metric("நிகர ரொக்க இலக்கு (Net Cash Target)", f"₹{cash_portion:,.2f}")
+                    with pm_c2:
+                        if pay_option == "முழுவதும் ரொக்கம் (100% Cash)":
+                            cash_portion = total_needed_abs
+                            bank_portion = 0.0
+                        elif pay_option == "முழுவதும் வங்கி / UPI (100% Online)":
+                            cash_portion = 0.0
+                            bank_portion = total_needed_abs
+                        else:
+                            cash_portion = st.number_input(
+                                "ரொக்கப் பகுதி (₹):",
+                                min_value=0.0,
+                                max_value=float(total_needed_abs),
+                                step=500.0,
+                                disabled=otp_already_sent,
+                                key="cash_portion_input"
+                            )
+                            bank_portion = total_needed_abs - cash_portion
+                        st.metric("நிகர ரொக்க இலக்கு (Net Cash Target)", f"₹{cash_portion:,.2f}")
 
-                                                with pm_c3:
-                                                    st.metric("வங்கி / UPI தொகை", f"₹{bank_portion:,.2f}")
-                                                    bank_ref_no = st.text_input("UTR / Ref எண் *:", disabled=otp_already_sent, key="bank_ref_input") if bank_portion > 0 else ""
+                    with pm_c3:
+                        st.metric("வங்கி / UPI தொகை", f"₹{bank_portion:,.2f}")
+                        bank_ref_no = st.text_input("UTR / Ref எண் *:", disabled=otp_already_sent, key="bank_ref_input") if bank_portion > 0 else ""
 
-                                                with st.expander("💼 தற்போதைய கல்லா கையிருப்பு நோட்டுகள் (Live Drawer Stock)", expanded=False):
-                                                    ds1, ds2, ds3, ds4 = st.columns(4)
-                                                    ds1.metric("₹500", f"{current_drawer['500']} தாள்கள்")
-                                                    ds1.metric("₹20", f"{current_drawer['20']} தாள்கள்")
-                                                    ds2.metric("₹200", f"{current_drawer['200']} தாள்கள்")
-                                                    ds2.metric("₹10", f"{current_drawer['10']} தாள்கள்")
-                                                    ds3.metric("₹100", f"{current_drawer['100']} தாள்கள்")
-                                                    ds3.metric("₹5", f"{current_drawer['5']} தாள்கள்")
-                                                    ds4.metric("₹50", f"{current_drawer['50']} தாள்கள்")
-                                                    ds4.metric("நாணயங்கள்", f"₹{current_drawer['coins']:,.2f}")
+                with st.expander("💼 தற்போதைய கல்லா கையிருப்பு நோட்டுகள் (Live Drawer Stock)", expanded=False):
+                    ds1, ds2, ds3, ds4 = st.columns(4)
+                    ds1.metric("₹500", f"{current_drawer['500']} தாள்கள்")
+                    ds1.metric("₹20", f"{current_drawer['20']} தாள்கள்")
+                    ds2.metric("₹200", f"{current_drawer['200']} தாள்கள்")
+                    ds2.metric("₹10", f"{current_drawer['10']} தாள்கள்")
+                    ds3.metric("₹100", f"{current_drawer['100']} தாள்கள்")
+                    ds3.metric("₹5", f"{current_drawer['5']} தாள்கள்")
+                    ds4.metric("₹50", f"{current_drawer['50']} தாள்கள்")
+                    ds4.metric("நாணயங்கள்", f"₹{current_drawer['coins']:,.2f}")
 
-                                                if otp_already_sent:
-                                                    st.warning("🔒 **OTP அனுப்பப்பட்டுவிட்டது! பணக் கணக்கீட்டில் இனி எந்த மாற்றமும் செய்ய முடியாது.**")
+                if otp_already_sent:
+                    st.warning("🔒 **OTP அனுப்பப்பட்டுவிட்டது! பணக் கணக்கீட்டில் இனி எந்த மாற்றமும் செய்ய முடியாது.**")
 
-                                                col_den1, col_den2 = st.columns([1.5, 1])
+                col_den1, col_den2 = st.columns([1.5, 1])
 
-                                                with col_den1:
-                                                    st.markdown("#### 💵 நோட்டுகள் மற்றும் மீதி சில்லறை கணக்கீடு")
+                with col_den1:
+                    st.markdown("#### 💵 நோட்டுகள் மற்றும் மீதி சில்லறை கணக்கீடு")
 
-                                                with st.expander("📥 வாடிக்கையாளர் தந்த நோட்டுகள் (Cash IN)", expanded=True):
-                                                    st.caption("வாடிக்கையாளர் கவுண்ட்டரில் கொடுத்த அனைத்து ரூபாய் நோட்டுகள்:")
-                                                    r1_1, r1_2, r1_3, r1_4 = st.columns(4)
-                                                    in_500 = r1_1.number_input("₹500 (IN)", min_value=0, step=1, disabled=otp_already_sent, key="in_500")
-                                                    in_200 = r1_2.number_input("₹200 (IN)", min_value=0, step=1, disabled=otp_already_sent, key="in_200")
-                                                    in_100 = r1_3.number_input("₹100 (IN)", min_value=0, step=1, disabled=otp_already_sent, key="in_100")
-                                                    in_50 = r1_4.number_input("₹50 (IN)", min_value=0, step=1, disabled=otp_already_sent, key="in_50")
+                    with st.expander("📥 வாடிக்கையாளர் தந்த நோட்டுகள் (Cash IN)", expanded=True):
+                        st.caption("வாடிக்கையாளர் கவுண்ட்டரில் கொடுத்த அனைத்து ரூபாய் நோட்டுகள்:")
+                        r1_1, r1_2, r1_3, r1_4 = st.columns(4)
+                        in_500 = r1_1.number_input("₹500 (IN)", min_value=0, step=1, disabled=otp_already_sent, key="in_500")
+                        in_200 = r1_2.number_input("₹200 (IN)", min_value=0, step=1, disabled=otp_already_sent, key="in_200")
+                        in_100 = r1_3.number_input("₹100 (IN)", min_value=0, step=1, disabled=otp_already_sent, key="in_100")
+                        in_50 = r1_4.number_input("₹50 (IN)", min_value=0, step=1, disabled=otp_already_sent, key="in_50")
 
-                                                    r2_1, r2_2, r2_3, r2_4 = st.columns(4)
-                                                    in_20 = r2_1.number_input("₹20 (IN)", min_value=0, step=1, disabled=otp_already_sent, key="in_20")
-                                                    in_10 = r2_2.number_input("₹10 (IN)", min_value=0, step=1, disabled=otp_already_sent, key="in_10")
-                                                    in_5 = r2_3.number_input("₹5 (IN)", min_value=0, step=1, disabled=otp_already_sent, key="in_5")
-                                                    in_coins = r2_4.number_input("சில்லறை ₹ (IN)", min_value=0, step=1, disabled=otp_already_sent, key="in_coins")
+                        r2_1, r2_2, r2_3, r2_4 = st.columns(4)
+                        in_20 = r2_1.number_input("₹20 (IN)", min_value=0, step=1, disabled=otp_already_sent, key="in_20")
+                        in_10 = r2_2.number_input("₹10 (IN)", min_value=0, step=1, disabled=otp_already_sent, key="in_10")
+                        in_5 = r2_3.number_input("₹5 (IN)", min_value=0, step=1, disabled=otp_already_sent, key="in_5")
+                        in_coins = r2_4.number_input("சில்லறை ₹ (IN)", min_value=0, step=1, disabled=otp_already_sent, key="in_coins")
 
-                                                    total_cash_in = (
-                                                        (in_500 * 500) + (in_200 * 200) + (in_100 * 100) + (in_50 * 50) +
-                                                        (in_20 * 20) + (in_10 * 10) + (in_5 * 5) + in_coins
-                                                    )
-                                                    st.markdown(f"**வாடிக்கையாளர் தந்த மொத்தத் தொகை:** `₹{total_cash_in:,.2f}`")
+                        total_cash_in = (
+                            (in_500 * 500) + (in_200 * 200) + (in_100 * 100) + (in_50 * 50) +
+                            (in_20 * 20) + (in_10 * 10) + (in_5 * 5) + in_coins
+                        )
+                        st.markdown(f"**வாடிக்கையாளர் தந்த மொத்தத் தொகை:** `₹{total_cash_in:,.2f}`")
 
-                                                with st.expander("📤 கிளை கொடுத்த நோட்டுகள் / பேலன்ஸ் சில்லறை (Cash OUT)", expanded=True):
-                                                    st.caption("வாடிக்கையாளருக்கு நாம் பட்டுவாடா செய்த அல்லது பேலன்ஸ் திருப்பிக் கொடுத்த நோட்டுகள்:")
-                                                    max_500 = max(0, current_drawer["500"] + in_500)
-                                                    max_200 = max(0, current_drawer["200"] + in_200)
-                                                    max_100 = max(0, current_drawer["100"] + in_100)
-                                                    max_50 = max(0, current_drawer["50"] + in_50)
-                                                    max_20 = max(0, current_drawer["20"] + in_20)
-                                                    max_10 = max(0, current_drawer["10"] + in_10)
-                                                    max_5 = max(0, current_drawer["5"] + in_5)
-                                                    max_coins = max(0, int(current_drawer["coins"]) + in_coins)
+                    with st.expander("📤 கிளை கொடுத்த நோட்டுகள் / பேலன்ஸ் சில்லறை (Cash OUT)", expanded=True):
+                        st.caption("வாடிக்கையாளருக்கு நாம் பட்டுவாடா செய்த அல்லது பேலன்ஸ் திருப்பிக் கொடுத்த நோட்டுகள்:")
+                        max_500 = max(0, current_drawer["500"] + in_500)
+                        max_200 = max(0, current_drawer["200"] + in_200)
+                        max_100 = max(0, current_drawer["100"] + in_100)
+                        max_50 = max(0, current_drawer["50"] + in_50)
+                        max_20 = max(0, current_drawer["20"] + in_20)
+                        max_10 = max(0, current_drawer["10"] + in_10)
+                        max_5 = max(0, current_drawer["5"] + in_5)
+                        max_coins = max(0, int(current_drawer["coins"]) + in_coins)
 
-                                                    o1_1, o1_2, o1_3, o1_4 = st.columns(4)
-                                                    out_500 = o1_1.number_input(f"₹500 (இருப்பு:{max_500})", min_value=0, max_value=max_500, step=1, disabled=otp_already_sent, key="out_500")
-                                                    out_200 = o1_2.number_input(f"₹200 (இருப்பு:{max_200})", min_value=0, max_value=max_200, step=1, disabled=otp_already_sent, key="out_200")
-                                                    out_100 = o1_3.number_input(f"₹100 (இருப்பு:{max_100})", min_value=0, max_value=max_100, step=1, disabled=otp_already_sent, key="out_100")
-                                                    out_50 = o1_4.number_input(f"₹50 (இருப்பு:{max_50})", min_value=0, max_value=max_50, step=1, disabled=otp_already_sent, key="out_50")
+                        o1_1, o1_2, o1_3, o1_4 = st.columns(4)
+                        out_500 = o1_1.number_input(f"₹500 (இருப்பு:{max_500})", min_value=0, max_value=max_500, step=1, disabled=otp_already_sent, key="out_500")
+                        out_200 = o1_2.number_input(f"₹200 (இருப்பு:{max_200})", min_value=0, max_value=max_200, step=1, disabled=otp_already_sent, key="out_200")
+                        out_100 = o1_3.number_input(f"₹100 (இருப்பு:{max_100})", min_value=0, max_value=max_100, step=1, disabled=otp_already_sent, key="out_100")
+                        out_50 = o1_4.number_input(f"₹50 (இருப்பு:{max_50})", min_value=0, max_value=max_50, step=1, disabled=otp_already_sent, key="out_50")
 
-                                                    o2_1, o2_2, o2_3, o2_4 = st.columns(4)
-                                                    out_20 = o2_1.number_input(f"₹20 (இருப்பு:{max_20})", min_value=0, max_value=max_20, step=1, disabled=otp_already_sent, key="out_20")
-                                                    out_10 = o2_2.number_input(f"₹10 (இருப்பு:{max_10})", min_value=0, max_value=max_10, step=1, disabled=otp_already_sent, key="out_10")
-                                                    out_5 = o2_3.number_input(f"₹5 (இருப்பு:{max_5})", min_value=0, max_value=max_5, step=1, disabled=otp_already_sent, key="out_5")
-                                                    out_coins = o2_4.number_input(f"சில்லறை (இருப்பு:{max_coins})", min_value=0, max_value=max_coins, step=1, disabled=otp_already_sent, key="out_coins")
+                        o2_1, o2_2, o2_3, o2_4 = st.columns(4)
+                        out_20 = o2_1.number_input(f"₹20 (இருப்பு:{max_20})", min_value=0, max_value=max_20, step=1, disabled=otp_already_sent, key="out_20")
+                        out_10 = o2_2.number_input(f"₹10 (இருப்பு:{max_10})", min_value=0, max_value=max_10, step=1, disabled=otp_already_sent, key="out_10")
+                        out_5 = o2_3.number_input(f"₹5 (இருப்பு:{max_5})", min_value=0, max_value=max_5, step=1, disabled=otp_already_sent, key="out_5")
+                        out_coins = o2_4.number_input(f"சில்லறை (இருப்பு:{max_coins})", min_value=0, max_value=max_coins, step=1, disabled=otp_already_sent, key="out_coins")
 
-                                                    total_cash_out = (
-                                                        (out_500 * 500) + (out_200 * 200) + (out_100 * 100) + (out_50 * 50) +
-                                                        (out_20 * 20) + (out_10 * 10) + (out_5 * 5) + out_coins
-                                                    )
-                                                    st.markdown(f"**கிளை வழங்கிய மொத்தத் தொகை:** `₹{total_cash_out:,.2f}`")
+                        total_cash_out = (
+                            (out_500 * 500) + (out_200 * 200) + (out_100 * 100) + (out_50 * 50) +
+                            (out_20 * 20) + (out_10 * 10) + (out_5 * 5) + out_coins
+                        )
+                        st.markdown(f"**கிளை வழங்கிய மொத்தத் தொகை:** `₹{total_cash_out:,.2f}`")
 
-                                                if net_target < 0:
-                                                    actual_net_handover = total_cash_in - total_cash_out
-                                                else:
-                                                    actual_net_handover = total_cash_out - total_cash_in
+                    if net_target < 0:
+                        actual_net_handover = total_cash_in - total_cash_out
+                    else:
+                        actual_net_handover = total_cash_out - total_cash_in
 
-                                                is_cash_tally = (actual_net_handover == cash_portion)
-                                                is_bank_valid = True if bank_portion == 0 else bool(bank_ref_no.strip())
-                                                is_ready = is_cash_tally and is_bank_valid
+                    is_cash_tally = (actual_net_handover == cash_portion)
+                    is_bank_valid = True if bank_portion == 0 else bool(bank_ref_no.strip())
+                    is_ready = is_cash_tally and is_bank_valid
 
-                                                st.markdown("---")
-                                                with st.container(border=True):
-                                                    t_c1, t_c2, t_c3 = st.columns(3)
-                                                    t_c1.metric("தேவையான நிகர ரொக்கம்", f"₹{cash_portion:,.2f}")
-                                                    t_c2.metric("எண்ணப்பட்ட நிகர ரொக்கம்", f"₹{actual_net_handover:,.2f}")
-                                                    diff_amt = cash_portion - actual_net_handover
-                                                    t_c3.metric("வித்தியாசம்", f"₹{abs(diff_amt):,.2f}")
+                    st.markdown("---")
+                    with st.container(border=True):
+                        t_c1, t_c2, t_c3 = st.columns(3)
+                        t_c1.metric("தேவையான நிகர ரொக்கம்", f"₹{cash_portion:,.2f}")
+                        t_c2.metric("எண்ணப்பட்ட நிகர ரொக்கம்", f"₹{actual_net_handover:,.2f}")
+                        diff_amt = cash_portion - actual_net_handover
+                        t_c3.metric("வித்தியாசம்", f"₹{abs(diff_amt):,.2f}")
 
-                                                    if not is_cash_tally:
-                                                        st.error(f"❌ நோட்டுகளின் நிகரக் கணக்கீடு பொருந்தவில்லை! வித்தியாசம்: ₹{abs(diff_amt):,.2f}")
-                                                    elif bank_portion > 0 and not bank_ref_no.strip():
-                                                        st.warning("⚠️ வங்கி பரிவர்த்தனைக்கான UTR / Ref எண்ணை உள்ளிடவும்!")
-                                                    else:
-                                                        st.success("✅ நோட்டுகள் மற்றும் பேலன்ஸ் சில்லறை சரியாகப் பொருந்தியது!")
+                        if not is_cash_tally:
+                            st.error(f"❌ நோட்டுகளின் நிகரக் கணக்கீடு பொருந்தவில்லை! வித்தியாசம்: ₹{abs(diff_amt):,.2f}")
+                        elif bank_portion > 0 and not bank_ref_no.strip():
+                            st.warning("⚠️ வங்கி பரிவர்த்தனைக்கான UTR / Ref எண்ணை உள்ளிடவும்!")
+                        else:
+                            st.success("✅ நோட்டுகள் மற்றும் பேலன்ஸ் சில்லறை சரியாகப் பொருந்தியது!")
 
-                                                with col_den2:
-                                                    st.markdown("#### 📲 OTP சரிபார்ப்பு")
-                                                st.write(f"வாடிக்கையாளர்: **{visit['customer_name']}**")
-                                                st.write(f"மொபைல் எண்: `{visit['mobile']}`")
+                with col_den2:
+                    st.markdown("#### 📲 OTP சரிபார்ப்பு")
+                    st.write(f"வாடிக்கையாளர்: **{visit['customer_name']}**")
+                    st.write(f"மொபைல் எண்: `{visit['mobile']}`")
 
-                                                if not is_ready:
-                                                    st.warning("⚠️ ரொக்க நோட்டுகளும் பேலன்ஸ் சில்லறையும் சரியாக அமைந்ததும் OTP இயங்கும்.")
-                                                    st.button("📲 OTP அனுப்புக", disabled=True, key="otp_btn_disabled")
-                                                elif otp_already_sent:
-                                                    st.success("✅ OTP வாடிக்கையாளருக்கு அனுப்பப்பட்டுவிட்டது!")
-                                                else:
-                                                    if st.button("📲 OTP அனுப்புக", type="primary", key="otp_btn_active"):
-                                                        otp_code = str(random.randint(1000, 9999))
-                                                        st.session_state.generated_otp = otp_code
-                                                        with st.spinner("SMS அனுப்பப்படுகிறது..."):
-                                                            sms_success, msg_detail = send_fast2sms_otp(visit["mobile"], otp_code)
-                                                        if sms_success:
-                                                            st.success("✅ OTP SMS அனுப்பப்பட்டது!")
-                                                        else:
-                                                            st.info(f"💡 சோதனை OTP: **{otp_code}**")
-                                                        st.rerun()
+                    if not is_ready:
+                        st.warning("⚠️ ரொக்க நோட்டுகளும் பேலன்ஸ் சில்லறையும் சரியாக அமைந்ததும் OTP இயங்கும்.")
+                        st.button("📲 OTP அனுப்புக", disabled=True, key="otp_btn_disabled")
+                    elif otp_already_sent:
+                        st.success("✅ OTP வாடிக்கையாளருக்கு அனுப்பப்பட்டுவிட்டது!")
+                    else:
+                        if st.button("📲 OTP அனுப்புக", type="primary", key="otp_btn_active"):
+                            otp_code = str(random.randint(1000, 9999))
+                            st.session_state.generated_otp = otp_code
+                            with st.spinner("SMS அனுப்பப்படுகிறது..."):
+                                sms_success, msg_detail = send_fast2sms_otp(visit["mobile"], otp_code)
+                            if sms_success:
+                                st.success("✅ OTP SMS அனுப்பப்பட்டது!")
+                            else:
+                                st.info(f"💡 சோதனை OTP: **{otp_code}**")
+                            st.rerun()
 
-                                                entered_otp = st.text_input("வாடிக்கையாளர் OTP உள்ளிடவும்", max_chars=4, key="entered_otp_val")
+                    entered_otp = st.text_input("வாடிக்கையாளர் OTP உள்ளிடவும்", max_chars=4, key="entered_otp_val")
 
-                                                if st.button("✅ வருகையை நிறைவு செய்க", type="primary", use_container_width=True):
-                                                    if not is_ready:
-                                                        st.error("❌ கணக்கீடு அல்லது UTR எண் விடுபட்டுள்ளது!")
-                                                    elif not otp_already_sent:
-                                                        st.error("❌ முதலில் வாடிக்கையாளருக்கு OTP அனுப்பவும்!")
-                                                    else:
-                                                        expected_otp = st.session_state.get("generated_otp")
-                                                        if entered_otp and entered_otp == expected_otp:
-                                                            with st.spinner("வருகை சேமிக்கப்படுகிறது..."):
-                                                                pm_label = "Cash" if bank_portion == 0 else ("Bank/UPI" if cash_portion == 0 else "Split")
-                                                                visit_data = {
-                                                                    "visit_no": visit["visit_no"],
-                                                                    "customer_id": visit["customer_id"],
-                                                                    "branch_id": st.session_state.branch_id,
-                                                                    "total_paid": visit["total_paid"],
-                                                                    "total_received": visit["total_received"],
-                                                                    "net_cash_amount": visit["net_amount"],
-                                                                    "cash_amount": float(cash_portion),
-                                                                    "bank_amount": float(bank_portion),
-                                                                    "payment_mode": pm_label,
-                                                                    "bank_reference_no": bank_ref_no.strip() if bank_portion > 0 else None,
-                                                                    "denomination_details": {
-                                                                        "in": {"500": in_500, "200": in_200, "100": in_100, "50": in_50, "20": in_20, "10": in_10, "5": in_5, "coins": in_coins, "total": total_cash_in},
-                                                                        "out": {"500": out_500, "200": out_200, "100": out_100, "50": out_50, "20": out_20, "10": out_10, "5": out_5, "coins": out_coins, "total": total_cash_out},
-                                                                        "net_change": total_cash_in - total_cash_out,
-                                                                    },
-                                                                    "otp_verified": True,
-                                                                    "status": "Pending_Calling_Verification",
-                                                                }
-                                                                visit_res = supabase.table("customer_visits").insert(visit_data).execute()
-                                                                created_visit_id = visit_res.data[0]["id"]
+                    if st.button("✅ வருகையை நிறைவு செய்க", type="primary", use_container_width=True):
+                        if not is_ready:
+                            st.error("❌ கணக்கீடு அல்லது UTR எண் விடுபட்டுள்ளது!")
+                        elif not otp_already_sent:
+                            st.error("❌ முதலில் வாடிக்கையாளருக்கு OTP அனுப்பவும்!")
+                        else:
+                            expected_otp = st.session_state.get("generated_otp")
+                            if entered_otp and entered_otp == expected_otp:
+                                with st.spinner("வருகை சேமிக்கப்படுகிறது..."):
+                                    pm_label = "Cash" if bank_portion == 0 else ("Bank/UPI" if cash_portion == 0 else "Split")
+                                    visit_data = {
+                                        "visit_no": visit["visit_no"],
+                                        "customer_id": visit["customer_id"],
+                                        "branch_id": st.session_state.branch_id,
+                                        "total_paid": visit["total_paid"],
+                                        "total_received": visit["total_received"],
+                                        "net_cash_amount": visit["net_amount"],
+                                        "cash_amount": float(cash_portion),
+                                        "bank_amount": float(bank_portion),
+                                        "payment_mode": pm_label,
+                                        "bank_reference_no": bank_ref_no.strip() if bank_portion > 0 else None,
+                                        "denomination_details": {
+                                            "in": {"500": in_500, "200": in_200, "100": in_100, "50": in_50, "20": in_20, "10": in_10, "5": in_5, "coins": in_coins, "total": total_cash_in},
+                                            "out": {"500": out_500, "200": out_200, "100": out_100, "50": out_50, "20": out_20, "10": out_10, "5": out_5, "coins": out_coins, "total": total_cash_out},
+                                            "net_change": total_cash_in - total_cash_out,
+                                        },
+                                        "otp_verified": True,
+                                        "status": "Pending_Calling_Verification",
+                                    }
+                                    visit_res = supabase.table("customer_visits").insert(visit_data).execute()
+                                    created_visit_id = visit_res.data[0]["id"]
 
-                                                                for txn in st.session_state.transactions_cart:
-                                                                    txn["visit_id"] = created_visit_id
-                                                                    supabase.table("transactions").insert(txn).execute()
+                                    for txn in st.session_state.transactions_cart:
+                                        txn["visit_id"] = created_visit_id
+                                        supabase.table("transactions").insert(txn).execute()
 
-                                                                st.success(f"🎉 வருகை {visit['visit_no']} வெற்றிகரமாக நிறைவுபெற்றது!")
-                                                                st.session_state.current_visit = None
-                                                                st.session_state.transactions_cart = []
-                                                                st.session_state.generated_otp = None
-                                                                st.rerun()
-                                                        else:
-                                                            st.error("தவறான OTP! சரியாக உள்ளிடவும்.")
+                                    st.success(f"🎉 வருகை {visit['visit_no']} வெற்றிகரமாக நிறைவுபெற்றது!")
+                                    st.session_state.current_visit = None
+                                    st.session_state.transactions_cart = []
+                                    st.session_state.generated_otp = None
+                                    st.rerun()
+                            else:
+                                st.error("தவறான OTP! சரியாக உள்ளிடவும்.")
 
-                                                st.write("")
-                                                if not otp_already_sent:
-                                                    if st.button("⬅️ நடவடிக்கைகளை மாற்ற பின்செல்க", use_container_width=True):
-                                                        st.session_state.current_visit["step"] = "TRANSACTIONS"
-                                                        st.rerun()
+                    st.write("")
+                    if not otp_already_sent:
+                        if st.button("⬅️ நடவடிக்கைகளை மாற்ற பின்செல்க", use_container_width=True):
+                            st.session_state.current_visit["step"] = "TRANSACTIONS"
+                            st.rerun()
