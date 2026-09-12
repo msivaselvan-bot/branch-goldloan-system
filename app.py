@@ -1790,128 +1790,197 @@ else:
                     key="dyn_txn_sel"
                 )
 
-                with st.form("dynamic_txn_form", clear_on_submit=True):
-                    col_st1, col_st2 = st.columns(2)
-                    with col_st1:
-                        staff = st.selectbox("காரணப் பணியாளர்:", current_staff_list)
-                    with col_st2:
-                        custom_remarks = st.text_input("கூடுதல் குறிப்பு:", placeholder="எ.கா: சிறப்பு தள்ளுபடி")
+                # பொது மாறிகள் வரையறை
+                col_st1, col_st2 = st.columns(2)
+                with col_st1:
+                    staff = st.selectbox("காரணப் பணியாளர்:", current_staff_list)
+                with col_st2:
+                    custom_remarks = st.text_input("கூடுதல் குறிப்பு:", placeholder="எ.கா: சிறப்பு தள்ளுபடி")
 
-                    st.markdown("---")
-                    paid_amt, received_amt, detail_summary = 0.0, 0.0, []
+                st.markdown("---")
+                paid_amt, received_amt, detail_summary = 0.0, 0.0, []
+                ornament_details = None
+                other_charges = 0.0
+                total_weight = 0.0
+                net_weight = 0.0
+                gp_number = None
+                ref1_name, ref1_phone = None, None
+                ref2_name, ref2_phone = None, None
+                principal_amount = 0.0
+                interest_amount = 0.0
+                nominee_name, nominee_relation, nominee_address = None, None, None
+                ornament_file = None
 
-                    if txn_category == "Pledge (புதிய நகைக் கடன்)":
-                        p_col1, p_col2, p_col3 = st.columns(3)
-                        with p_col1:
-                            new_gl_no = st.text_input("புதிய கடன் எண் (GL No) *")
-                            scheme_name = st.selectbox("அட்மின் நகைக் கடன் திட்டம் (Scheme) *", gold_scheme_options)
-                            sel_scheme_obj = g_scheme_map.get(scheme_name, {})
-                            cur_rpg = float(sel_scheme_obj.get("rate_per_gram", 0) or 0)
-                            if cur_rpg > 0:
-                                st.info(f"💎 **இந்த ஸ்கீமின் RPG:** `₹{cur_rpg:,.2f} / gram`")
-                        with p_col2:
-                            gross_wt = st.number_input("மொத்த எடை (Gross Weight - gms) *", min_value=0.0, step=0.1)
-                            net_wt = st.number_input("நிகர எடை (Net Weight - gms) *", min_value=0.0, step=0.1)
-                            item_count = st.number_input("நகை எண்ணிக்கை", min_value=1, step=1)
-                        with p_col3:
-                            max_eligible_calc = net_wt * cur_rpg if cur_rpg > 0 else 0.0
-                            if cur_rpg > 0 and net_wt > 0:
-                                st.success(f"⚖️ அதிகபட்ச கடன்: **₹{max_eligible_calc:,.2f}**")
-                            paid_amt = st.number_input("கடன் தொகை (Paid ₹) *", min_value=0.0, step=500.0)
-                        detail_summary = [f"GL: {new_gl_no}", f"ஸ்கீம்: {scheme_name}", f"RPG: ₹{cur_rpg}", f"எடை: {net_wt}g"]
+                # 1. நகைக்கடன் (Pledge)
+                if txn_category == "Pledge (புதிய நகைக் கடன்)":
+                    p_col1, p_col2, p_col3 = st.columns(3)
+                    with p_col1:
+                        new_gl_no = st.text_input("புதிய கடன் எண் (GL No) *")
+                        scheme_name = st.selectbox("அட்மின் நகைக் கடன் திட்டம் (Scheme) *", gold_scheme_options)
+                        sel_scheme_obj = g_scheme_map.get(scheme_name, {})
+                        cur_rpg = float(sel_scheme_obj.get("rate_per_gram", 0) or 0)
+                        if cur_rpg > 0:
+                            st.info(f"💎 **இந்த ஸ்கீமின் RPG:** `₹{cur_rpg:,.2f} / gram`")
+                    with p_col2:
+                        total_weight = st.number_input("மொத்த எடை (Gross Weight - gms) *", min_value=0.0, step=0.001, format="%.3f")
+                        net_weight = st.number_input("நிகர எடை (Net Weight - gms) *", min_value=0.0, step=0.001, format="%.3f")
+                        item_count = st.number_input("நகை எண்ணிக்கை", min_value=1, step=1)
+                    with p_col3:
+                        max_eligible_calc = net_weight * cur_rpg if cur_rpg > 0 else 0.0
+                        if cur_rpg > 0 and net_weight > 0:
+                            st.success(f"⚖️ அதிகபட்ச கடன்: **₹{max_eligible_calc:,.2f}**")
+                        paid_amt = st.number_input("கடன் தொகை (Paid ₹) *", min_value=0.0, step=500.0)
+                        other_charges = st.number_input("இதர கட்டணங்கள் (Other Charges ₹)", min_value=0.0, step=10.0)
 
-                    elif txn_category == "GL Release (அடமானம் மீட்டல்)":
-                        r_col1, r_col2 = st.columns(2)
-                        with r_col1:
-                            rel_gl_no = st.text_input("மீட்கப்படும் கடன் எண் *")
-                            principal_amt = st.number_input("அசல் தொகை (₹) *", min_value=0.0, step=500.0)
-                        with r_col2:
-                            interest_amt = st.number_input("வட்டித் தொகை (₹) *", min_value=0.0, step=50.0)
-                            other_charges = st.number_input("இதர கட்டணம் (₹)", min_value=0.0, step=10.0)
-                        received_amt = principal_amt + interest_amt + other_charges
-                        detail_summary = [f"GL: {rel_gl_no}", f"அசல்: ₹{principal_amt}", f"வட்டி: ₹{interest_amt}"]
+                    ornament_details = st.text_area("நகை விபரம் (Ornament Details)")
+                    ornament_file = st.file_uploader("நகை படம் (Ornament Photo)", type=["jpg", "jpeg", "png"], key="pledge_img")
+                    detail_summary = [f"GL: {new_gl_no}", f"ஸ்கீம்: {scheme_name}", f"RPG: ₹{cur_rpg}", f"எடை: {net_weight}g"]
 
-                    elif txn_category in ["Interest Payment (வட்டி வரவு)", "Part Payment (அசல் வரவு)"]:
-                        i_col1, i_col2 = st.columns(2)
-                        with i_col1:
-                            part_gl_no = st.text_input("கடன் எண் *")
-                        with i_col2:
-                            received_amt = st.number_input("செலுத்திய தொகை (₹) *", min_value=0.0, step=100.0)
-                        detail_summary = [f"GL: {part_gl_no}", f"அசல்: ₹{received_amt}" if "Part Payment" in txn_category else f"வட்டி: ₹{received_amt}"]
+                # 2. அடமானம் மீட்டல் (GL Release)
+                elif txn_category == "GL Release (அடமானம் மீட்டல்)":
+                    r_col1, r_col2 = st.columns(2)
+                    with r_col1:
+                        rel_gl_no = st.text_input("மீட்கப்படும் கடன் எண் *")
+                        principal_amount = st.number_input("அசல் தொகை (₹) *", min_value=0.0, step=500.0)
+                    with r_col2:
+                        interest_amount = st.number_input("வட்டித் தொகை (₹) *", min_value=0.0, step=50.0)
+                        other_charges = st.number_input("இதர கட்டணம் (₹)", min_value=0.0, step=10.0)
+                    received_amt = principal_amount + interest_amount + other_charges
+                    detail_summary = [f"GL: {rel_gl_no}", f"அசல்: ₹{principal_amount}", f"வட்டி: ₹{interest_amount}"]
 
-                    elif txn_category == "Take Over (பிற நிறுவன கடன் மீட்டல்)":
-                        to_col1, to_col2 = st.columns(2)
-                        with to_col1:
-                            bank_source = st.text_input("முந்தைய நிறுவனம் *")
-                            prev_loan_no = st.text_input("முந்தைய லோன் எண் *")
-                        with to_col2:
-                            paid_amt = st.number_input("செலுத்திய தொகை (₹) *", min_value=0.0, step=500.0)
-                        detail_summary = [f"வங்கி: {bank_source}", f"கடன் எண்: {prev_loan_no}"]
+                # 3. அசல் வரவு & வட்டி வரவு
+                elif txn_category in ["Interest Payment (வட்டி வரவு)", "Part Payment (அசல் வரவு)"]:
+                    i_col1, i_col2 = st.columns(2)
+                    with i_col1:
+                        part_gl_no = st.text_input("கடன் எண் *")
+                        principal_amount = st.number_input("அசல் தொகை (₹)", min_value=0.0, step=100.0) if "Part" in txn_category else 0.0
+                    with i_col2:
+                        interest_amount = st.number_input("வட்டித் தொகை (₹)", min_value=0.0, step=50.0)
+                    received_amt = principal_amount + interest_amount
+                    detail_summary = [f"GL: {part_gl_no}", f"அசல்: ₹{principal_amount}", f"வட்டி: ₹{interest_amount}"]
 
-                    elif txn_category == "FD Open (புதிய வைப்பு நிதி)":
-                        f_col1, f_col2 = st.columns(2)
-                        with f_col1:
-                            fd_acc_no = st.text_input("புதிய FD கணக்கு எண் *")
-                            fd_sel_scheme = st.selectbox("அட்மின் FD திட்டம் (Scheme) *", fd_scheme_options)
-                        with f_col2:
-                            received_amt = st.number_input("வைப்புத் தொகை (Deposit ₹) *", min_value=0.0, step=1000.0)
-                        detail_summary = [f"FD No: {fd_acc_no}", f"Scheme: {fd_sel_scheme}"]
+                # 4. Take Over
+                elif txn_category == "Take Over (பிற நிறுவன கடன் மீட்டல்)":
+                    to_col1, to_col2 = st.columns(2)
+                    with to_col1:
+                        bank_source = st.text_input("முந்தைய நிறுவனம் *")
+                        prev_loan_no = st.text_input("முந்தைய லோன் எண் *")
+                    with to_col2:
+                        paid_amt = st.number_input("செலுத்திய தொகை (₹) *", min_value=0.0, step=500.0)
+                    detail_summary = [f"வங்கி: {bank_source}", f"கடன் எண்: {prev_loan_no}"]
 
-                    elif txn_category == "RD Open (புதிய RD சேமிப்பு)":
-                        rd_col1, rd_col2 = st.columns(2)
-                        with rd_col1:
-                            rd_acc_no = st.text_input("புதிய RD கணக்கு எண் *")
-                            rd_sel_scheme = st.selectbox("அட்மின் RD திட்டம் (Scheme) *", rd_scheme_options)
-                        with rd_col2:
-                            received_amt = st.number_input("முதல் தவணைத் தொகை (Installment ₹) *", min_value=0.0, step=500.0)
-                        detail_summary = [f"RD No: {rd_acc_no}", f"Scheme: {rd_sel_scheme}"]
+                # 5. RD Open & FD Open (நாமினி விவரங்களுடன்)
+                elif txn_category in ["RD Open (புதிய RD சேமிப்பு)", "FD Open (புதிய வைப்பு நிதி)"]:
+                    f_col1, f_col2 = st.columns(2)
+                    with f_col1:
+                        acc_no = st.text_input("புதிய கணக்கு எண் *")
+                        sel_scheme = st.selectbox("திட்டம் (Scheme) *", rd_scheme_options if "RD" in txn_category else fd_scheme_options)
+                    with f_col2:
+                        received_amt = st.number_input("வைப்பு / தவணைத் தொகை (₹) *", min_value=0.0, step=500.0)
+                    
+                    st.markdown("##### 👤 நாமினி விவரங்கள் (Nominee Details)")
+                    nom_col1, nom_col2 = st.columns(2)
+                    with nom_col1:
+                        nominee_name = st.text_input("நாமினி பெயர்")
+                        nominee_relation = st.text_input("உறவுமுறை")
+                    with nom_col2:
+                        nominee_address = st.text_area("நாமினி முகவரி", height=68)
+                    detail_summary = [f"A/c: {acc_no}", f"Scheme: {sel_scheme}"]
 
-                    elif "RD" in txn_category or "FD" in txn_category:
-                        d_col1, d_col2 = st.columns(2)
-                        with d_col1:
-                            acc_no = st.text_input("கணக்கு எண் *")
-                        with d_col2:
-                            if "Closure" in txn_category or "Interest" in txn_category:
-                                paid_amt = st.number_input("வழங்கிய தொகை (₹) *", min_value=0.0, step=100.0)
-                            else:
-                                received_amt = st.number_input("பெற்ற தொகை (₹) *", min_value=0.0, step=100.0)
-                        detail_summary = [f"A/c: {acc_no}"]
-
-                    elif txn_category == "GP (Gold Purchase)":
-                        gp_col1, gp_col2 = st.columns(2)
-                        with gp_col1:
-                            gp_wt = st.number_input("நகை எடை (Grams) *", min_value=0.0, step=0.1)
-                            gp_purity = st.selectbox("தரம்", ["916 (22K)", "KDM", "999 (24K)", "750 (18K)"])
-                        with gp_col2:
-                            paid_amt = st.number_input("வழங்கிய தொகை (Paid ₹) *", min_value=0.0, step=500.0)
-                        detail_summary = [f"எடை: {gp_wt}g", f"தரம்: {gp_purity}"]
-
-                    elif txn_category == "GS (Gold Sale)":
-                        gs_col1, gs_col2 = st.columns(2)
-                        with gs_col1:
-                            gs_bill_no = st.text_input("விற்பனை பில் எண் *")
-                            gs_item_name = st.text_input("பொருள் பெயர்")
-                            gs_wt = st.number_input("எடை (Grams) *", min_value=0.0, step=0.1, key="gs_w")
-                        with gs_col2:
-                            received_amt = st.number_input("பெற்ற தொகை (Received ₹) *", min_value=0.0, step=500.0)
-                        detail_summary = [f"பில்: {gs_bill_no}", f"பொருள்: {gs_item_name}", f"எடை: {gs_wt}g"]
-
-                    if st.form_submit_button("➕ பட்டியலில் சேர் (Add to Cart)", type="primary"):
-                        if paid_amt > 0 or received_amt > 0:
-                            all_remarks = " | ".join(detail_summary)
-                            if custom_remarks.strip():
-                                all_remarks += f" ({custom_remarks.strip()})"
-                            st.session_state.transactions_cart.append({
-                                "transaction_type": txn_category,
-                                "staff_name": staff,
-                                "paid_amount": float(paid_amt),
-                                "received_amount": float(received_amt),
-                                "remarks": all_remarks,
-                            })
-                            st.success(f"'{txn_category}' சேர்க்கப்பட்டது!")
-                            st.rerun()
+                # 6. RD & FD முதிர்வு / தவணைகள்
+                elif "RD" in txn_category or "FD" in txn_category:
+                    d_col1, d_col2 = st.columns(2)
+                    with d_col1:
+                        acc_no = st.text_input("கணக்கு எண் *")
+                    with d_col2:
+                        if "Closure" in txn_category:
+                            principal_amount = st.number_input("முதலீடு செய்த/கட்டிய தொகை (₹) *", min_value=0.0, step=100.0)
+                            interest_amount = st.number_input("வட்டி தொகை (₹) *", min_value=0.0, step=50.0)
+                            paid_amt = principal_amount + interest_amount
+                            st.info(f"மொத்த முதிர்வுத் தொகை: ₹{paid_amt:,.2f}")
+                        elif "Interest" in txn_category:
+                            paid_amt = st.number_input("வழங்கிய தொகை (₹) *", min_value=0.0, step=100.0)
                         else:
-                            st.error("தொகையை உள்ளிடவும்.")
+                            received_amt = st.number_input("பெற்ற தவணைத் தொகை (₹) *", min_value=0.0, step=100.0)
+                    detail_summary = [f"A/c: {acc_no}"]
+
+                # 7. GP (Gold Purchase - தங்கம் வாங்குதல்)
+                elif txn_category == "GP (Gold Purchase)":
+                    gp_col1, gp_col2, gp_col3 = st.columns(3)
+                    with gp_col1:
+                        gp_number = st.text_input("GP எண் (GP Number) *")
+                        total_weight = st.number_input("மொத்த எடை (Gross Wt - g) *", min_value=0.0, step=0.001, format="%.3f")
+                    with gp_col2:
+                        gp_purity = st.selectbox("தரம்", ["916 (22K)", "KDM", "999 (24K)", "750 (18K)"])
+                        net_weight = st.number_input("நிகர எடை (Net Wt - g) *", min_value=0.0, step=0.001, format="%.3f")
+                    with gp_col3:
+                        paid_amt = st.number_input("கொடுக்கப்பட்ட தொகை (Paid ₹) *", min_value=0.0, step=500.0)
+
+                    ornament_details = st.text_area("நகை விபரம் (Ornament Details)", key="gp_details")
+                    ornament_file = st.file_uploader("நகை படம் (Ornament Photo)", type=["jpg", "jpeg", "png"], key="gp_img")
+
+                    st.markdown("##### 👥 பரிந்துரைப்பாளர்கள் (References)")
+                    ref_c1, ref_c2 = st.columns(2)
+                    with ref_c1:
+                        ref1_name = st.text_input("Reference 1 - பெயர்")
+                        ref1_phone = st.text_input("Reference 1 - தொலைபேசி")
+                    with ref_c2:
+                        ref2_name = st.text_input("Reference 2 - பெயர்")
+                        ref2_phone = st.text_input("Reference 2 - தொலைபேசி")
+                    detail_summary = [f"GP: {gp_number}", f"எடை: {net_weight}g", f"தரம்: {gp_purity}"]
+
+                # 8. GS (Gold Sale - தங்கம் விற்பனை)
+                elif txn_category == "GS (Gold Sale)":
+                    gs_col1, gs_col2, gs_col3 = st.columns(3)
+                    with gs_col1:
+                        gs_bill_no = st.text_input("விற்பனை பில் எண் *")
+                        total_weight = st.number_input("மொத்த எடை (Gross Wt - g) *", min_value=0.0, step=0.001, format="%.3f")
+                    with gs_col2:
+                        gs_item_name = st.text_input("பொருள் பெயர்")
+                        net_weight = st.number_input("நிகர எடை (Net Wt - g) *", min_value=0.0, step=0.001, format="%.3f")
+                    with gs_col3:
+                        received_amt = st.number_input("பெற்ற தொகை (Received ₹) *", min_value=0.0, step=500.0)
+
+                    ornament_details = st.text_area("நகை விபரம் (Ornament Details)", key="gs_details")
+                    ornament_file = st.file_uploader("நகை படம் (Ornament Photo)", type=["jpg", "jpeg", "png"], key="gs_img")
+                    detail_summary = [f"பில்: {gs_bill_no}", f"பொருள்: {gs_item_name}", f"எடை: {net_weight}g"]
+
+                # கார்ட்டில் சேர்க்கும் பட்டன்
+                if st.button("➕ பட்டியலில் சேர் (Add to Cart)", type="primary"):
+                    if paid_amt > 0 or received_amt > 0:
+                        all_remarks = " | ".join(detail_summary)
+                        if custom_remarks.strip():
+                            all_remarks += f" ({custom_remarks.strip()})"
+                        
+                        img_url = upload_ornament_image(ornament_file) if ornament_file else None
+
+                        st.session_state.transactions_cart.append({
+                            "transaction_type": txn_category,
+                            "staff_name": staff,
+                            "paid_amount": float(paid_amt),
+                            "received_amount": float(received_amt),
+                            "amount": float(paid_amt if paid_amt > 0 else received_amt),
+                            "remarks": all_remarks,
+                            "ornament_details": ornament_details,
+                            "other_charges": float(other_charges),
+                            "ornament_image_url": img_url,
+                            "total_weight": float(total_weight),
+                            "net_weight": float(net_weight),
+                            "gp_number": gp_number,
+                            "ref1_name": ref1_name,
+                            "ref1_phone": ref1_phone,
+                            "ref2_name": ref2_name,
+                            "ref2_phone": ref2_phone,
+                            "principal_amount": float(principal_amount),
+                            "interest_amount": float(interest_amount),
+                            "nominee_name": nominee_name,
+                            "nominee_relation": nominee_relation,
+                            "nominee_address": nominee_address,
+                        })
+                        st.success(f"'{txn_category}' சேர்க்கப்பட்டது!")
+                        st.rerun()
+                    else:
+                        st.error("தொகையை உள்ளிடவும்.")
 
                 if st.session_state.transactions_cart:
                     st.markdown("### 🛒 நடவடிக்கைகள் பட்டியல்:")
