@@ -1872,25 +1872,45 @@ else:
                 final_amount = st.number_input("பெற்ற தொகை (Received Amount)", min_value=0.0, key="gs_amt")
             ornament_file = st.file_uploader("நகை படம் (Ornament Photo)", type=["jpg", "jpeg", "png"], key="gs_img")
 
-            if st.form_submit_button("➕ பட்டியலில் சேர் (Add to Cart)", type="primary"):
-                if paid_amt > 0 or received_amt > 0:
-                    all_remarks = " | ".join(detail_summary)
-                    if custom_remarks.strip():
+        if st.form_submit_button("➕ பட்டியலில் சேர் (Add to Cart)", type="primary"):
+                if paid_amt > 0 or received_amt > 0 or final_amount > 0:
+                    all_remarks = " | ".join(detail_summary) if 'detail_summary' in locals() and detail_summary else ""
+                    if 'custom_remarks' in locals() and custom_remarks.strip():
                         all_remarks += f" ({custom_remarks.strip()})"
+                    
+                    # நகைப் படம் இருந்தால் அப்லோட் செய்து அதன் லிங்க்கை (URL) எடுத்தல்
+                    img_url = upload_ornament_image(ornament_file) if 'ornament_file' in locals() and ornament_file else None
+
+                    # புதிய ஃபீல்டுகளுடன் கார்ட்டில் சேர்த்தல்
                     st.session_state.transactions_cart.append({
-                        "transaction_type": txn_category,
-                        "staff_name": staff,
-                        "paid_amount": float(paid_amt),
-                        "received_amount": float(received_amt),
+                        "transaction_type": txn_category if 'txn_category' in locals() else txn_type,
+                        "staff_name": staff if 'staff' in locals() else st.session_state.username,
+                        "paid_amount": float(paid_amt) if 'paid_amt' in locals() else float(final_amount),
+                        "received_amount": float(received_amt) if 'received_amt' in locals() else 0.0,
                         "remarks": all_remarks,
+                        "ornament_details": ornament_details if 'ornament_details' in locals() else None,
+                        "other_charges": float(other_charges) if 'other_charges' in locals() else 0.0,
+                        "ornament_image_url": img_url,
+                        "total_weight": float(total_weight) if 'total_weight' in locals() else 0.0,
+                        "net_weight": float(net_weight) if 'net_weight' in locals() else 0.0,
+                        "gp_number": gp_number if 'gp_number' in locals() else None,
+                        "ref1_name": ref1_name if 'ref1_name' in locals() else None,
+                        "ref1_phone": ref1_phone if 'ref1_phone' in locals() else None,
+                        "ref2_name": ref2_name if 'ref2_name' in locals() else None,
+                        "ref2_phone": ref2_phone if 'ref2_phone' in locals() else None,
+                        "principal_amount": float(principal_amount) if 'principal_amount' in locals() else 0.0,
+                        "interest_amount": float(interest_amount) if 'interest_amount' in locals() else 0.0,
+                        "nominee_name": nominee_name if 'nominee_name' in locals() else None,
+                        "nominee_relation": nominee_relation if 'nominee_relation' in locals() else None,
+                        "nominee_address": nominee_address if 'nominee_address' in locals() else None,
                     })
-                    st.success(f"'{txn_category}' சேர்க்கப்பட்டது!")
+                    st.success(f"பரிவர்த்தனை கார்ட்டில் வெற்றிகரமாகச் சேர்க்கப்பட்டது!")
                     st.rerun()
                 else:
                     st.error("தொகையை உள்ளிடவும்.")
 
-            if st.session_state.transactions_cart:
-                st.markdown("### 🛒 நடவடிக்கைகள் பட்டியல்:")
+        if st.session_state.transactions_cart:
+            st.markdown("### 🛒 நடவடிக்கைகள் பட்டியல்:")
             df_cart = pd.DataFrame(st.session_state.transactions_cart)
             st.dataframe(df_cart, use_container_width=True)
 
