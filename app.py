@@ -1939,8 +1939,7 @@ else:
             # -----------------------------------------------------------------
             # Step 3: பணப் பரிமாற்றம், 8 ரூபாய் நோட்டுகள் & OTP சரிபார்ப்பு
             # -----------------------------------------------------------------
-        elif st.session_state.current_visit["step"] == "CASH_OTP":
-                visit = st.session_state.current_visit
+        elif st.session_state.get("current_visit") and st.session_state.current_visit.get("step") == "CASH_OTP":
                 net_target = visit["net_amount"]
                 total_needed_abs = abs(net_target)
                 current_drawer = get_current_branch_cash_drawer(st.session_state.branch_id)
