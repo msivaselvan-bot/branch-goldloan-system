@@ -980,51 +980,54 @@ else:
             st.subheader("📥 பழைய வாடிக்கையாளர் இறக்குமதி (Bulk Import)")
             uploaded_cust_file = st.file_uploader("கோப்பைத் தேர்வு செய்யவும்", type=["xls", "xlsx", "csv"])
             
-            if uploaded_cust_file and st.button("பதிவேற்றத்தைத் தொடங்கு", type="primary"):
+            if uploaded_cust_file:
                 try:
-                    # எந்தவித வரியையும் தவிர்க்காமல் நேரடியாகப் படித்தல்
                     df_raw = pd.read_csv(uploaded_cust_file) if uploaded_cust_file.name.endswith(".csv") else pd.read_excel(uploaded_cust_file)
+                    st.write(f"கோப்பில் உள்ள மொத்த வரிசைகள் (Total Rows): {len(df_raw)}")
+                    st.dataframe(df_raw.head(3)) # தரவுகள் சரியாகப் படிக்கப்படுகிறதா எனப் பார்க்க
                     
-                    # காலம்களைச் சிறிய எழுத்துகளாக மாற்றுதல்
-                    df_raw.columns = [str(c).strip().lower() for c in df_raw.columns]
-                    
-                    # முதல் இரண்டு காலம்களை (Columns) பெயர் மற்றும் மொபைல் எண்களாகப் பயன்படுத்துதல்
-                    name_col = df_raw.columns[0]
-                    mob_col = df_raw.columns[1] if len(df_raw.columns) > 1 else df_raw.columns[0]
-                    
-                    df_cust = df_raw.dropna(subset=[name_col]).copy()
-                    total_rows = len(df_cust)
-                    
-                    progress_bar = st.progress(0)
-                    success_count = 0
-                    
-                    st.info(f"⏳ மொத்தம் {total_rows} வாடிக்கையாளர்கள் டேட்டாபேஸில் பதிவிடப்படுகிறார்கள்...")
-                    
-                    for idx, row in enumerate(df_cust.itertuples(), 1):
-                        name = str(getattr(row, name_col, "")).strip()
-                        raw_mob = str(getattr(row, mob_col, "")) if len(df_raw.columns) > 1 else ""
-                        mobile = "".join(filter(str.isdigit, raw_mob))[-10:]
+                    if st.button("பதிவேற்றத்தைத் தொடங்கு", type="primary"):
+                        df_raw.columns = [str(c).strip().lower() for c in df_raw.columns]
+                        name_col = df_raw.columns[0]
+                        mob_col = df_raw.columns[1] if len(df_raw.columns) > 1 else df_raw.columns[0]
                         
-                        if name and name.lower() != 'nan':
-                            tcode = f"IMP-{datetime.now().strftime('%m%d')}-{idx:04d}"
+                        # Branch ID சரிபார்த்தல் (Admin-க்கு branch_id இல்லாவிட்டால் முதல் கிளையை எடுத்துக்கொள்ளும்)
+                        b_id = st.session_state.get("branch_id")
+                        if not b_id:
+                            b_res = supabase.table("branches").select("id").limit(1).execute()
+                            if b_res.data:
+                                b_id = b_res.data[0]["id"]
+                        
+                        progress_bar = st.progress(0)
+                        success_count = 0
+                        total_rows = len(df_raw)
+                        
+                        for idx, row in enumerate(df_raw.itertuples(), 1):
+                            name = str(getattr(row, name_col, "")).strip()
+                            raw_mob = str(getattr(row, mob_col, "")) if len(df_raw.columns) > 1 else ""
+                            mobile = "".join(filter(str.isdigit, raw_mob))[-10:]
                             
-                            supabase.table("customers").insert({
-                                "branch_id": st.session_state.branch_id,
-                                "customer_code": tcode,
-                                "name": name,
-                                "mobile": mobile if len(mobile) == 10 else "0000000000",
-                                "address": "Branch Import",
-                                "kyc_status": "Approved",
-                                "is_active": True
-                            }).execute()
-                            success_count += 1
+                            if name and name.lower() != 'nan' and name != name_col:
+                                tcode = f"IMP-{datetime.now().strftime('%m%d')}-{idx:04d}"
+                                
+                                supabase.table("customers").insert({
+                                    "branch_id": b_id,
+                                    "customer_code": tcode,
+                                    "name": name,
+                                    "mobile": mobile if len(mobile) == 10 else "0000000000",
+                                    "address": "Branch Import",
+                                    "kyc_status": "Approved",
+                                    "is_active": True
+                                }).execute()
+                                success_count += 1
+                            
+                            if total_rows > 0:
+                                progress_bar.progress(idx / total_rows)
                         
-                        progress_bar.progress(idx / total_rows)
-                    
-                    st.success(f"✅ வெற்றிகரமாக {success_count} வாடிக்கையாளர்கள் டேட்டாபேஸில் பதிவு செய்யப்பட்டுவிட்டனர்!")
+                        st.success(f"✅ வெற்றிகரமாக {success_count} வாடிக்கையாளர்கள் டேட்டாபேஸில் பதிவு செய்யப்பட்டுவிட்டனர்!")
                 except Exception as e:
                     st.error(f"இறக்குமதி செய்வதில் பிழை: {e}")
-                    
+
         with tab6:
             st.subheader("🗂️ வாடிக்கையாளர் பட்டியல் & திருத்தம்")
             cq = supabase.table("customers").select("*, branches(branch_name)").order("id", desc=True).limit(100)
