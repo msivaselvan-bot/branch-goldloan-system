@@ -942,13 +942,16 @@ else:
                     st.write("")
                     st.write("")
                     if st.button("💾 பொது மதிப்புகளைச் சேமி (Update Values)", type="primary"):
-                        supabase.table("incentive_settings").upsert({
-                            "id": 1,
-                            "rupees_per_point": float(new_rpp),
-                            "negative_growth_penalty_per_lakh": float(new_pen)
-                        }).execute()
-                        st.success("புள்ளி மதிப்பு புதுப்பிக்கப்பட்டது!")
-                        st.rerun()
+                        try:
+                            supabase.table("incentive_settings").upsert({
+                                "id": 1,
+                                "rupees_per_point": float(new_rpp),
+                                "negative_growth_penalty_per_lakh": float(new_pen)
+                            }, on_conflict="id").execute()
+                            st.success("புள்ளி மதிப்பு புதுப்பிக்கப்பட்டது!")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"டேட்டாபேஸ் சேமிப்புப் பிழை: {e}")
 
             st.markdown("---")
             st.markdown("##### ⚙️ குறிப்பிட்ட ஸ்கீம் வாரியான புள்ளி விதிகள் (Scheme-wise Points Rule)")
