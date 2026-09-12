@@ -982,23 +982,16 @@ else:
             
             if uploaded_cust_file:
                 try:
-                    # இரண்டாவது வரியை (Row index 1) ஹெட்டராகப் பயன்படுத்துதல்
+                    # ஹெட்டர் எதுவும் எடுக்காமல் டேட்டாவை மட்டும் நேரடியாகப் படித்தல்
                     if uploaded_cust_file.name.endswith(".csv"):
-                        df_raw = pd.read_csv(uploaded_cust_file, header=1)
+                        df_raw = pd.read_csv(uploaded_cust_file, header=None)
                     else:
-                        df_raw = pd.read_excel(uploaded_cust_file, header=1)
+                        df_raw = pd.read_excel(uploaded_cust_file, header=None)
                     
                     st.write(f"கோப்பில் உள்ள மொத்த வரிசைகள் (Total Rows): {len(df_raw)}")
-                    st.dataframe(df_raw.head(3)) # சரியான ஹெட்டர் வந்துவிட்டதா எனப் பார்க்க
+                    st.dataframe(df_raw.head(3)) # சரியாக டேட்டா வந்துவிட்டதா எனப் பார்க்க
                     
                     if st.button("பதிவேற்றத்தைத் தொடங்கு", type="primary"):
-                        # காலம்களின் பெயர்களைச் சீரமைத்தல்
-                        df_raw.columns = [str(c).strip().lower() for c in df_raw.columns]
-                        
-                        # Full Name மற்றும் Mobile No காலம்களைத் துல்லியமாகத் கண்டறிதல்
-                        name_col = next((c for c in df_raw.columns if 'full name' in c or 'name' in c or 'பெயர்' in c), df_raw.columns[1] if len(df_raw.columns) > 1 else df_raw.columns[0])
-                        mob_col = next((c for c in df_raw.columns if 'mobile' in c or 'phone' in c or 'மொபைல்' in c), df_raw.columns[6] if len(df_raw.columns) > 6 else df_raw.columns[0])
-                        
                         b_id = st.session_state.get("branch_id")
                         if not b_id:
                             b_res = supabase.table("branches").select("id").limit(1).execute()
@@ -1010,29 +1003,45 @@ else:
                         total_rows = len(df_raw)
                         
                         for idx, row in enumerate(df_raw.itertuples(), 1):
-                            name = str(getattr(row, name_col.replace(' ', '_'), "")).strip() if hasattr(row, name_col.replace(' ', '_')) else str(row[2] if len(row) > 2 else "").strip()
+                            # இண்டெக்ஸ் மூலம் சரியான காலம்களை எடுத்தல் (Col 3: Name, Col 8: Mobile)
+                            # எக்செல் கட்டமைப்பிற்கு ஏற்ப காலம் இன்டெக்ஸ் மாறலாம்
+                            row_list = list(row)[1:] # 첫번째 itertuples இண்டெக்ஸைத் தவிர்த்தல்
                             
-                            # பாதுகாப்பான முறையில் வேல்யூ எடுப்பது
-                            try:
-                                raw_mob = str(getattr(row, mob_col.replace(' ', '_'), ""))
-                            except:
-                                raw_mob = ""
+                            if len(row_list) > 8:
+                                name = str(row_list[2] if len(row_list) > 2 else "").strip() # பெயர் உள்ள காலம்
+                                raw_mob = str(row_list[7] if len(row_list) > 7 else "") # மொபைல் உள்ள காலம்
                                 
-                            mobile = "".join(filter(str.isdigit, raw_mob))[-10:]
-                            
-                            if name and name.lower() != 'nan' and not name.startswith('Customer'):
-                                tcode = f"IMP-{datetime.now().strftime('%m%d')}-{idx:04d}"
+                                # பெயருக்கான சரியான காலமைத் தேடுதல் (எண்கள் அல்லது 'Customer' எனத் தொடங்காதவை)
+                                for val in row_list:
+                                    v_str = str(val).strip()
+                                    if v_str and not v_str.isdigit() and len(v_str) > 2 and 'customer' not in v_str.lower() and 'name' not in v_str.lower():
+                                        name = v_str
+                                        break
+                                        
+                                # மொபைல் எண்ணைத் துல்லியமாக எடுப்பது (10 இலக்க எண்கள்)
+                                mobile = ""
+                                for val in row_list:
+                                    v_digits = "".join(filter(str.isdigit, str(val)))
+                                    if len(v_digits) >= 10:
+                                        mobile = v_digits[-10:]
+                                        break
                                 
-                                supabase.table("customers").insert({
-                                    "branch_id": b_id,
-                                    "customer_code": tcode,
-                                    "name": name,
-                                    "mobile": mobile if len(mobile) == 10 else "0000000000",
-                                    "address": "Branch Import",
-                                    "kyc_status": "Approved",
-                                    "is_active": True
-                                }).execute()
-                                success_count += 1
+                                if name and name.lower() != 'nan' and len(mobile) == 10:
+                                    tcode = f"IMP-{datetime.now().strftime('%m%d')}-{idx:04d}"
+                                    
+                                    # ஏற்கனவே இந்த மொபைல் எண் உள்ளதா எனச் சோதித்துச் சேர்த்தல்
+                                    existing = supabase.table("customers").select("id").eq("mobile", mobile).execute()
+                                    if not existing.data:
+                                        supabase.table("customers").insert({
+                                            "branch_id": b_id,
+                                            "customer_code": tcode,
+                                            "name": name,
+                                            "mobile": mobile,
+                                            "address": "Branch Import",
+                                            "kyc_status": "Approved",
+                                            "is_active": True
+                                        }).execute()
+                                        success_count += 1
                             
                             if total_rows > 0:
                                 progress_bar.progress(idx / total_rows)
