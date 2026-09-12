@@ -10,7 +10,7 @@ import uuid
 # 1. பக்க வடிவமைப்பு
 st.set_page_config(page_title="Branch Operations System", layout="wide")
 # ==============================================================================
-# நகை படம் பதிவேற்றும் செயல்பாடு (Supabase Storage Bucket: ornaments)
+# நகை படம் பதிவேற்றும் செயல்பாடு (Supabase Storage Bucket: ornaments) சிறப்பு
 # ==============================================================================
 def upload_ornament_image(file_obj):
     if not file_obj:
