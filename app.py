@@ -982,17 +982,17 @@ else:
             
             if uploaded_cust_file and st.button("பதிவேற்றத்தைத் தொடங்கு", type="primary"):
                 try:
-                    df_raw = pd.read_csv(uploaded_cust_file, skiprows=2) if uploaded_cust_file.name.endswith(".csv") else pd.read_excel(uploaded_cust_file, skiprows=2)
+                    # எந்தவித வரியையும் தவிர்க்காமல் நேரடியாகப் படித்தல்
+                    df_raw = pd.read_csv(uploaded_cust_file) if uploaded_cust_file.name.endswith(".csv") else pd.read_excel(uploaded_cust_file)
                     
-                    # காலம்களின் பெயர்களைச் சீரமைத்தல் (Lowercase)
+                    # காலம்களைச் சிறிய எழுத்துகளாக மாற்றுதல்
                     df_raw.columns = [str(c).strip().lower() for c in df_raw.columns]
                     
-                    # பெயர் மற்றும் மொபைல் எண்களுக்கான காலம்களைத் தேடுதல்
-                    name_col = next((c for c in df_raw.columns if 'name' in c or 'பெயர்' in c), df_raw.columns[0])
-                    mob_col = next((c for c in df_raw.columns if 'mobile' in c or 'phone' in c or 'மொபைல்' in c), df_raw.columns[1] if len(df_raw.columns) > 1 else df_raw.columns[0])
-                    addr_col = next((c for c in df_raw.columns if 'address' in c or 'முகவரி' in c), None)
+                    # முதல் இரண்டு காலம்களை (Columns) பெயர் மற்றும் மொபைல் எண்களாகப் பயன்படுத்துதல்
+                    name_col = df_raw.columns[0]
+                    mob_col = df_raw.columns[1] if len(df_raw.columns) > 1 else df_raw.columns[0]
                     
-                    df_cust = df_raw.dropna(subset=[name_col, mob_col]).copy()
+                    df_cust = df_raw.dropna(subset=[name_col]).copy()
                     total_rows = len(df_cust)
                     
                     progress_bar = st.progress(0)
@@ -1002,18 +1002,18 @@ else:
                     
                     for idx, row in enumerate(df_cust.itertuples(), 1):
                         name = str(getattr(row, name_col, "")).strip()
-                        mobile = "".join(filter(str.isdigit, str(getattr(row, mob_col, ""))))[-10:]
-                        address = str(getattr(row, addr_col, "Branch Import")) if addr_col else "Branch Import"
+                        raw_mob = str(getattr(row, mob_col, "")) if len(df_raw.columns) > 1 else ""
+                        mobile = "".join(filter(str.isdigit, raw_mob))[-10:]
                         
-                        if name and len(mobile) >= 10:
+                        if name and name.lower() != 'nan':
                             tcode = f"IMP-{datetime.now().strftime('%m%d')}-{idx:04d}"
                             
                             supabase.table("customers").insert({
                                 "branch_id": st.session_state.branch_id,
                                 "customer_code": tcode,
                                 "name": name,
-                                "mobile": mobile,
-                                "address": address,
+                                "mobile": mobile if len(mobile) == 10 else "0000000000",
+                                "address": "Branch Import",
                                 "kyc_status": "Approved",
                                 "is_active": True
                             }).execute()
@@ -1024,7 +1024,7 @@ else:
                     st.success(f"✅ வெற்றிகரமாக {success_count} வாடிக்கையாளர்கள் டேட்டாபேஸில் பதிவு செய்யப்பட்டுவிட்டனர்!")
                 except Exception as e:
                     st.error(f"இறக்குமதி செய்வதில் பிழை: {e}")
-
+                    
         with tab6:
             st.subheader("🗂️ வாடிக்கையாளர் பட்டியல் & திருத்தம்")
             cq = supabase.table("customers").select("*, branches(branch_name)").order("id", desc=True).limit(100)
