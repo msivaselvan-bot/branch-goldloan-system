@@ -625,12 +625,12 @@ if not st.session_state.logged_in:
                 if username.strip() and password.strip():
                     user_query = (
                         supabase.table("users")
-                        .select("id, name, username, role, branch_id, is_active, branches(branch_name)")
+                        .select("id, name, username, role, branch_id, is_active")
                         .eq("username", username.strip())
                         .eq("password_hash", password.strip())
                         .eq("is_active", True)
                         .execute()
-                )
+                    )
 
                     if user_query.data:
                         user_info = user_query.data[0]
@@ -640,8 +640,11 @@ if not st.session_state.logged_in:
                         if role in ["Admin", "Auditor", "Operations"]:
                             b_name = f"Head Office / {role}"
                         else:
-                            branch_rel = user_info.get("branches")
-                            b_name = branch_rel.get("branch_name") if branch_rel else "ஒதுக்கப்படாத கிளை"
+                            b_name = "ஒதுக்கப்படாத கிளை"
+                            if b_id:
+                                b_res = supabase.table("branches").select("branch_name").eq("id", b_id).execute()
+                                if b_res.data:
+                                    b_name = b_res.data[0].get("branch_name", "கிளை")
 
                         if role not in ["Admin", "Auditor", "Operations"] and not b_id:
                             st.error("உங்களுக்கு இன்னும் கிளை ஒதுக்கப்படவில்லை!")
@@ -651,11 +654,10 @@ if not st.session_state.logged_in:
                             st.session_state.branch = b_name
                             st.session_state.branch_id = b_id
                             st.session_state.username = user_info["name"]
+                            st.session_state.profile_image = user_info.get("profile_image_url")
                             st.rerun()
                     else:
                         st.error("தவறான பயனர் பெயர் அல்லது கடவுச்சொல்!")
-                else:
-                    st.warning("விவரங்களை உள்ளிடவும்.")
 
 # ==========================================
 # 6. முதன்மை திரை
