@@ -982,22 +982,20 @@ else:
             
             if uploaded_cust_file:
                 try:
-                    # முதல் வரியை ஹெட்டராகப் படித்தல்
                     if uploaded_cust_file.name.endswith(".csv"):
                         df_raw = pd.read_csv(uploaded_cust_file, header=0)
                     else:
                         df_raw = pd.read_excel(uploaded_cust_file, header=0)
                     
                     st.write(f"கோப்பில் உள்ள மொத்த வரிசைகள் (Total Rows): {len(df_raw)}")
-                    st.dataframe(df_raw.head(3)) # ஹெட்டர் சரியாக வந்துள்ளதா எனப் பார்க்க
+                    st.dataframe(df_raw.head(3))
                     
                     if st.button("பதிவேற்றத்தைத் தொடங்கு", type="primary"):
-                        # காலம்களின் பெயர்களைச் சீரமைத்தல்
-                        df_raw.columns = [str(c).strip().lower() for c in df_raw.columns]
+                        cols = list(df_raw.columns)
                         
-                        # பெயர் மற்றும் மொபைல் காலம்களைத் தேடுதல்
-                        name_col = next((c for c in df_raw.columns if 'name' in c or 'பெயர்' in c), df_raw.columns[0])
-                        mob_col = next((c for c in df_raw.columns if 'mobile' in c or 'phone' in c or 'cell' in c or 'மொபைல்' in c), df_raw.columns[1] if len(df_raw.columns) > 1 else df_raw.columns[0])
+                        # சரியான பெயர் மற்றும் மொபைல் காலம்களைத் கண்டறிதல்
+                        name_col_name = next((c for c in cols if 'name' in str(c).lower() or 'பெயர்' in str(c)), cols[2] if len(cols) > 2 else cols[0])
+                        mob_col_name = next((c for c in cols if 'mobile' in str(c).lower() or 'phone' in str(c) or 'மொபைல்' in str(c)), cols[7] if len(cols) > 7 else cols[1])
                         
                         b_id = st.session_state.get("branch_id")
                         if not b_id:
@@ -1009,30 +1007,17 @@ else:
                         success_count = 0
                         total_rows = len(df_raw)
                         
-                        for idx, row in enumerate(df_raw.itertuples(), 1):
-                            # பாதுகாப்பாக வேல்யூ எடுப்பது
-                            name = ""
-                            try:
-                                name_val = getattr(row, name_col.replace(' ', '_'), None)
-                                if name_val:
-                                    name = str(name_val).strip()
-                            except:
-                                pass
-                                
-                            raw_mob = ""
-                            try:
-                                mob_val = getattr(row, mob_col.replace(' ', '_'), None)
-                                if mob_val:
-                                    raw_mob = str(mob_val).strip()
-                            except:
-                                pass
-                                
+                        for idx, row in df_raw.iterrows():
+                            name_val = row.get(name_col_name, "")
+                            name = str(name_val).strip() if pd.notna(name_val) else ""
+                            
+                            mob_val = row.get(mob_col_name, "")
+                            raw_mob = str(mob_val).strip() if pd.notna(mob_val) else ""
                             mobile = "".join(filter(str.isdigit, raw_mob))[-10:]
                             
                             if name and name.lower() != 'nan' and len(mobile) == 10:
-                                tcode = f"IMP-{datetime.now().strftime('%m%d')}-{idx:04d}"
+                                tcode = f"IMP-{datetime.now().strftime('%m%d')}-{idx+1:04d}"
                                 
-                                # ஏற்கனவே இந்த எண் உள்ளதா எனச் சரிபார்த்தல்
                                 existing = supabase.table("customers").select("id").eq("mobile", mobile).execute()
                                 if not existing.data:
                                     supabase.table("customers").insert({
@@ -1047,7 +1032,7 @@ else:
                                     success_count += 1
                             
                             if total_rows > 0:
-                                progress_bar.progress(idx / total_rows)
+                                progress_bar.progress(min((idx + 1) / total_rows, 1.0))
                         
                         st.success(f"✅ வெற்றிகரமாக {success_count} வாடிக்கையாளர்கள் டேட்டாபேஸில் பதிவு செய்யப்பட்டுவிட்டனர்!")
                 except Exception as e:
