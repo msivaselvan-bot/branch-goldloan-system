@@ -625,7 +625,7 @@ if not st.session_state.logged_in:
                 if username.strip() and password.strip():
                     user_query = (
                         supabase.table("users")
-                        .select("id, name, username, role, branch_id, is_active, branches(branch_name)")
+                        .select("id, name, username, role, branch_id, is_active")
                         .eq("username", username.strip())
                         .eq("password_hash", password.strip())
                         .eq("is_active", True)
