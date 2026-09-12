@@ -979,10 +979,42 @@ else:
         with tab5:
             st.subheader("📥 பழைய வாடிக்கையாளர் இறக்குமதி (Bulk Import)")
             uploaded_cust_file = st.file_uploader("கோப்பைத் தேர்வு செய்யவும்", type=["xls", "xlsx", "csv"])
+            
             if uploaded_cust_file and st.button("பதிவேற்றத்தைத் தொடங்கு", type="primary"):
-                df_raw = pd.read_csv(uploaded_cust_file, skiprows=2) if uploaded_cust_file.name.endswith(".csv") else pd.read_excel(uploaded_cust_file, skiprows=2)
-                df_cust = df_raw.dropna(subset=["Full Name", "Mobile No"]).copy()
-                st.success(f"{len(df_cust)} வாடிக்கையாளர்கள் பதிவு செய்யப்படுகிறார்கள்...")
+                try:
+                    df_raw = pd.read_csv(uploaded_cust_file, skiprows=2) if uploaded_cust_file.name.endswith(".csv") else pd.read_excel(uploaded_cust_file, skiprows=2)
+                    df_cust = df_raw.dropna(subset=["Full Name", "Mobile No"]).copy()
+                    
+                    total_rows = len(df_cust)
+                    progress_bar = st.progress(0)
+                    success_count = 0
+                    
+                    st.info(f"⏳ மொத்தம் {total_rows} வாடிக்கையாளர்கள் டேட்டாபேஸில் பதிவிடப்படுகிறார்கள்...")
+                    
+                    for idx, row in enumerate(df_cust.itertuples(), 1):
+                        name = str(getattr(row, "Full Name", "")).strip()
+                        mobile = str(getattr(row, "Mobile No", "")).strip()
+                        
+                        if name and mobile:
+                            tcode = f"IMP-{datetime.now().strftime('%m%d')}-{idx:04d}"
+                            
+                            # Supabase-ல் வாடிக்கையாளரைச் சேர்த்தல்
+                            supabase.table("customers").insert({
+                                "branch_id": st.session_state.branch_id,
+                                "customer_code": tcode,
+                                "name": name,
+                                "mobile": mobile,
+                                "address": str(getattr(row, "Address", "Branch Import")),
+                                "kyc_status": "Approved",
+                                "is_active": True
+                            }).execute()
+                            success_count += 1
+                        
+                        progress_bar.progress(idx / total_rows)
+                    
+                    st.success(f"✅ வெற்றிகரமாக {success_count} வாடிக்கையாளர்கள் டேட்டாபேஸில் பதிவு செய்யப்பட்டுவிட்டனர்!")
+                except Exception as e:
+                    st.error(f"இறக்குமதி செய்வதில் பிழை: {e}")
 
         with tab6:
             st.subheader("🗂️ வாடிக்கையாளர் பட்டியல் & திருத்தம்")
