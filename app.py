@@ -624,33 +624,29 @@ if not st.session_state.logged_in:
             if submitted:
                 if username.strip() and password.strip():
                     try:
-                        user_query = (
-                            supabase.table("users")
-                            .select("*")
-                            .eq("username", username.strip())
-                            .execute()
-                        )
+                        # மிக எளிய முறையில் டேட்டாபேஸை மட்டும் சரிபார்த்தல்
+                        res = supabase.table("users").select("*").eq("username", username.strip()).execute()
                         
-                        if user_query.data:
-                            user_info = user_query.data[0]
+                        if res.data:
+                            user_info = res.data[0]
                             db_pass = str(user_info.get("password_hash") or user_info.get("password", ""))
                             
                             if db_pass == password.strip():
-                                role = user_info["role"]
-                                b_id = user_info.get("branch_id")
-
-                                if role in ["Admin", "Auditor", "Operations"]:
-                                    b_name = f"Head Office / {role}"
+                                if not user_info.get("is_active", True):
+                                    st.error("இந்தப் பயனர் கணக்கு முடக்கப்பட்டுள்ளது!")
                                 else:
-                                    b_name = "ஒதுக்கப்படாத கிளை"
-                                    if b_id:
-                                        b_res = supabase.table("branches").select("branch_name").eq("id", b_id).execute()
-                                        if b_res.data:
-                                            b_name = b_res.data[0].get("branch_name", "கிளை")
+                                    role = user_info["role"]
+                                    b_id = user_info.get("branch_id")
+                                    
+                                    if role in ["Admin", "Auditor", "Operations"]:
+                                        b_name = f"Head Office / {role}"
+                                    else:
+                                        b_name = "ஒதுக்கப்படாத கிளை"
+                                        if b_id:
+                                            b_res = supabase.table("branches").select("branch_name").eq("id", b_id).execute()
+                                            if b_res.data:
+                                                b_name = b_res.data[0].get("branch_name", "கிளை")
 
-                                if role not in ["Admin", "Auditor", "Operations"] and not b_id:
-                                    st.error("உங்களுக்கு இன்னும் கிளை ஒதுக்கப்படவில்லை!")
-                                else:
                                     st.session_state.logged_in = True
                                     st.session_state.user_role = role
                                     st.session_state.branch = b_name
@@ -663,7 +659,7 @@ if not st.session_state.logged_in:
                         else:
                             st.error("தவறான பயனர் பெயர்!")
                     except Exception as e:
-                        st.error(f"உள்நுழைவுப் பிழை: {e}")
+                        st.error(f"இணைப்புப் பிழை: {e}")
                 else:
                     st.warning("விவரங்களை உள்ளிடவும்.")
 
