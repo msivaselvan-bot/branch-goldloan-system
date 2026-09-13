@@ -891,6 +891,15 @@ else:
                             }).execute()
                             st.success(f"FD திட்டம் சேமிக்கப்பட்டது!")
                             st.rerun()
+                            st.markdown("---")
+                st.markdown("###### 📋 பதிவு செய்யப்பட்ட FD திட்டங்கள்:")
+                fd_schemes = supabase.table("fd_schemes").select("*").order("id", desc=True).execute().data or []
+                if fd_schemes:
+                    df_fd = pd.DataFrame(fd_schemes)[["scheme_name", "tenure_months", "annual_interest_percent", "min_deposit_amount", "interest_payout", "is_active"]]
+                    df_fd.columns = ["திட்டம் பெயர்", "கால அளவு (மாதம்)", "ஆண்டு வட்டி (%)", "குறைந்தபட்ச தொகை (₹)", "வட்டி பட்டுவாடா", "நிலை"]
+                    st.dataframe(df_fd, use_container_width=True)
+                else:
+                    st.info("திட்டங்கள் எதுவும் இன்னும் பதிவு செய்யப்படவில்லை.")
 
             with s_tab3:
                 st.markdown("##### 📈 புதிய RD திட்டம் உருவாக்குதல்")
@@ -920,6 +929,15 @@ else:
                             }).execute()
                             st.success(f"RD திட்டம் சேமிக்கப்பட்டது!")
                             st.rerun()
+                            st.markdown("---")
+                st.markdown("###### 📋 பதிவு செய்யப்பட்ட RD திட்டங்கள்:")
+                rd_schemes = supabase.table("rd_schemes").select("*").order("id", desc=True).execute().data or []
+                if rd_schemes:
+                    df_rd = pd.DataFrame(rd_schemes)[["scheme_name", "tenure_months", "annual_interest_percent", "min_deposit_amount", "due_frequency", "is_active"]]
+                    df_rd.columns = ["திட்டம் பெயர்", "கால அளவு (மாதம்)", "ஆண்டு வட்டி (%)", "குறைந்தபட்ச தவணை (₹)", "தவணை முறை", "நிலை"]
+                    st.dataframe(df_rd, use_container_width=True)
+                else:
+                    st.info("திட்டங்கள் எதுவும் இன்னும் பதிவு செய்யப்படவில்லை.")
 
         # -----------------------------------------------------------------
         # tab4: இன்சென்டிவ் & புள்ளி விதிகள் (Delete / Edit / Multi-Scheme)
@@ -942,13 +960,16 @@ else:
                     st.write("")
                     st.write("")
                     if st.button("💾 பொது மதிப்புகளைச் சேமி (Update Values)", type="primary"):
-                        supabase.table("incentive_settings").upsert({
-                            "id": 1,
-                            "rupees_per_point": float(new_rpp),
-                            "negative_growth_penalty_per_lakh": float(new_pen)
-                        }).execute()
-                        st.success("புள்ளி மதிப்பு புதுப்பிக்கப்பட்டது!")
-                        st.rerun()
+                        try:
+                            supabase.table("incentive_settings").upsert({
+                                "id": 1,
+                                "rupees_per_point": float(new_rpp),
+                                "negative_growth_penalty_per_lakh": float(new_pen)
+                            }, on_conflict="id").execute()
+                            st.success("புள்ளி மதிப்பு புதுப்பிக்கப்பட்டது!")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"டேட்டாபேஸ் சேமிப்புப் பிழை: {e}")
 
             st.markdown("---")
             st.markdown("##### ⚙️ குறிப்பிட்ட ஸ்கீம் வாரியான புள்ளி விதிகள் (Scheme-wise Points Rule)")
