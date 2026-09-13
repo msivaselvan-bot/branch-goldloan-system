@@ -1035,16 +1035,21 @@ else:
         with tab5:
             st.subheader("📥 கிளை வாரியான பழைய வாடிக்கையாளர் இறக்குமதி (Branch-wise Bulk Import)")
             
-            # அட்டவணையில் உள்ள அனைத்து கிளைகளையும் நேரடியாகப் பெறுதல்
-            branch_res = supabase.table("branches").select("id, branch_name").execute()
-            branch_dict = {b["branch_name"]: b["id"] for b in branch_res.data} if branch_res.data else {}
+            # 1. கிளைப் பெயர், ID மற்றும் branch_code-ஐப் பெறுதல்
+            branch_res = supabase.table("branches").select("id, branch_name, branch_code").execute()
+            branches_data = branch_res.data or []
+            
+            branch_dict = {b["branch_name"]: b["id"] for b in branches_data}
+            branch_code_map = {b["id"]: b.get("branch_code", "BR") for b in branches_data}
             
             if branch_dict:
                 chosen_branch_name = st.selectbox("எந்தக் கிளைக்கான பட்டியல் இது? (Select Branch)", list(branch_dict.keys()))
                 target_branch_id = branch_dict[chosen_branch_name]
+                target_branch_code = branch_code_map.get(target_branch_id, "BR")
             else:
                 st.warning("கிளைகள் எதுவும் கிடைக்கவில்லை!")
                 target_branch_id = None
+                target_branch_code = "BR"
 
             uploaded_cust_file = st.file_uploader("கோப்பைத் தேர்வு செய்யவும் (Excel/CSV)", type=["xls", "xlsx", "csv"])
             
@@ -1055,46 +1060,70 @@ else:
                     else:
                         df_raw = pd.read_excel(uploaded_cust_file, header=0)
                     
-                    st.write(f"தேர்ந்தெடுக்கப்பட்ட கிளை: **{chosen_branch_name}** | மொத்த வரிசைகள்: {len(df_raw)}")
+                    st.write(f"தேர்ந்தெடுக்கப்பட்ட கிளை: **{chosen_branch_name} ({target_branch_code})** | மொத்த வரிசைகள்: {len(df_raw)}")
                     st.dataframe(df_raw.head(3))
                     
                     if st.button("பதிவேற்றத்தைத் தொடங்கு", type="primary"):
                         cols = list(df_raw.columns)
+                        
+                        # காலம்களைக் கண்டறிதல்
                         name_col_name = next((c for c in cols if 'name' in str(c).lower() or 'பெயர்' in str(c)), cols[2] if len(cols) > 2 else cols[0])
                         mob_col_name = next((c for c in cols if 'mobile' in str(c).lower() or 'phone' in str(c) or 'மொபைல்' in str(c)), cols[7] if len(cols) > 7 else cols[1])
                         
+                        # எக்செல் ஷீட்டில் உள்ள வாடிக்கையாளர் எண் காலம் (Cust No / Customer ID / Code)
+                        cust_no_col = next((c for c in cols if any(k in str(c).lower() for k in ['cust_no', 'customer_no', 'cust no', 'code', 'id', 'வ.எண்', 'எண்'])), None)
+                        
                         progress_bar = st.progress(0)
                         success_count = 0
+                        skipped_count = 0
                         total_rows = len(df_raw)
                         
                         for idx, row in df_raw.iterrows():
+                            # 1. பெயர்
                             name_val = row.get(name_col_name, "")
                             name = str(name_val).strip() if pd.notna(name_val) else ""
                             
+                            # 2. மொபைல் எண்
                             mob_val = row.get(mob_col_name, "")
                             raw_mob = str(mob_val).strip() if pd.notna(mob_val) else ""
                             mobile = "".join(filter(str.isdigit, raw_mob))[-10:]
                             
+                            # 3. வாடிக்கையாளர் குறியீடு (TGL-101 வடிவில்)
+                            if cust_no_col and pd.notna(row.get(cust_no_col)):
+                                sheet_cust_no = str(row.get(cust_no_col)).strip()
+                                # எக்செல் எண்களில் வரும் .0 ஐ நீக்குதல்
+                                if sheet_cust_no.endswith(".0"):
+                                    sheet_cust_no = sheet_cust_no[:-2]
+                                tcode = f"{target_branch_code}-{sheet_cust_no}"
+                            else:
+                                tcode = f"{target_branch_code}-{idx+1}"
+
                             if name and name.lower() != 'nan' and len(mobile) == 10:
-                                tcode = f"IMP-{datetime.now().strftime('%m%d')}-{idx+1:04d}"
+                                # மொபைல் எண்ணை Duplicate ஆகக் கருதாமல், customer_code மட்டும் ஏற்கனவே உள்ளதா என்று பார்க்கிறோம்
+                                existing_code = supabase.table("customers").select("id").eq("customer_code", tcode).execute()
                                 
-                                existing = supabase.table("customers").select("id").eq("mobile", mobile).execute()
-                                if not existing.data:
-                                    supabase.table("customers").insert({
-                                        "branch_id": target_branch_id,
-                                        "customer_code": tcode,
-                                        "name": name,
-                                        "mobile": mobile,
-                                        "address": chosen_branch_name,
-                                        "kyc_status": "Approved",
-                                        "is_active": True
-                                    }).execute()
-                                    success_count += 1
+                                if not existing_code.data:
+                                    try:
+                                        supabase.table("customers").insert({
+                                            "branch_id": target_branch_id,
+                                            "customer_code": tcode,
+                                            "name": name,
+                                            "mobile": mobile,  # ஒரே மொபைல் எண் குடும்ப உறுப்பினர்களுக்கு வந்தாலும் அனுமதிக்கப்படும்
+                                            "address": chosen_branch_name,
+                                            "kyc_status": "Approved",
+                                            "is_active": True
+                                        }).execute()
+                                        success_count += 1
+                                    except Exception:
+                                        skipped_count += 1
+                                else:
+                                    # அதே வாடிக்கையாளர் குறியீடு (TGL-101) ஏற்கனவே இருந்தால் மட்டும் தவிர்க்கப்படும்
+                                    skipped_count += 1
                             
                             if total_rows > 0:
                                 progress_bar.progress(min((idx + 1) / total_rows, 1.0))
                         
-                        st.success(f"✅ {chosen_branch_name} கிளைக்கு வெற்றிகரமாக {success_count} வாடிக்கையாளர்கள் பதிவு செய்யப்பட்டுவிட்டனர்!")
+                        st.success(f"✅ {chosen_branch_name} கிளைக்கு வெற்றிகரமாக {success_count} வாடிக்கையாளர்கள் பதிவு செய்யப்பட்டுவிட்டனர்! (ஏற்கனவே இருந்தவை: {skipped_count})")
                 except Exception as e:
                     st.error(f"இறக்குமதி செய்வதில் பிழை: {e}")
 
