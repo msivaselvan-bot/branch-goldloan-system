@@ -1126,6 +1126,154 @@ else:
                         st.success(f"✅ {chosen_branch_name} கிளைக்கு வெற்றிகரமாக {success_count} வாடிக்கையாளர்கள் பதிவு செய்யப்பட்டுவிட்டனர்! (ஏற்கனவே இருந்தவை: {skipped_count})")
                 except Exception as e:
                     st.error(f"இறக்குமதி செய்வதில் பிழை: {e}")
+                    
+        with tab6:
+            st.subheader("👥 வாடிக்கையாளர் மேலாண்மை (Customer Management)")
+            
+            # 1. கிளைகள் பட்டியலை எடுத்தல்
+            b_data = supabase.table("branches").select("id, branch_name, branch_code").execute().data or []
+            branch_map = {b["id"]: f"{b['branch_name']} ({b.get('branch_code', 'BR')})" for b in b_data}
+            
+            c_sub1, c_sub2 = st.tabs(["📋 வாடிக்கையாளர் பட்டியல் & தேடல்", "➕ புதிய வாடிக்கையாளர் சேர்க்க"])
+            
+            # --- TAB 1: பட்டியல், தேடல் மற்றும் திருத்துதல் ---
+            with c_sub1:
+                col_f1, col_f2 = st.columns([1, 2])
+                
+                with col_f1:
+                    branch_filter_options = ["அனைத்துக் கிளைகள் (All Branches)"] + [f"{b['branch_name']} ({b.get('branch_code', 'BR')})" for b in b_data]
+                    sel_branch_filter = st.selectbox("கிளை வடிகட்டி (Filter by Branch):", branch_filter_options)
+                
+                with col_f2:
+                    search_query = st.text_input("🔍 தேடுக (பெயர், மொபைல் எண், அல்லது வாடிக்கையாளர் குறியீடு - எ.கா: TGL-101):", placeholder="Type name, phone or code...")
+                
+                # Supabase Query அமைத்தல்
+                query = supabase.table("customers").select("id, customer_code, name, mobile, address, branch_id, kyc_status, is_active, created_at").order("id", desc=True)
+                
+                # கிளை வாரியாக வடிகட்டுதல்
+                if sel_branch_filter != "அனைத்துக் கிளைகள் (All Branches)":
+                    chosen_b_id = next((b["id"] for b in b_data if f"{b['branch_name']} ({b.get('branch_code', 'BR')})" == sel_branch_filter), None)
+                    if chosen_b_id:
+                        query = query.eq("branch_id", chosen_b_id)
+                
+                cust_records = query.limit(1000).execute().data or []
+                
+                # தேடல் வடிகட்டி (Search Filter)
+                if search_query.strip():
+                    sq = search_query.strip().lower()
+                    cust_records = [
+                        c for c in cust_records 
+                        if sq in str(c.get("name", "")).lower() 
+                        or sq in str(c.get("mobile", "")) 
+                        or sq in str(c.get("customer_code", "")).lower()
+                    ]
+                
+                st.markdown(f"**மொத்த வாடிக்கையாளர்கள்:** `{len(cust_records)}`")
+                
+                if cust_records:
+                    # அட்டவணை வடிவில் தயார் செய்தல்
+                    display_list = []
+                    for c in cust_records:
+                        display_list.append({
+                            "ID": c.get("id"),
+                            "குறியீடு (Code)": c.get("customer_code", "-"),
+                            "பெயர் (Name)": c.get("name", "-"),
+                            "மொபைல் எண் (Mobile)": c.get("mobile", "-"),
+                            "கிளை (Branch)": branch_map.get(c.get("branch_id"), "-"),
+                            "முகவரி (Address)": c.get("address", "-"),
+                            "KYC நிலை": c.get("kyc_status", "Approved"),
+                            "செயலில் உள்ளதா": "ஆம்" if c.get("is_active") else "இல்லை"
+                        })
+                    
+                    df_customers = pd.DataFrame(display_list)
+                    st.dataframe(df_customers, use_container_width=True, hide_index=True)
+                    
+                    # --- வாடிக்கையாளர் விவரங்களைத் திருத்துதல் (Edit Section) ---
+                    st.markdown("---")
+                    st.markdown("##### ✏️ வாடிக்கையாளர் விவரங்களைத் திருத்து (Edit Customer Details)")
+                    
+                    cust_options = {f"{c.get('customer_code', '-')} - {c.get('name')} ({c.get('mobile')})": c for c in cust_records}
+                    sel_cust_label = st.selectbox("திருத்த வேண்டிய வாடிக்கையாளரைத் தேர்வு செய்யவும்:", list(cust_options.keys()))
+                    
+                    if sel_cust_label:
+                        selected_cust = cust_options[sel_cust_label]
+                        with st.form("edit_customer_form"):
+                            e_col1, e_col2, e_col3 = st.columns(3)
+                            with e_col1:
+                                edit_name = st.text_input("பெயர்", value=selected_cust.get("name", ""))
+                            with e_col2:
+                                edit_mobile = st.text_input("மொபைல் எண்", value=selected_cust.get("mobile", ""), max_chars=10)
+                            with e_col3:
+                                edit_code = st.text_input("வாடிக்கையாளர் குறியீடு", value=selected_cust.get("customer_code", ""))
+                            
+                            e_col4, e_col5 = st.columns([2, 1])
+                            with e_col4:
+                                edit_address = st.text_input("முகவரி", value=selected_cust.get("address", ""))
+                            with e_col5:
+                                edit_status = st.selectbox("நிலை (Status)", ["Approved", "Pending", "Rejected"], index=["Approved", "Pending", "Rejected"].index(selected_cust.get("kyc_status", "Approved")) if selected_cust.get("kyc_status") in ["Approved", "Pending", "Rejected"] else 0)
+                            
+                            if st.form_submit_button("💾 மாற்றங்களைச் சேமி (Update Customer)", type="primary"):
+                                if edit_name.strip() and len(edit_mobile.strip()) == 10:
+                                    try:
+                                        supabase.table("customers").update({
+                                            "name": edit_name.strip(),
+                                            "mobile": edit_mobile.strip(),
+                                            "customer_code": edit_code.strip(),
+                                            "address": edit_address.strip(),
+                                            "kyc_status": edit_status
+                                        }).eq("id", selected_cust["id"]).execute()
+                                        st.success("வாடிக்கையாளர் விவரங்கள் வெற்றிகரமாகப் புதுப்பிக்கப்பட்டன!")
+                                        st.rerun()
+                                    except Exception as err:
+                                        st.error(f"புதுப்பிப்பதில் பிழை: {err}")
+                                else:
+                                    st.warning("பெயர் மற்றும் சரியான 10 இலக்க மொபைல் எண்ணை உள்ளிடவும்!")
+                else:
+                    st.info("வாடிக்கையாளர்கள் விவரங்கள் எதுவும் கிடைக்கவில்லை.")
+
+            # --- TAB 2: புதிய வாடிக்கையாளரை நேரடியாகச் சேர்த்தல் ---
+            with c_sub2:
+                st.markdown("##### ➕ புதிய வாடிக்கையாளரை நேரடியாகப் பதிவு செய்க")
+                with st.form("admin_manual_cust_form", clear_on_submit=True):
+                    nc_col1, nc_col2 = st.columns(2)
+                    with nc_col1:
+                        target_b = st.selectbox("கிளையைத் தேர்வு செய்யவும்:", [f"{b['branch_name']} ({b.get('branch_code', 'BR')})" for b in b_data])
+                        new_cust_name = st.text_input("வாடிக்கையாளர் பெயர் *")
+                    with nc_col2:
+                        new_cust_mobile = st.text_input("10 இலக்க மொபைல் எண் *", max_chars=10)
+                        new_cust_code_manual = st.text_input("வாடிக்கையாளர் குறியீடு (விருப்பப்பட்டால் - எ.கா: TGL-150):", placeholder="வெற்றாக விட்டால் தானாக உருவாகும்")
+                    
+                    new_cust_addr = st.text_area("முகவரி")
+                    
+                    if st.form_submit_button("வாடிக்கையாளரைச் சேமிக்க", type="primary"):
+                        if new_cust_name.strip() and len(new_cust_mobile.strip()) == 10:
+                            # கிளையைத் தேர்ந்தெடுத்தல்
+                            chosen_b_obj = next((b for b in b_data if f"{b['branch_name']} ({b.get('branch_code', 'BR')})" == target_b), None)
+                            b_id = chosen_b_obj["id"] if chosen_b_obj else None
+                            b_code = chosen_b_obj.get("branch_code", "BR") if chosen_b_obj else "BR"
+                            
+                            # குறியீடு தானாக அல்லது உள்ளீடு வழியாக அமைத்தல்
+                            if new_cust_code_manual.strip():
+                                final_c_code = new_cust_code_manual.strip()
+                            else:
+                                final_c_code = f"{b_code}-{datetime.now().strftime('%m%d%H%M')}"
+                            
+                            try:
+                                supabase.table("customers").insert({
+                                    "branch_id": b_id,
+                                    "customer_code": final_c_code,
+                                    "name": new_cust_name.strip(),
+                                    "mobile": new_cust_mobile.strip(),
+                                    "address": new_cust_addr.strip() if new_cust_addr.strip() else chosen_b_obj.get("branch_name", ""),
+                                    "kyc_status": "Approved",
+                                    "is_active": True
+                                }).execute()
+                                st.success(f"வாடிக்கையாளர் {new_cust_name} ({final_c_code}) வெற்றிகரமாகச் சேர்க்கப்பட்டார்!")
+                                st.rerun()
+                            except Exception as err:
+                                st.error(f"பதிவு செய்வதில் பிழை: {err}")
+                        else:
+                            st.warning("தயவுசெய்து பெயர் மற்றும் சரியான 10 இலக்க மொபைல் எண்ணை உள்ளிடவும்!")
 
         with tab7:
             st.subheader("📊 வருகை & பரிவர்த்தனை மேலாண்மை")
