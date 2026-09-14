@@ -241,6 +241,110 @@ def upload_single_file(file_obj, folder_name):
         file_options={"content-type": file_obj.type, "upsert": "true"},
     )
     return supabase.storage.from_(bucket_name).get_public_url(file_path)
+# ==============================================================================
+# கடன் உறுதி ஆவணம் உருவாக்கும் செயல்பாடு (Declaration Form HTML Generator)
+# ==============================================================================
+def generate_declaration_html(data):
+    """தமிழ் டிக்ளரேஷன் உறுதி ஆவணம் உருவாக்கும் முறை"""
+    html_content = f"""<!DOCTYPE html>
+<html lang="ta">
+<head>
+    <meta charset="UTF-8">
+    <title>கடன் உறுதி ஆவணம் - {data.get('loan_number', '')}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Mukta+Malar:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        @page {{
+            size: A4 portrait;
+            margin: 20mm;
+        }}
+        * {{
+            box-sizing: border-box;
+        }}
+        body {{
+            font-family: 'Mukta Malar', sans-serif;
+            color: #111;
+            padding: 30px;
+            max-width: 800px;
+            margin: 0 auto;
+            line-height: 1.9;
+        }}
+        .header {{
+            text-align: center;
+            font-size: 21px;
+            font-weight: 700;
+            margin-top: 25px;
+            margin-bottom: 25px;
+            text-decoration: underline;
+        }}
+        .section-from, .section-to {{
+            font-size: 15px;
+            line-height: 1.7;
+            margin-bottom: 20px;
+        }}
+        .content {{
+            font-size: 16px;
+            text-align: justify;
+            text-indent: 40px;
+            margin-top: 15px;
+            margin-bottom: 35px;
+        }}
+        .footer-table {{
+            width: 100%;
+            margin-top: 40px;
+            font-size: 15px;
+            border-collapse: collapse;
+        }}
+        .footer-table td {{
+            vertical-align: bottom;
+        }}
+        @media print {{
+            body {{
+                padding: 0;
+            }}
+            .no-print {{
+                display: none !important;
+            }}
+        }}
+    </style>
+</head>
+<body onload="window.print()">
+    <div class="section-from">
+        <b>FROM</b><br>
+        {data.get('customer_name', '')}<br>
+        {data.get('address', '')}<br>
+        தொடர்பு எண்: {data.get('contact_number', '')}
+    </div>
+
+    <div class="section-to">
+        <b>To</b><br>
+        ஐயா,<br>
+        <b>முத்துசிஸ் கோல்டு புரொடக்ட் பிரைவேட் லிமிடெட்</b><br>
+        {data.get('branch_name', '')}
+    </div>
+
+    <div class="header">கடன் தொடர்பான உறுதி ஆவணம்</div>
+
+    <div class="content">
+        நான் மேற்கூறிய முகவரியில் வசித்து வருகிறேன். நான் தங்களிடம் <b>{data.get('pledge_date', '')}</b> அன்று கடன் எண் <b>{data.get('loan_number', '')}</b> மீது கடனாக <b>₹{data.get('loan_amount', 0):,.2f}</b> ரூபாய் பெற்றுள்ளேன். எனக்கு பணத்தேவை அதிகமாக உள்ளபடியால் தாங்கள் சாதாரணமாக கொடுக்கும் நகைக்கான கடனைவிட எனது வேண்டுகோளால் அதிகமான பணத்தினை மேலே உள்ள நகைகடனுக்கு பெற்றுள்ளேன். மேலும் மேற்கூறிய கடனுக்கு மாதம் தோறும் வட்டி கட்டுவேன் எனவும் மூன்று மாதத்தில் திருப்பிக்கொள்வேன் எனவும் உறுதியளிக்கிறேன். மீறினால் நிறுவனமே எனது நகைகளை விற்று எனது கடனை நேர் செய்து கொள்ளலாம் எனவும் இதன் மூலம் உறுதியளிக்கிறேன். எனது கடனுக்கு காலம் மூன்று மாதமே என்பதனை நன்கு அறிவேன் மூன்று மாதங்களில் கடன் நேர் செய்யப்படவில்லை எனில் அடகு வைத்த நகை மீது எனக்கு எந்த உரிமையும் இல்லை என்பதனை நன்கு அறிவேன்.
+    </div>
+
+    <table class="footer-table">
+        <tr>
+            <td style="width: 50%;">
+                <b>கிளை:</b> {data.get('branch_name', '')}<br>
+                <b>தேதி:</b> {data.get('current_date', '')}
+            </td>
+            <td style="width: 50%; text-align: right;">
+                <b>தங்கள் உண்மையுள்ள</b><br><br><br><br>
+                ({data.get('customer_name', '')})
+            </td>
+        </tr>
+    </table>
+</body>
+</html>"""
+    return html_content
 
 def generate_short_visit_no() -> str:
     try:
@@ -2207,7 +2311,7 @@ else:
                             all_remarks += f" ({custom_remarks.strip()})"
                         
                         img_url = upload_ornament_image(ornament_file) if ornament_file else None
-
+                        
                         st.session_state.transactions_cart.append({
                             "transaction_type": txn_category,
                             "staff_name": staff,
@@ -2231,10 +2335,48 @@ else:
                             "nominee_relation": nominee_relation,
                             "nominee_address": nominee_address,
                         })
+
+                        # 🌟 6 அல்லது அதற்கு கீழ் உள்ள ஸ்கீம்களுக்கு Declaration Form தயாரித்தல்
+                        scheme_tenor = int(sel_scheme_obj.get("scheme_tenor_months", 12) or 12) if txn_category == "Pledge (புதிய நகைக் கடன்)" else 12
+                        
+                        if txn_category == "Pledge (புதிய நகைக் கடன்)" and scheme_tenor <= 6:
+                            cust_id = visit.get("customer_id")
+                            # வாடிக்கையாளர் முகவரியை எடுப்பது
+                            c_info = supabase.table("customers").select("address, mobile").eq("id", cust_id).execute().data
+                            cust_addr = c_info[0].get("address", "-") if c_info else "-"
+                            cust_mob = c_info[0].get("mobile", "-") if c_info else visit.get("mobile", "-")
+
+                            dec_data = {
+                                "customer_name": visit.get("customer_name", ""),
+                                "address": cust_addr,
+                                "contact_number": cust_mob,
+                                "branch_name": st.session_state.branch,
+                                "pledge_date": str(date.today()),
+                                "loan_number": new_gl_no,
+                                "loan_amount": float(paid_amt),
+                                "current_date": str(date.today())
+                            }
+                            st.session_state.current_declaration = generate_declaration_html(dec_data)
+                            st.session_state.declaration_gl_no = new_gl_no
+                        else:
+                            st.session_state.current_declaration = None
+
                         st.success(f"'{txn_category}' சேர்க்கப்பட்டது!")
                         st.rerun()
                     else:
                         st.error("தொகையை உள்ளிடவும்.")
+                    
+                    if st.session_state.get("current_declaration"):
+                    with st.container(border=True):
+                        st.warning("⚠️ **கவனிக்க:** இந்த நகைக் கடனின் கால அளவு 6 மாதங்கள் அல்லது அதற்கும் குறைவாக உள்ளதால் உறுதி ஆவணம் (Declaration Form) அவசியமாகிறது.")
+                        st.download_button(
+                            label=f"📄 உறுதி ஆவணத்தைப் பதிவிறக்குக (Print Declaration - GL: {st.session_state.get('declaration_gl_no')})",
+                            data=st.session_state.current_declaration,
+                            file_name=f"Declaration_{st.session_state.get('declaration_gl_no')}.html",
+                            mime="text/html",
+                            type="primary",
+                            help="இதை கிளிக் செய்து பிரவுசரில் திறந்து நேரடியாக பிரிண்ட் (Ctrl+P) எடுக்கலாம்."
+                        )
 
                 if st.session_state.transactions_cart:
                     st.markdown("### 🛒 நடவடிக்கைகள் பட்டியல்:")
