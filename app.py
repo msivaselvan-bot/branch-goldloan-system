@@ -451,25 +451,49 @@ def render_staff_attribution_report(selected_branch_id=None):
         for t in v.get("transactions", []):
             txn_type = t.get("transaction_type", "-")
             raw_staff = t.get("staff_name") or "Walk-in (நேரடி வருகை)"
-            paid_val = float(t.get("paid_amount", 0.0))
-            rec_val = float(t.get("received_amount", 0.0))
+            paid_val = float(t.get("paid_amount", 0.0) or 0.0)
+            rec_val = float(t.get("received_amount", 0.0) or 0.0)
+            principal_val = float(t.get("principal_amount", 0.0) or 0.0)
             remarks_str = str(t.get("remarks", ""))
 
+            # 1. கணக்கீட்டிற்கான உண்மையான அசல் / வணிக அளவைத் தீர்மானித்தல்
             effective_vol = 0.0
-            if "Release" in txn_type:
-                try:
-                    if "அசல்: ₹" in remarks_str:
+
+            # அடமானம் மீட்டல் (GL Release) - அசல் தொகை மட்டும்
+            if "Release" in txn_type or "அடமானம் மீட்டல்" in txn_type:
+                if principal_val > 0:
+                    effective_vol = principal_val
+                elif "அசல்: ₹" in remarks_str:
+                    try:
                         p_str = remarks_str.split("அசல்: ₹")[1].split("|")[0].strip().replace(",", "")
                         effective_vol = float(p_str)
-                    else:
+                    except Exception:
                         effective_vol = rec_val
-                except Exception:
+                else:
                     effective_vol = rec_val
-            elif "Part Payment" in txn_type:
+
+            # பார்ட் பேமெண்ட் (Part Payment) - வரவான அசல் தொகை மட்டும்
+            elif "Part Payment" in txn_type or "அசல் வரவு" in txn_type:
+                if principal_val > 0:
+                    effective_vol = principal_val
+                elif "அசல்: ₹" in remarks_str:
+                    try:
+                        p_str = remarks_str.split("அசல்: ₹")[1].split("|")[0].strip().replace(",", "")
+                        effective_vol = float(p_str)
+                    except Exception:
+                        effective_vol = rec_val
+                else:
+                    effective_vol = rec_val
+
+            # RD Due / தவணை வரவு
+            elif "RD Due" in txn_type or "RD தவணை" in txn_type:
                 effective_vol = rec_val
+
+            # புதிய கடன் அல்லது பிற சேவைகள்
             else:
                 effective_vol = paid_val if paid_val > 0 else rec_val
 
+            # 2. ஸ்கீம் பெயரை எடுத்தல்
             detected_scheme = "All"
             try:
                 if "ஸ்கீம்:" in remarks_str:
@@ -479,26 +503,34 @@ def render_staff_attribution_report(selected_branch_id=None):
             except Exception:
                 detected_scheme = "All"
 
-            rule_info = rule_dict.get((txn_type, detected_scheme)) or rule_dict.get((txn_type, "All")) or {"basis_type": "Amount", "unit_value": 100000.0, "points_per_unit": 10.0}
+            # 3. அட்மின் விதியைப் பொருத்துதல்
+            rule_info = (
+                rule_dict.get((txn_type, detected_scheme)) 
+                or rule_dict.get((txn_type, "All")) 
+                or {"basis_type": "Amount", "unit_value": 100000.0, "points_per_unit": 10.0}
+            )
 
             basis = rule_info.get("basis_type", "Amount")
             unit_val = float(rule_info.get("unit_value", 100000.0) or 100000.0)
             pts_per_unit = float(rule_info.get("points_per_unit", 10.0) or 0.0)
 
+            # 4. புள்ளிகள் கணக்கீடு (நெகட்டிவ் மற்றும் பாசிட்டிவ் புள்ளிகள்)
             calc_pts = 0.0
             if basis == "Weight_Grams":
-                grams_val = 0.0
-                try:
-                    if "எடை:" in remarks_str:
+                grams_val = float(t.get("net_weight", 0.0) or 0.0)
+                if grams_val == 0.0 and "எடை:" in remarks_str:
+                    try:
                         part = remarks_str.split("எடை:")[1].split("g")[0].strip()
                         grams_val = float(part)
-                except Exception:
-                    grams_val = 0.0
+                    except Exception:
+                        grams_val = 0.0
                 calc_pts = (grams_val / unit_val) * pts_per_unit if unit_val > 0 else 0.0
-                disp_val = f"{grams_val} g"
+                disp_val = f"{grams_val:.3f} g"
             else:
                 base_calc = (effective_vol / unit_val) * pts_per_unit if unit_val > 0 else 0.0
-                if "Release" in txn_type or "Part Payment" in txn_type:
+
+                # 🔴 GL Release மற்றும் Part Payment அசல் தொகைக்கு கட்டாய நெகட்டிவ் புள்ளிகள்
+                if any(k in txn_type for k in ["Release", "அடமானம் மீட்டல்", "Part Payment", "அசல் வரவு"]):
                     calc_pts = -abs(base_calc)
                 else:
                     calc_pts = abs(base_calc)
@@ -985,10 +1017,16 @@ else:
                     ir_txn_type = st.selectbox(
                         "நடவடிக்கை வகை *:",
                         [
-                            "Pledge (புதிய நகைக் கடன்)", "GL Release (அடமானம் மீட்டல்)",
-                            "Interest Payment (வட்டி வரவு)", "Part Payment (அசல் வரவு)",
-                            "Take Over (பிற நிறுவன கடன் மீட்டல்)", "FD Open (புதிய வைப்பு நிதி)",
-                            "RD Open (புதிய RD சேமிப்பு)", "GP (Gold Purchase)", "GS (Gold Sale)"
+                            "Pledge (புதிய நகைக் கடன்)", 
+                            "GL Release (அடமானம் மீட்டல்)",
+                            "Interest Payment (வட்டி வரவு)", 
+                            "Part Payment (அசல் வரவு)",
+                            "Take Over (பிற நிறுவன கடன் மீட்டல்)", 
+                            "FD Open (புதிய வைப்பு நிதி)",
+                            "RD Open (புதிய RD சேமிப்பு)", 
+                            "RD Due (RD தவணை வரவு)",  # <-- புதிதாகச் சேர்க்கப்பட்டது
+                            "GP (Gold Purchase)", 
+                            "GS (Gold Sale)"
                         ]
                     )
                 with ir_c2:
