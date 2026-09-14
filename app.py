@@ -2616,7 +2616,7 @@ else:
                                 st.session_state.declaration_gl_no = new_gl_no
 
                         st.session_state.form_reset_counter += 1
-                        
+
                         st.success(f"'{txn_category}' வெற்றிகரமாகப் பட்டியலில் சேர்க்கப்பட்டது!")
                         st.rerun()
                     else:
