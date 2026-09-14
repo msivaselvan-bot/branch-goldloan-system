@@ -2528,13 +2528,14 @@ else:
                     ornament_file = st.file_uploader("நகை படம் (Ornament Photo)", type=["jpg", "jpeg", "png"], key="gs_img")
                     detail_summary = [f"பில்: {gs_bill_no}", f"பொருள்: {gs_item_name}", f"எடை: {net_weight}g"]
 
-                # கார்ட்டில் சேர்க்கும் பட்டன்
-                if st.button("➕ பட்டியலில் சேர் (Add to Cart)", type="primary", key="btn_add_to_cart_main"):
-                    # நகைக்கடனாக இருந்தால் இதர கட்டணங்களைக் கழித்து நிகரத் தொகையைக் கணக்கிடுதல்
-                    if "Pledge" in txn_category:
-                        actual_paid_amt = max(0.0, float(paid_amt) - float(other_charges))
-                    else:
-                        actual_paid_amt = float(paid_amt)
+                # கார்ட்டில் சேர்க்கும் பட்டன் (GP அல்லாத பிற நடவடிக்கைகளுக்கு மட்டும்)
+                if txn_category != "GP (Gold Purchase)":
+                    if st.button("➕ பட்டியலில் சேர் (Add to Cart)", type="primary", key="btn_add_to_cart_main"):
+                        # நகைக்கடனாக இருந்தால் இதர கட்டணங்களைக் கழித்து நிகரத் தொகையைக் கணக்கிடுதல்
+                        if "Pledge" in txn_category:
+                            actual_paid_amt = max(0.0, float(paid_amt) - float(other_charges))
+                        else:
+                            actual_paid_amt = float(paid_amt)
 
                     if actual_paid_amt > 0 or received_amt > 0:
                         all_remarks = " | ".join(detail_summary)
