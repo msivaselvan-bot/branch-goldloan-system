@@ -840,14 +840,14 @@ else:
         if st.button("🔄 Refresh", use_container_width=True, help="பக்கத்தை முழுமையாகப் புதுப்பிக்க"):
             st.rerun()
     with top_col4:
-    if st.button("வெளியேறு", use_container_width=True):
-        st.session_state.logged_in = False
-        st.session_state.current_visit = None
-        st.session_state.transactions_cart = []
-        st.session_state.generated_otp = None
-        st.session_state.current_declaration = None
-        st.session_state.declaration_gl_no = None
-        st.rerun()
+        if st.button("வெளியேறு", use_container_width=True):
+            st.session_state.logged_in = False
+            st.session_state.current_visit = None
+            st.session_state.transactions_cart = []
+            st.session_state.generated_otp = None
+            st.session_state.current_declaration = None
+            st.session_state.declaration_gl_no = None
+            st.rerun()
 
     st.markdown("---")
 
