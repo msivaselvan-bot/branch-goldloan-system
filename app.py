@@ -757,6 +757,13 @@ if "current_visit" not in st.session_state:
 if "transactions_cart" not in st.session_state:
     st.session_state.transactions_cart = []
 
+# புதிதாகச் சேர்க்க வேண்டிய வரிகள்:
+if "current_declaration" not in st.session_state:
+    st.session_state.current_declaration = None
+
+if "declaration_gl_no" not in st.session_state:
+    st.session_state.declaration_gl_no = None
+
 branches_res = supabase.table("branches").select("*").order("id").execute()
 branch_options = {b["branch_name"]: b["id"] for b in branches_res.data} if branches_res.data else {}
 branch_id_to_name = {b["id"]: b["branch_name"] for b in branches_res.data} if branches_res.data else {}
@@ -2311,7 +2318,8 @@ else:
                             all_remarks += f" ({custom_remarks.strip()})"
                         
                         img_url = upload_ornament_image(ornament_file) if ornament_file else None
-                        
+
+                        # கார்ட்டில் சேர்த்தல்
                         st.session_state.transactions_cart.append({
                             "transaction_type": txn_category,
                             "staff_name": staff,
@@ -2336,15 +2344,21 @@ else:
                             "nominee_address": nominee_address,
                         })
 
-                        # 🌟 6 அல்லது அதற்கு கீழ் உள்ள ஸ்கீம்களுக்கு Declaration Form தயாரித்தல்
-                        scheme_tenor = int(sel_scheme_obj.get("scheme_tenor_months", 12) or 12) if txn_category == "Pledge (புதிய நகைக் கடன்)" else 12
+                        # 🌟 6 அல்லது அதற்குக் குறைவான மாதங்களுக்கான உறுதி ஆவணம் சரிபார்ப்பு
+                        scheme_tenor = int(sel_scheme_obj.get("scheme_tenor_months", 12) or 12)
                         
                         if txn_category == "Pledge (புதிய நகைக் கடன்)" and scheme_tenor <= 6:
                             cust_id = visit.get("customer_id")
-                            # வாடிக்கையாளர் முகவரியை எடுப்பது
-                            c_info = supabase.table("customers").select("address, mobile").eq("id", cust_id).execute().data
-                            cust_addr = c_info[0].get("address", "-") if c_info else "-"
-                            cust_mob = c_info[0].get("mobile", "-") if c_info else visit.get("mobile", "-")
+                            cust_addr = "-"
+                            cust_mob = visit.get("mobile", "-")
+                            
+                            try:
+                                c_res = supabase.table("customers").select("address, mobile").eq("id", cust_id).execute()
+                                if c_res.data:
+                                    cust_addr = c_res.data[0].get("address") or "-"
+                                    cust_mob = c_res.data[0].get("mobile") or cust_mob
+                            except Exception:
+                                pass
 
                             dec_data = {
                                 "customer_name": visit.get("customer_name", ""),
@@ -2358,10 +2372,8 @@ else:
                             }
                             st.session_state.current_declaration = generate_declaration_html(dec_data)
                             st.session_state.declaration_gl_no = new_gl_no
-                        else:
-                            st.session_state.current_declaration = None
 
-                        st.success(f"'{txn_category}' சேர்க்கப்பட்டது!")
+                        st.success(f"'{txn_category}' வெற்றிகரமாகப் பட்டியலில் சேர்க்கப்பட்டது!")
                         st.rerun()
                     else:
                         st.error("தொகையை உள்ளிடவும்.")
@@ -2375,7 +2387,7 @@ else:
                             file_name=f"Declaration_{st.session_state.get('declaration_gl_no')}.html",
                             mime="text/html",
                             type="primary",
-                            help="இதை கிளிக் செய்து பிரவுசரில் திறந்து நேரடியாக பிரிண்ட் (Ctrl+P) எடுக்கலாம்."
+                            key="btn_dl_declaration"
                         )
 
                 if st.session_state.transactions_cart:
