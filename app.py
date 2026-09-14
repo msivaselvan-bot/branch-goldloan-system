@@ -2549,7 +2549,7 @@ else:
                     # 🌟 1. மாறிகளை முன்னிருப்பாக வரையறுத்தல் (NameError வராமல் தடுக்க)
                         actual_paid_amt = 0.0
                         # நகைக்கடனாக இருந்தால் இதர கட்டணங்களைக் கழித்து நிகரத் தொகையைக் கணக்கிடுதல்
-                        if "Pledge" in txn_category:
+                    if "Pledge" in txn_category:
                         actual_paid_amt = max(0.0, float(paid_amt) - float(other_charges))
                     else:
                         actual_paid_amt = float(paid_amt) if 'paid_amt' in locals() else 0.0
