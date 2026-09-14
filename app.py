@@ -806,6 +806,9 @@ if "current_declaration" not in st.session_state:
 if "declaration_gl_no" not in st.session_state:
     st.session_state.declaration_gl_no = None
 
+if "form_reset_counter" not in st.session_state:
+    st.session_state.form_reset_counter += 1
+
 if "gp_ornament_rows" not in st.session_state:
     st.session_state.gp_ornament_rows = [
         {"item": "", "count": 1, "gross_wt": 0.0, "net_wt": 0.0, "purity": "916 KDM"}
@@ -2191,6 +2194,8 @@ else:
                 fd_scheme_options = [s["scheme_name"] for s in active_fd_schemes] if active_fd_schemes else ["Standard FD 9.5%"]
                 rd_scheme_options = [s["scheme_name"] for s in active_rd_schemes] if active_rd_schemes else ["Standard RD 10%"]
 
+                form_ver = st.session_state.form_reset_counter
+
                 txn_category = st.selectbox(
                     "நடவடிக்கை வகை:",
                     [
@@ -2204,8 +2209,10 @@ else:
                     key="dyn_txn_sel"
                 )
 
+                with st.form("txn_entry_form", clear_on_submit=True):
+
                 # பொது மாறிகள் வரையறை
-                col_st1, col_st2 = st.columns(2)
+                    col_st1, col_st2 = st.columns(2)
                 with col_st1:
                     staff = st.selectbox("காரணப் பணியாளர்:", current_staff_list)
                 with col_st2:
@@ -2536,7 +2543,9 @@ else:
 
                 # கார்ட்டில் சேர்க்கும் பட்டன் (GP அல்லாத பிற நடவடிக்கைகளுக்கு மட்டும்)
                 if txn_category != "GP (Gold Purchase)":
-                    if st.button("➕ பட்டியலில் சேர் (Add to Cart)", type="primary", key="btn_add_to_cart_main"):
+
+                    submitted = st.form_submit_button("➕ பட்டியலில் சேர் (Add to Cart)", type="primary")
+                    if submitted:
                         # நகைக்கடனாக இருந்தால் இதர கட்டணங்களைக் கழித்து நிகரத் தொகையைக் கணக்கிடுதல்
                         if "Pledge" in txn_category:
                             actual_paid_amt = max(0.0, float(paid_amt) - float(other_charges))
@@ -2606,6 +2615,8 @@ else:
                                 st.session_state.current_declaration = generate_declaration_html(dec_data)
                                 st.session_state.declaration_gl_no = new_gl_no
 
+                        st.session_state.form_reset_counter += 1
+                        
                         st.success(f"'{txn_category}' வெற்றிகரமாகப் பட்டியலில் சேர்க்கப்பட்டது!")
                         st.rerun()
                     else:
