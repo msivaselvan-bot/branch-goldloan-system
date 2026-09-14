@@ -2367,9 +2367,9 @@ else:
                         st.error("தொகையை உள்ளிடவும்.")
                     
                     if st.session_state.get("current_declaration"):
-                    with st.container(border=True):
-                        st.warning("⚠️ **கவனிக்க:** இந்த நகைக் கடனின் கால அளவு 6 மாதங்கள் அல்லது அதற்கும் குறைவாக உள்ளதால் உறுதி ஆவணம் (Declaration Form) அவசியமாகிறது.")
-                        st.download_button(
+                        with st.container(border=True):
+                            st.warning("⚠️ **கவனிக்க:** இந்த நகைக் கடனின் கால அளவு 6 மாதங்கள் அல்லது அதற்கும் குறைவாக உள்ளதால் உறுதி ஆவணம் (Declaration Form) அவசியமாகிறது.")
+                            st.download_button(
                             label=f"📄 உறுதி ஆவணத்தைப் பதிவிறக்குக (Print Declaration - GL: {st.session_state.get('declaration_gl_no')})",
                             data=st.session_state.current_declaration,
                             file_name=f"Declaration_{st.session_state.get('declaration_gl_no')}.html",
