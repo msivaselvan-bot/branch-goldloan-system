@@ -7,7 +7,7 @@ import streamlit as st
 from supabase import Client, create_client
 import uuid
 
-# 1. பக்க வடிவமைப்பு
+# 1. பக்க வடிவமைப்பு GL Declaration working
 st.set_page_config(page_title="Branch Operations System", layout="wide")
 # ==============================================================================
 # நகை படம் பதிவேற்றும் செயல்பாடு (Supabase Storage Bucket: ornaments)
