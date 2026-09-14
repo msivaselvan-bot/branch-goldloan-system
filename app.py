@@ -2455,62 +2455,68 @@ else:
                     if is_takeover:
                         detail_summary.append(f"அட்வான்ஸ்: ₹{advance_paid:,.2f} | மீதி: ₹{balance_payable:,.2f}")
                     if st.button("➕ பட்டியலில் சேர் (Add to Cart)", type="primary", key="btn_add_gp_to_cart"):
+                        # 1. வவுச்சர் எண் சரிபார்ப்பு
                         if not voucher_no.strip():
-                            st.error("⚠️ தயவுசெய்து வவுச்சர் எண்ணை உள்ளிடவும்!")
-                    elif total_gp_value <= 0:
-                        st.error("⚠️ மொத்த மதிப்பு 0-க்கு மேல் இருக்க வேண்டும்!")
-                    elif not cust_with_ornaments_img or not ornaments_summary_img:
-                        st.error("⚠️ வாடிக்கையாளர் படம் மற்றும் நகை விபர படம் இரண்டையும் பதிவேற்றவும்!")
-                    else:
-                        with st.spinner("விவரங்கள் மற்றும் படங்கள் பதிவேற்றப்படுகின்றன..."):
-                            # படங்கள் பதிவேற்றம்
-                            cust_pic_url = upload_ornament_image(cust_with_ornaments_img)
-                            orn_pic_url = upload_ornament_image(ornaments_summary_img)
+                            st.warning("⚠️ தயவுசெய்து வவுச்சர் எண்ணை உள்ளிடவும்!")
+                        # 2. மொத்த மதிப்பு சரிபார்ப்பு
+                        elif total_gp_value <= 0:
+                            st.warning("⚠️ மொத்த மதிப்பு ₹0-க்கு மேல் இருக்க வேண்டும்!")
+                        else:
+                            try:
+                                with st.spinner("விவரங்கள் கார்ட்டில் சேர்க்கப்படுகின்றன..."):
+                                    # படங்கள் இருந்தால் பதிவேற்றுதல் (இல்லாவிடில் None)
+                                    cust_pic_url = upload_ornament_image(cust_with_ornaments_img) if cust_with_ornaments_img else None
+                                    orn_pic_url = upload_ornament_image(ornaments_summary_img) if ornaments_summary_img else None
 
-                            # நகை விவர பட்டியல் ஸ்ட்ரிங்
-                            orn_list_details = []
-                            for idx, r in enumerate(st.session_state.gp_ornament_rows):
-                                if r["item"].strip():
-                                    orn_list_details.append(
-                                        f"{idx+1}. {r['item']} ({r['count']} nos) - Gross: {r['gross_wt']}g, Net: {r['net_wt']}g, Purity: {r['purity']}"
-                                    )
-                            full_ornament_text = "\n".join(orn_list_details)
+                                    # நகை பட்டியல் விவரங்கள் தொகுப்பு
+                                    orn_list_details = []
+                                    for idx, r in enumerate(st.session_state.gp_ornament_rows):
+                                        if r.get("item", "").strip():
+                                            orn_list_details.append(
+                                                f"{idx+1}. {r['item']} ({r.get('count', 1)} nos) - "
+                                                f"Gross: {r.get('gross_wt', 0.0)}g, Net: {r.get('net_wt', 0.0)}g, "
+                                                f"Purity: {r.get('purity', '916 KDM')}"
+                                            )
+                                    full_ornament_text = "\n".join(orn_list_details) if orn_list_details else "விவரங்கள் உள்ளிடப்படவில்லை"
 
-                            # குறிப்பு விவரங்கள்
-                            gp_remarks = f"GP வகை: {gp_mode} | வவுச்சர்: {voucher_no.strip()} | மொத்த உருப்படிகள்: {calc_total_items} nos | நிகர எடை: {calc_total_net:.3f}g"
-                            if is_takeover:
-                                gp_remarks += f" | அட்வான்ஸ்: ₹{advance_paid:,.2f} | மீதி: ₹{balance_payable:,.2f}"
+                                    # சுருக்கக் குறிப்பு
+                                    gp_remarks = f"GP வகை: {gp_mode} | வவுச்சர்: {voucher_no.strip()} | உருப்படிகள்: {calc_total_items} nos | நிகர எடை: {calc_total_net:.3f}g"
+                                    if is_takeover:
+                                        gp_remarks += f" | அட்வான்ஸ்: ₹{advance_paid:,.2f} | மீதி: ₹{balance_payable:,.2f}"
 
-                            # கார்ட்டில் சேர்த்தல்
-                            st.session_state.transactions_cart.append({
-                                "transaction_type": f"GP - {gp_mode}",
-                                "staff_name": staff,
-                                "paid_amount": float(paid_amt),              # கையில் வழங்கப்படும் தொகை
-                                "received_amount": 0.0,
-                                "amount": float(total_gp_value),
-                                "remarks": gp_remarks,
-                                "ornament_details": full_ornament_text,      # நகை பட்டியல் விவரங்கள்
-                                "other_charges": 0.0,
-                                "ornament_image_url": orn_pic_url,           # நகைகள் படம்
-                                "customer_photo_url": cust_pic_url,          # நகையுடன் வாடிக்கையாளர் படம்
-                                "total_weight": float(calc_total_gross),     # மொத்த மொத்த எடை
-                                "net_weight": float(calc_total_net),         # மொத்த நிகர எடை
-                                "gp_number": gp_number,                      # ஆட்டோ GP எண்
-                                "voucher_no": voucher_no.strip(),            # வவுச்சர் எண்
-                                "ref1_name": f"{gp_ref1_name} ({gp_ref1_rel})" if gp_ref1_name else "",
-                                "ref1_phone": f"{gp_ref1_phone} - {gp_ref1_addr}".strip(" -"),
-                                "ref2_name": f"{gp_ref2_name} ({gp_ref2_rel})" if gp_ref2_name else "",
-                                "ref2_phone": f"{gp_ref2_phone} - {gp_ref2_addr}".strip(" -"),
-                                "principal_amount": float(total_gp_value),
-                                "interest_amount": 0.0
-                            })
+                                    # கார்ட்டில் சேர்த்தல்
+                                    st.session_state.transactions_cart.append({
+                                        "transaction_type": f"GP - {gp_mode}",
+                                        "staff_name": staff,
+                                        "paid_amount": float(paid_amt),              # கையில் வழங்கப்படும் தொகை
+                                        "received_amount": 0.0,
+                                        "amount": float(total_gp_value),
+                                        "remarks": gp_remarks,
+                                        "ornament_details": full_ornament_text,
+                                        "other_charges": 0.0,
+                                        "ornament_image_url": orn_pic_url,
+                                        "customer_photo_url": cust_pic_url,
+                                        "total_weight": float(calc_total_gross),
+                                        "net_weight": float(calc_total_net),
+                                        "gp_number": gp_number,
+                                        "voucher_no": voucher_no.strip(),
+                                        "ref1_name": f"{gp_ref1_name} ({gp_ref1_rel})" if gp_ref1_name else "",
+                                        "ref1_phone": f"{gp_ref1_phone} - {gp_ref1_addr}".strip(" -"),
+                                        "ref2_name": f"{gp_ref2_name} ({gp_ref2_rel})" if gp_ref2_name else "",
+                                        "ref2_phone": f"{gp_ref2_phone} - {gp_ref2_addr}".strip(" -"),
+                                        "principal_amount": float(total_gp_value),
+                                        "interest_amount": 0.0
+                                    })
 
-                            # வெற்றிகரமாகச் சேர்ந்ததும் GP வரிசையை ரீசெட் செய்தல்
-                            st.session_state.gp_ornament_rows = [
-                                {"item": "", "count": 1, "gross_wt": 0.0, "net_wt": 0.0, "purity": "916 KDM"}
-                            ]
-                            st.success("✅ GP நடவடிக்கை வெற்றிகரமாகப் பட்டியலில் சேர்க்கப்பட்டது!")
-                            st.rerun()
+                                    # படிவத்தை மீட்டமைத்தல் (Reset)
+                                    st.session_state.gp_ornament_rows = [
+                                        {"item": "", "count": 1, "gross_wt": 0.0, "net_wt": 0.0, "purity": "916 KDM"}
+                                    ]
+                                    st.success("✅ GP நடவடிக்கை வெற்றிகரமாகப் பட்டியலில் சேர்க்கப்பட்டது!")
+                                    st.rerun()
+
+                            except Exception as err:
+                                st.error(f"❌ கார்ட்டில் சேர்ப்பதில் பிழை ஏற்பட்டுள்ளது: {err}")
 
                 # 8. GS (Gold Sale - தங்கம் விற்பனை)
                 elif txn_category == "GS (Gold Sale)":
