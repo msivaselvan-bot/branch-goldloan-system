@@ -2451,11 +2451,12 @@ else:
                         f"உருப்படிகள்: {calc_total_items} nos",
                         f"நிகர எடை: {calc_total_net:.3f}g"
                     ]
+
                     if is_takeover:
                         detail_summary.append(f"அட்வான்ஸ்: ₹{advance_paid:,.2f} | மீதி: ₹{balance_payable:,.2f}")
                     if st.button("➕ பட்டியலில் சேர் (Add to Cart)", type="primary", key="btn_add_gp_to_cart"):
-                    if not voucher_no.strip():
-                        st.error("⚠️ தயவுசெய்து வவுச்சர் எண்ணை உள்ளிடவும்!")
+                        if not voucher_no.strip():
+                            st.error("⚠️ தயவுசெய்து வவுச்சர் எண்ணை உள்ளிடவும்!")
                     elif total_gp_value <= 0:
                         st.error("⚠️ மொத்த மதிப்பு 0-க்கு மேல் இருக்க வேண்டும்!")
                     elif not cust_with_ornaments_img or not ornaments_summary_img:
