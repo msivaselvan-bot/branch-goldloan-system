@@ -807,7 +807,8 @@ if "declaration_gl_no" not in st.session_state:
     st.session_state.declaration_gl_no = None
 
 if "form_reset_counter" not in st.session_state:
-    st.session_state.form_reset_counter += 1
+    st.session_state.form_reset_counter = 0
+st.session_state.form_reset_counter += 1
 
 if "gp_ornament_rows" not in st.session_state:
     st.session_state.gp_ornament_rows = [
