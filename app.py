@@ -2545,7 +2545,7 @@ else:
                 # கார்ட்டில் சேர்க்கும் பட்டன் (GP அல்லாத பிற நடவடிக்கைகளுக்கு மட்டும்)
                 if txn_category != "GP (Gold Purchase)":
 
-                    submitted = st.form_submit_button("➕ பட்டியலில் சேர் (Add to Cart)", type="primary")
+                    submitted = st.button("➕ பட்டியலில் சேர் (Add to Cart)", type="primary", key="btn_add_to_cart_main")
                     if submitted:
                         # நகைக்கடனாக இருந்தால் இதர கட்டணங்களைக் கழித்து நிகரத் தொகையைக் கணக்கிடுதல்
                         if "Pledge" in txn_category:
