@@ -2319,7 +2319,6 @@ else:
                         
                         img_url = upload_ornament_image(ornament_file) if ornament_file else None
 
-                        # கார்ட்டில் சேர்த்தல்
                         st.session_state.transactions_cart.append({
                             "transaction_type": txn_category,
                             "staff_name": staff,
@@ -2344,34 +2343,40 @@ else:
                             "nominee_address": nominee_address,
                         })
 
-                        # 🌟 6 அல்லது அதற்குக் குறைவான மாதங்களுக்கான உறுதி ஆவணம் சரிபார்ப்பு
-                        scheme_tenor = int(sel_scheme_obj.get("scheme_tenor_months", 12) or 12)
-                        
-                        if txn_category == "Pledge (புதிய நகைக் கடன்)" and scheme_tenor <= 6:
-                            cust_id = visit.get("customer_id")
-                            cust_addr = "-"
-                            cust_mob = visit.get("mobile", "-")
+                        # 🌟 ஸ்கீமின் கால அளவை எடுப்பது
+                        if txn_category == "Pledge (புதிய நகைக் கடன்)":
+                            # sel_scheme_obj-ல் இருந்து tenor எடுப்பது, இல்லையெனில் 6 என முன்னிருப்பு வைத்தல்
+                            raw_tenor = sel_scheme_obj.get("scheme_tenor_months")
+                            scheme_tenor = int(raw_tenor) if raw_tenor is not None else 6
                             
-                            try:
-                                c_res = supabase.table("customers").select("address, mobile").eq("id", cust_id).execute()
-                                if c_res.data:
-                                    cust_addr = c_res.data[0].get("address") or "-"
-                                    cust_mob = c_res.data[0].get("mobile") or cust_mob
-                            except Exception:
-                                pass
+                            # 6 மாதங்கள் அல்லது அதற்கும் குறைவான திட்டங்களுக்கு உறுதி ஆவணம் தயாரித்தல்
+                            if scheme_tenor <= 6:
+                                cust_id = visit.get("customer_id")
+                                cust_addr = "-"
+                                cust_mob = visit.get("mobile", "-")
+                                
+                                try:
+                                    c_res = supabase.table("customers").select("address, mobile").eq("id", cust_id).execute()
+                                    if c_res.data:
+                                        cust_addr = c_res.data[0].get("address") or "-"
+                                        cust_mob = c_res.data[0].get("mobile") or cust_mob
+                                except Exception:
+                                    pass
 
-                            dec_data = {
-                                "customer_name": visit.get("customer_name", ""),
-                                "address": cust_addr,
-                                "contact_number": cust_mob,
-                                "branch_name": st.session_state.branch,
-                                "pledge_date": str(date.today()),
-                                "loan_number": new_gl_no,
-                                "loan_amount": float(paid_amt),
-                                "current_date": str(date.today())
-                            }
-                            st.session_state.current_declaration = generate_declaration_html(dec_data)
-                            st.session_state.declaration_gl_no = new_gl_no
+                                dec_data = {
+                                    "customer_name": visit.get("customer_name", ""),
+                                    "address": cust_addr,
+                                    "contact_number": cust_mob,
+                                    "branch_name": st.session_state.branch,
+                                    "pledge_date": str(date.today()),
+                                    "loan_number": new_gl_no,
+                                    "loan_amount": float(paid_amt),
+                                    "current_date": str(date.today())
+                                }
+                                st.session_state.current_declaration = generate_declaration_html(dec_data)
+                                st.session_state.declaration_gl_no = new_gl_no
+                            else:
+                                st.session_state.current_declaration = None
 
                         st.success(f"'{txn_category}' வெற்றிகரமாகப் பட்டியலில் சேர்க்கப்பட்டது!")
                         st.rerun()
