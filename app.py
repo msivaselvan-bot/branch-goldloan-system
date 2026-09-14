@@ -7,7 +7,7 @@ import streamlit as st
 from supabase import Client, create_client
 import uuid
 
-# 1. பக்க வடிவமைப்பு GL Declaration working
+# 1. பக்க வடிவமைப்பு
 st.set_page_config(page_title="Branch Operations System", layout="wide")
 # ==============================================================================
 # நகை படம் பதிவேற்றும் செயல்பாடு (Supabase Storage Bucket: ornaments)
@@ -2314,22 +2314,29 @@ else:
 
                 # கார்ட்டில் சேர்க்கும் பட்டன்
                 if st.button("➕ பட்டியலில் சேர் (Add to Cart)", type="primary", key="btn_add_to_cart_main"):
-                    if paid_amt > 0 or received_amt > 0:
+                    # நகைக்கடனாக இருந்தால் இதர கட்டணங்களைக் கழித்து நிகரத் தொகையைக் கணக்கிடுதல்
+                    if "Pledge" in txn_category:
+                        actual_paid_amt = max(0.0, float(paid_amt) - float(other_charges))
+                    else:
+                        actual_paid_amt = float(paid_amt)
+
+                    if actual_paid_amt > 0 or received_amt > 0:
                         all_remarks = " | ".join(detail_summary)
                         if custom_remarks.strip():
                             all_remarks += f" ({custom_remarks.strip()})"
                         
                         img_url = upload_ornament_image(ornament_file) if ornament_file else None
 
+                        # கார்ட்டில் சேர்த்தல் (நிகரத் தொகையுடன்)
                         st.session_state.transactions_cart.append({
                             "transaction_type": txn_category,
                             "staff_name": staff,
-                            "paid_amount": float(paid_amt),
+                            "paid_amount": float(actual_paid_amt),          # இதர கட்டணங்கள் கழித்த நிகரத் தொகை
                             "received_amount": float(received_amt),
-                            "amount": float(paid_amt if paid_amt > 0 else received_amt),
+                            "amount": float(actual_paid_amt if actual_paid_amt > 0 else received_amt),
                             "remarks": all_remarks,
                             "ornament_details": ornament_details,
-                            "other_charges": float(other_charges),
+                            "other_charges": float(other_charges),          # பிடித்தம் செய்யப்பட்ட கட்டணம்
                             "ornament_image_url": img_url,
                             "total_weight": float(total_weight),
                             "net_weight": float(net_weight),
@@ -2338,7 +2345,7 @@ else:
                             "ref1_phone": ref1_phone,
                             "ref2_name": ref2_name,
                             "ref2_phone": ref2_phone,
-                            "principal_amount": float(principal_amount),
+                            "principal_amount": float(paid_amt),            # முழு கடன் அசல் தொகை
                             "interest_amount": float(interest_amount),
                             "nominee_name": nominee_name,
                             "nominee_relation": nominee_relation,
@@ -2350,7 +2357,6 @@ else:
                             raw_tenor = sel_scheme_obj.get("scheme_tenor_months")
                             scheme_tenor = int(raw_tenor) if raw_tenor is not None else 6
                             
-                            # 6 மாதங்கள் அல்லது அதற்குக் குறைவாக இருந்தால் ஆவணம் உருவாக்குதல்
                             if scheme_tenor <= 6:
                                 cust_id = visit.get("customer_id")
                                 cust_addr = "-"
@@ -2371,17 +2377,16 @@ else:
                                     "branch_name": st.session_state.branch,
                                     "pledge_date": str(date.today()),
                                     "loan_number": new_gl_no,
-                                    "loan_amount": float(paid_amt),
+                                    "loan_amount": float(paid_amt),  # டாக்குமெண்ட்டில் முழு கடன் தொகை காட்டும்
                                     "current_date": str(date.today())
                                 }
-                                # உருவான ஆவணத்தை session_state-ல் நிரந்தரமாகச் சேமித்தல்
                                 st.session_state.current_declaration = generate_declaration_html(dec_data)
                                 st.session_state.declaration_gl_no = new_gl_no
 
                         st.success(f"'{txn_category}' வெற்றிகரமாகப் பட்டியலில் சேர்க்கப்பட்டது!")
                         st.rerun()
                     else:
-                        st.error("கடன் தொகையை உள்ளிடவும்.")
+                        st.error("கடன் தொகையைச் சரியாக உள்ளிடவும் (கட்டணம் கழித்தபின் தொகை 0-க்கு மேல் இருக்க வேண்டும்).")
                     
                     # 🌟 உறுதி ஆவணப் பதிவிறக்கப் பகுதி (Session State இருக்கும் வரை மறையாது)
                 if st.session_state.get("current_declaration"):
