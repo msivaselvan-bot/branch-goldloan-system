@@ -7,7 +7,7 @@ import streamlit as st
 from supabase import Client, create_client
 import uuid
 
-# 1. பக்க வடிவமைப்பு
+# 1. பக்க வடிவமைப்பு GL Declaration working
 st.set_page_config(page_title="Branch Operations System", layout="wide")
 # ==============================================================================
 # நகை படம் பதிவேற்றும் செயல்பாடு (Supabase Storage Bucket: ornaments)
@@ -241,6 +241,110 @@ def upload_single_file(file_obj, folder_name):
         file_options={"content-type": file_obj.type, "upsert": "true"},
     )
     return supabase.storage.from_(bucket_name).get_public_url(file_path)
+# ==============================================================================
+# கடன் உறுதி ஆவணம் உருவாக்கும் செயல்பாடு (Declaration Form HTML Generator)
+# ==============================================================================
+def generate_declaration_html(data):
+    """தமிழ் டிக்ளரேஷன் உறுதி ஆவணம் உருவாக்கும் முறை"""
+    html_content = f"""<!DOCTYPE html>
+<html lang="ta">
+<head>
+    <meta charset="UTF-8">
+    <title>கடன் உறுதி ஆவணம் - {data.get('loan_number', '')}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Mukta+Malar:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        @page {{
+            size: A4 portrait;
+            margin: 20mm;
+        }}
+        * {{
+            box-sizing: border-box;
+        }}
+        body {{
+            font-family: 'Mukta Malar', sans-serif;
+            color: #111;
+            padding: 30px;
+            max-width: 800px;
+            margin: 0 auto;
+            line-height: 1.9;
+        }}
+        .header {{
+            text-align: center;
+            font-size: 21px;
+            font-weight: 700;
+            margin-top: 25px;
+            margin-bottom: 25px;
+            text-decoration: underline;
+        }}
+        .section-from, .section-to {{
+            font-size: 15px;
+            line-height: 1.7;
+            margin-bottom: 20px;
+        }}
+        .content {{
+            font-size: 16px;
+            text-align: justify;
+            text-indent: 40px;
+            margin-top: 15px;
+            margin-bottom: 35px;
+        }}
+        .footer-table {{
+            width: 100%;
+            margin-top: 40px;
+            font-size: 15px;
+            border-collapse: collapse;
+        }}
+        .footer-table td {{
+            vertical-align: bottom;
+        }}
+        @media print {{
+            body {{
+                padding: 0;
+            }}
+            .no-print {{
+                display: none !important;
+            }}
+        }}
+    </style>
+</head>
+<body onload="window.print()">
+    <div class="section-from">
+        <b>FROM</b><br>
+        {data.get('customer_name', '')}<br>
+        {data.get('address', '')}<br>
+        தொடர்பு எண்: {data.get('contact_number', '')}
+    </div>
+
+    <div class="section-to">
+        <b>To</b><br>
+        ஐயா,<br>
+        <b>முத்துசிஸ் கோல்டு புரொடக்ட் பிரைவேட் லிமிடெட்</b><br>
+        {data.get('branch_name', '')}
+    </div>
+
+    <div class="header">கடன் தொடர்பான உறுதி ஆவணம்</div>
+
+    <div class="content">
+        நான் மேற்கூறிய முகவரியில் வசித்து வருகிறேன். நான் தங்களிடம் <b>{data.get('pledge_date', '')}</b> அன்று கடன் எண் <b>{data.get('loan_number', '')}</b> மீது கடனாக <b>₹{data.get('loan_amount', 0):,.2f}</b> ரூபாய் பெற்றுள்ளேன். எனக்கு பணத்தேவை அதிகமாக உள்ளபடியால் தாங்கள் சாதாரணமாக கொடுக்கும் நகைக்கான கடனைவிட எனது வேண்டுகோளால் அதிகமான பணத்தினை மேலே உள்ள நகைகடனுக்கு பெற்றுள்ளேன். மேலும் மேற்கூறிய கடனுக்கு மாதம் தோறும் வட்டி கட்டுவேன் எனவும் மூன்று மாதத்தில் திருப்பிக்கொள்வேன் எனவும் உறுதியளிக்கிறேன். மீறினால் நிறுவனமே எனது நகைகளை விற்று எனது கடனை நேர் செய்து கொள்ளலாம் எனவும் இதன் மூலம் உறுதியளிக்கிறேன். எனது கடனுக்கு காலம் மூன்று மாதமே என்பதனை நன்கு அறிவேன் மூன்று மாதங்களில் கடன் நேர் செய்யப்படவில்லை எனில் அடகு வைத்த நகை மீது எனக்கு எந்த உரிமையும் இல்லை என்பதனை நன்கு அறிவேன்.
+    </div>
+
+    <table class="footer-table">
+        <tr>
+            <td style="width: 50%;">
+                <b>கிளை:</b> {data.get('branch_name', '')}<br>
+                <b>தேதி:</b> {data.get('current_date', '')}
+            </td>
+            <td style="width: 50%; text-align: right;">
+                <b>தங்கள் உண்மையுள்ள</b><br><br><br><br>
+                ({data.get('customer_name', '')})
+            </td>
+        </tr>
+    </table>
+</body>
+</html>"""
+    return html_content
 
 def generate_short_visit_no() -> str:
     try:
@@ -451,25 +555,49 @@ def render_staff_attribution_report(selected_branch_id=None):
         for t in v.get("transactions", []):
             txn_type = t.get("transaction_type", "-")
             raw_staff = t.get("staff_name") or "Walk-in (நேரடி வருகை)"
-            paid_val = float(t.get("paid_amount", 0.0))
-            rec_val = float(t.get("received_amount", 0.0))
+            paid_val = float(t.get("paid_amount", 0.0) or 0.0)
+            rec_val = float(t.get("received_amount", 0.0) or 0.0)
+            principal_val = float(t.get("principal_amount", 0.0) or 0.0)
             remarks_str = str(t.get("remarks", ""))
 
+            # 1. கணக்கீட்டிற்கான உண்மையான அசல் / வணிக அளவைத் தீர்மானித்தல்
             effective_vol = 0.0
-            if "Release" in txn_type:
-                try:
-                    if "அசல்: ₹" in remarks_str:
+
+            # அடமானம் மீட்டல் (GL Release) - அசல் தொகை மட்டும்
+            if "Release" in txn_type or "அடமானம் மீட்டல்" in txn_type:
+                if principal_val > 0:
+                    effective_vol = principal_val
+                elif "அசல்: ₹" in remarks_str:
+                    try:
                         p_str = remarks_str.split("அசல்: ₹")[1].split("|")[0].strip().replace(",", "")
                         effective_vol = float(p_str)
-                    else:
+                    except Exception:
                         effective_vol = rec_val
-                except Exception:
+                else:
                     effective_vol = rec_val
-            elif "Part Payment" in txn_type:
+
+            # பார்ட் பேமெண்ட் (Part Payment) - வரவான அசல் தொகை மட்டும்
+            elif "Part Payment" in txn_type or "அசல் வரவு" in txn_type:
+                if principal_val > 0:
+                    effective_vol = principal_val
+                elif "அசல்: ₹" in remarks_str:
+                    try:
+                        p_str = remarks_str.split("அசல்: ₹")[1].split("|")[0].strip().replace(",", "")
+                        effective_vol = float(p_str)
+                    except Exception:
+                        effective_vol = rec_val
+                else:
+                    effective_vol = rec_val
+
+            # RD Due / தவணை வரவு
+            elif "RD Due" in txn_type or "RD தவணை" in txn_type:
                 effective_vol = rec_val
+
+            # புதிய கடன் அல்லது பிற சேவைகள்
             else:
                 effective_vol = paid_val if paid_val > 0 else rec_val
 
+            # 2. ஸ்கீம் பெயரை எடுத்தல்
             detected_scheme = "All"
             try:
                 if "ஸ்கீம்:" in remarks_str:
@@ -479,26 +607,34 @@ def render_staff_attribution_report(selected_branch_id=None):
             except Exception:
                 detected_scheme = "All"
 
-            rule_info = rule_dict.get((txn_type, detected_scheme)) or rule_dict.get((txn_type, "All")) or {"basis_type": "Amount", "unit_value": 100000.0, "points_per_unit": 10.0}
+            # 3. அட்மின் விதியைப் பொருத்துதல்
+            rule_info = (
+                rule_dict.get((txn_type, detected_scheme)) 
+                or rule_dict.get((txn_type, "All")) 
+                or {"basis_type": "Amount", "unit_value": 100000.0, "points_per_unit": 10.0}
+            )
 
             basis = rule_info.get("basis_type", "Amount")
             unit_val = float(rule_info.get("unit_value", 100000.0) or 100000.0)
             pts_per_unit = float(rule_info.get("points_per_unit", 10.0) or 0.0)
 
+            # 4. புள்ளிகள் கணக்கீடு (நெகட்டிவ் மற்றும் பாசிட்டிவ் புள்ளிகள்)
             calc_pts = 0.0
             if basis == "Weight_Grams":
-                grams_val = 0.0
-                try:
-                    if "எடை:" in remarks_str:
+                grams_val = float(t.get("net_weight", 0.0) or 0.0)
+                if grams_val == 0.0 and "எடை:" in remarks_str:
+                    try:
                         part = remarks_str.split("எடை:")[1].split("g")[0].strip()
                         grams_val = float(part)
-                except Exception:
-                    grams_val = 0.0
+                    except Exception:
+                        grams_val = 0.0
                 calc_pts = (grams_val / unit_val) * pts_per_unit if unit_val > 0 else 0.0
-                disp_val = f"{grams_val} g"
+                disp_val = f"{grams_val:.3f} g"
             else:
                 base_calc = (effective_vol / unit_val) * pts_per_unit if unit_val > 0 else 0.0
-                if "Release" in txn_type or "Part Payment" in txn_type:
+
+                # 🔴 GL Release மற்றும் Part Payment அசல் தொகைக்கு கட்டாய நெகட்டிவ் புள்ளிகள்
+                if any(k in txn_type for k in ["Release", "அடமானம் மீட்டல்", "Part Payment", "அசல் வரவு"]):
                     calc_pts = -abs(base_calc)
                 else:
                     calc_pts = abs(base_calc)
@@ -621,6 +757,13 @@ if "current_visit" not in st.session_state:
 if "transactions_cart" not in st.session_state:
     st.session_state.transactions_cart = []
 
+# புதிதாகச் சேர்க்க வேண்டிய வரிகள்:
+if "current_declaration" not in st.session_state:
+    st.session_state.current_declaration = None
+
+if "declaration_gl_no" not in st.session_state:
+    st.session_state.declaration_gl_no = None
+
 branches_res = supabase.table("branches").select("*").order("id").execute()
 branch_options = {b["branch_name"]: b["id"] for b in branches_res.data} if branches_res.data else {}
 branch_id_to_name = {b["id"]: b["branch_name"] for b in branches_res.data} if branches_res.data else {}
@@ -702,6 +845,8 @@ else:
             st.session_state.current_visit = None
             st.session_state.transactions_cart = []
             st.session_state.generated_otp = None
+            st.session_state.current_declaration = None
+            st.session_state.declaration_gl_no = None
             st.rerun()
 
     st.markdown("---")
@@ -985,10 +1130,16 @@ else:
                     ir_txn_type = st.selectbox(
                         "நடவடிக்கை வகை *:",
                         [
-                            "Pledge (புதிய நகைக் கடன்)", "GL Release (அடமானம் மீட்டல்)",
-                            "Interest Payment (வட்டி வரவு)", "Part Payment (அசல் வரவு)",
-                            "Take Over (பிற நிறுவன கடன் மீட்டல்)", "FD Open (புதிய வைப்பு நிதி)",
-                            "RD Open (புதிய RD சேமிப்பு)", "GP (Gold Purchase)", "GS (Gold Sale)"
+                            "Pledge (புதிய நகைக் கடன்)", 
+                            "GL Release (அடமானம் மீட்டல்)",
+                            "Interest Payment (வட்டி வரவு)", 
+                            "Part Payment (அசல் வரவு)",
+                            "Take Over (பிற நிறுவன கடன் மீட்டல்)", 
+                            "FD Open (புதிய வைப்பு நிதி)",
+                            "RD Open (புதிய RD சேமிப்பு)", 
+                            "RD Due (RD தவணை வரவு)",  # <-- புதிதாகச் சேர்க்கப்பட்டது
+                            "GP (Gold Purchase)", 
+                            "GS (Gold Sale)"
                         ]
                     )
                 with ir_c2:
@@ -2162,7 +2313,7 @@ else:
                     detail_summary = [f"பில்: {gs_bill_no}", f"பொருள்: {gs_item_name}", f"எடை: {net_weight}g"]
 
                 # கார்ட்டில் சேர்க்கும் பட்டன்
-                if st.button("➕ பட்டியலில் சேர் (Add to Cart)", type="primary"):
+                if st.button("➕ பட்டியலில் சேர் (Add to Cart)", type="primary", key="btn_add_to_cart_main"):
                     if paid_amt > 0 or received_amt > 0:
                         all_remarks = " | ".join(detail_summary)
                         if custom_remarks.strip():
@@ -2193,10 +2344,58 @@ else:
                             "nominee_relation": nominee_relation,
                             "nominee_address": nominee_address,
                         })
-                        st.success(f"'{txn_category}' சேர்க்கப்பட்டது!")
+
+                        # 🌟 6 அல்லது அதற்குக் குறைவான மாதங்களுக்கான டிக்ளரேஷன் சரிபார்ப்பு
+                        if "Pledge" in txn_category:
+                            raw_tenor = sel_scheme_obj.get("scheme_tenor_months")
+                            scheme_tenor = int(raw_tenor) if raw_tenor is not None else 6
+                            
+                            # 6 மாதங்கள் அல்லது அதற்குக் குறைவாக இருந்தால் ஆவணம் உருவாக்குதல்
+                            if scheme_tenor <= 6:
+                                cust_id = visit.get("customer_id")
+                                cust_addr = "-"
+                                cust_mob = visit.get("mobile", "-")
+                                
+                                try:
+                                    c_res = supabase.table("customers").select("address, mobile").eq("id", cust_id).execute()
+                                    if c_res.data:
+                                        cust_addr = c_res.data[0].get("address") or "-"
+                                        cust_mob = c_res.data[0].get("mobile") or cust_mob
+                                except Exception:
+                                    pass
+
+                                dec_data = {
+                                    "customer_name": visit.get("customer_name", ""),
+                                    "address": cust_addr,
+                                    "contact_number": cust_mob,
+                                    "branch_name": st.session_state.branch,
+                                    "pledge_date": str(date.today()),
+                                    "loan_number": new_gl_no,
+                                    "loan_amount": float(paid_amt),
+                                    "current_date": str(date.today())
+                                }
+                                # உருவான ஆவணத்தை session_state-ல் நிரந்தரமாகச் சேமித்தல்
+                                st.session_state.current_declaration = generate_declaration_html(dec_data)
+                                st.session_state.declaration_gl_no = new_gl_no
+
+                        st.success(f"'{txn_category}' வெற்றிகரமாகப் பட்டியலில் சேர்க்கப்பட்டது!")
                         st.rerun()
                     else:
-                        st.error("தொகையை உள்ளிடவும்.")
+                        st.error("கடன் தொகையை உள்ளிடவும்.")
+                    
+                    # 🌟 உறுதி ஆவணப் பதிவிறக்கப் பகுதி (Session State இருக்கும் வரை மறையாது)
+                if st.session_state.get("current_declaration"):
+                    st.markdown("---")
+                    with st.container(border=True):
+                        st.warning("⚠️ **கவனிக்க:** இந்த நகைக் கடனின் கால அளவு 6 மாதங்கள் அல்லது அதற்கும் குறைவாக உள்ளதால் உறுதி ஆவணம் அவசியமாகிறது.")
+                        st.download_button(
+                            label=f"📄 உறுதி ஆவணத்தைப் பதிவிறக்குக (Print Declaration - GL: {st.session_state.get('declaration_gl_no')})",
+                            data=st.session_state.current_declaration,
+                            file_name=f"Declaration_{st.session_state.get('declaration_gl_no')}.html",
+                            mime="text/html",
+                            type="primary",
+                            key=f"dl_btn_{st.session_state.get('declaration_gl_no')}"
+                        )
 
                 if st.session_state.transactions_cart:
                     st.markdown("### 🛒 நடவடிக்கைகள் பட்டியல்:")
@@ -2433,6 +2632,11 @@ else:
                                     st.session_state.current_visit = None
                                     st.session_state.transactions_cart = []
                                     st.session_state.generated_otp = None
+
+                                    # புதிய உறுதி ஆவண மாறிகளை அழிக்கும் வரிகள்:
+                                    st.session_state.current_declaration = None
+                                    st.session_state.declaration_gl_no = None
+
                                     st.rerun()
                             else:
                                 st.error("தவறான OTP! சரியாக உள்ளிடவும்.")
