@@ -2311,7 +2311,7 @@ else:
                     detail_summary = [f"பில்: {gs_bill_no}", f"பொருள்: {gs_item_name}", f"எடை: {net_weight}g"]
 
                 # கார்ட்டில் சேர்க்கும் பட்டன்
-                if st.button("➕ பட்டியலில் சேர் (Add to Cart)", type="primary"):
+                if st.button("➕ பட்டியலில் சேர் (Add to Cart)", type="primary", key="btn_add_to_cart_main"):
                     if paid_amt > 0 or received_amt > 0:
                         all_remarks = " | ".join(detail_summary)
                         if custom_remarks.strip():
@@ -2343,13 +2343,12 @@ else:
                             "nominee_address": nominee_address,
                         })
 
-                        # 🌟 ஸ்கீமின் கால அளவை எடுப்பது
-                        if txn_category == "Pledge (புதிய நகைக் கடன்)":
-                            # sel_scheme_obj-ல் இருந்து tenor எடுப்பது, இல்லையெனில் 6 என முன்னிருப்பு வைத்தல்
+                        # 🌟 6 அல்லது அதற்குக் குறைவான மாதங்களுக்கான டிக்ளரேஷன் சரிபார்ப்பு
+                        if "Pledge" in txn_category:
                             raw_tenor = sel_scheme_obj.get("scheme_tenor_months")
                             scheme_tenor = int(raw_tenor) if raw_tenor is not None else 6
                             
-                            # 6 மாதங்கள் அல்லது அதற்கும் குறைவான திட்டங்களுக்கு உறுதி ஆவணம் தயாரித்தல்
+                            # 6 மாதங்கள் அல்லது அதற்குக் குறைவாக இருந்தால் ஆவணம் உருவாக்குதல்
                             if scheme_tenor <= 6:
                                 cust_id = visit.get("customer_id")
                                 cust_addr = "-"
@@ -2373,26 +2372,27 @@ else:
                                     "loan_amount": float(paid_amt),
                                     "current_date": str(date.today())
                                 }
+                                # உருவான ஆவணத்தை session_state-ல் நிரந்தரமாகச் சேமித்தல்
                                 st.session_state.current_declaration = generate_declaration_html(dec_data)
                                 st.session_state.declaration_gl_no = new_gl_no
-                            else:
-                                st.session_state.current_declaration = None
 
                         st.success(f"'{txn_category}' வெற்றிகரமாகப் பட்டியலில் சேர்க்கப்பட்டது!")
                         st.rerun()
                     else:
-                        st.error("தொகையை உள்ளிடவும்.")
+                        st.error("கடன் தொகையை உள்ளிடவும்.")
                     
-                    if st.session_state.get("current_declaration"):
-                        with st.container(border=True):
-                            st.warning("⚠️ **கவனிக்க:** இந்த நகைக் கடனின் கால அளவு 6 மாதங்கள் அல்லது அதற்கும் குறைவாக உள்ளதால் உறுதி ஆவணம் (Declaration Form) அவசியமாகிறது.")
-                            st.download_button(
+                    # 🌟 உறுதி ஆவணப் பதிவிறக்கப் பகுதி (Session State இருக்கும் வரை மறையாது)
+                if st.session_state.get("current_declaration"):
+                    st.markdown("---")
+                    with st.container(border=True):
+                        st.warning("⚠️ **கவனிக்க:** இந்த நகைக் கடனின் கால அளவு 6 மாதங்கள் அல்லது அதற்கும் குறைவாக உள்ளதால் உறுதி ஆவணம் அவசியமாகிறது.")
+                        st.download_button(
                             label=f"📄 உறுதி ஆவணத்தைப் பதிவிறக்குக (Print Declaration - GL: {st.session_state.get('declaration_gl_no')})",
                             data=st.session_state.current_declaration,
                             file_name=f"Declaration_{st.session_state.get('declaration_gl_no')}.html",
                             mime="text/html",
                             type="primary",
-                            key="btn_dl_declaration"
+                            key=f"dl_btn_{st.session_state.get('declaration_gl_no')}"
                         )
 
                 if st.session_state.transactions_cart:
