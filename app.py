@@ -2189,30 +2189,32 @@ with branch_tab1:
 
                 elif st.session_state.current_visit.get("step") == "TRANSACTIONS":
                     visit = st.session_state.current_visit
-        st.success(f"வாடிக்கையாளர்: **{visit['customer_name']}** (வருகை எண்: **{visit['visit_no']}**)")
-        st.subheader("படி 2: வணிக நடவடிக்கைகள் சேர்த்தல்")
+                    if visit:
+                        st.success(f"வாடிக்கையாளர்: **{visit.get('customer_name', '')}** (வருகை எண்: **{visit.get('visit_no', '')}**)")
+                    st.success(f"வாடிக்கையாளர்: **{visit['customer_name']}** (வருகை எண்: **{visit['visit_no']}**)")
+                    st.subheader("படி 2: வணிக நடவடிக்கைகள் சேர்த்தல்")
 
-        active_g_schemes = supabase.table("gold_loan_schemes").select("*").eq("is_active", True).execute().data or []
-        active_fd_schemes = supabase.table("fd_schemes").select("*").eq("is_active", True).execute().data or []
-        active_rd_schemes = supabase.table("rd_schemes").select("*").eq("is_active", True).execute().data or []
+                    active_g_schemes = supabase.table("gold_loan_schemes").select("*").eq("is_active", True).execute().data or []
+                    active_fd_schemes = supabase.table("fd_schemes").select("*").eq("is_active", True).execute().data or []
+                    active_rd_schemes = supabase.table("rd_schemes").select("*").eq("is_active", True).execute().data or []
 
-        g_scheme_map = {s["scheme_name"]: s for s in active_g_schemes}
-        gold_scheme_options = list(g_scheme_map.keys()) if g_scheme_map else ["General 12%"]
-        fd_scheme_options = [s["scheme_name"] for s in active_fd_schemes] if active_fd_schemes else ["Standard FD 9.5%"]
-        rd_scheme_options = [s["scheme_name"] for s in active_rd_schemes] if active_rd_schemes else ["Standard RD 10%"]
+                    g_scheme_map = {s["scheme_name"]: s for s in active_g_schemes}
+                    gold_scheme_options = list(g_scheme_map.keys()) if g_scheme_map else ["General 12%"]
+                    fd_scheme_options = [s["scheme_name"] for s in active_fd_schemes] if active_fd_schemes else ["Standard FD 9.5%"]
+                    rd_scheme_options = [s["scheme_name"] for s in active_rd_schemes] if active_rd_schemes else ["Standard RD 10%"]
 
-        txn_category = st.selectbox(
-            "நடவடிக்கை வகை:",
-            [
-                "Pledge (புதிய நகைக் கடன்)", "GL Release (அடமானம் மீட்டல்)",
-                "Interest Payment (வட்டி வரவு)", "Part Payment (அசல் வரவு)",
-                "Take Over (பிற நிறுவன கடன் மீட்டல்)", "RD Open (புதிய RD சேமிப்பு)",
-                "RD Due (RD தவணை)", "RD Closure (RD முதிர்வு)",
-                "FD Open (புதிய வைப்பு நிதி)", "FD Interest (FD வட்டி)",
-                "FD Closure (FD முதிர்வு)", "GP (Gold Purchase)", "GS (Gold Sale)"
-            ],
-            key="dyn_txn_sel"
-        )
+                    txn_category = st.selectbox(
+                        "நடவடிக்கை வகை:",
+                        [
+                            "Pledge (புதிய நகைக் கடன்)", "GL Release (அடமானம் மீட்டல்)",
+                            "Interest Payment (வட்டி வரவு)", "Part Payment (அசல் வரவு)",
+                            "Take Over (பிற நிறுவன கடன் மீட்டல்)", "RD Open (புதிய RD சேமிப்பு)",
+                            "RD Due (RD தவணை)", "RD Closure (RD முதிர்வு)",
+                            "FD Open (புதிய வைப்பு நிதி)", "FD Interest (FD வட்டி)",
+                            "FD Closure (FD முதிர்வு)", "GP (Gold Purchase)", "GS (Gold Sale)"
+                        ],
+                        key="dyn_txn_sel"
+                    )
 
         col_st1, col_st2 = st.columns(2)
         with col_st1:
