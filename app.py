@@ -2817,16 +2817,28 @@ else:
                                     st.write("அனுப்பப்பட்ட Visit Data:", visit_data)
                                     st.stop()
 
+                                # 🌟 உருவான visit_id-ஐ பாதுகாப்பாகப் பெறுதல் (NameError வராமல் தடுக்கும்)
+                                if visit_res.data and len(visit_res.data) > 0:
+                                    created_visit_id = visit_res.data[0].get("id") or visit_data.get("visit_no")
+                                else:
+                                    created_visit_id = visit_data.get("visit_no")
+
+                                # 🌟 ஒவ்வொரு பரிவர்த்தனையையும் பதிவு செய்தல்
                                 for txn in st.session_state.transactions_cart:
                                     txn["visit_id"] = created_visit_id
-                                    supabase.table("transactions").insert(txn).execute()
+                                    try:
+                                        supabase.table("transactions").insert(txn).execute()
+                                    except Exception as txn_err:
+                                        st.error(f"❌ Transaction பதிவு செய்வதில் பிழை: {txn_err}")
+                                        st.write("அனுப்பப்பட்ட Transaction Data:", txn)
+                                        st.stop()
 
                                 st.success(f"🎉 வருகை {visit['visit_no']} வெற்றிகரமாக நிறைவுபெற்றது!")
                                 st.session_state.current_visit = None
                                 st.session_state.transactions_cart = []
                                 st.session_state.generated_otp = None
 
-                                # புதிய உறுதி ஆவண மாறிகளை அழிக்கும் வரிகள்:
+                                # உறுதி ஆவண மாறிகளை அழித்தல்
                                 st.session_state.current_declaration = None
                                 st.session_state.declaration_gl_no = None
 
