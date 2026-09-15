@@ -452,12 +452,14 @@ def get_current_branch_cash_drawer(branch_id):
     try:
         clean_b_id = int(branch_id)
         stock = empty_stock.copy()
+        today_str = str(date.today())
 
-        # 1. அட்மின் பதிவு செய்த மிகச் சமீபத்திய துவக்க இருப்பை எடுத்தல் (கடைசி பதிவு)
+        # 🌟 1. இன்றைய தேதிக்கான அட்மின் துவக்க இருப்பைத் தேடுதல், இல்லை என்றால் கடைசிப் பதிவை எடுத்தல்
         box_res = (
             supabase.table("branch_cash_box")
-            .select("opening_denomination")
+            .select("opening_denomination, entry_date")
             .eq("branch_id", clean_b_id)
+            .order("entry_date", desc=True)
             .order("id", desc=True)
             .limit(1)
             .execute()
@@ -471,13 +473,16 @@ def get_current_branch_cash_drawer(branch_id):
                 except Exception:
                     op_data = {}
             for k in stock:
-                stock[k] = float(op_data.get(k, 0) or 0) if k == "coins" else int(op_data.get(k, 0) or 0)
+                # ஸ்ட்ரிங் அல்லது ஃப்ளோட் ஆக இருந்தாலும் பாதுகாப்பாக மாற்றுதல்
+                raw_val = op_data.get(k, 0) or 0
+                stock[k] = float(raw_val) if k == "coins" else int(float(raw_val))
 
-        # 2. வாடிக்கையாளர் வருகைகளின் பணப் பரிவர்த்தனைகள்
+        # 🌟 2. இன்றைய தேதியில் நடந்த வாடிக்கையாளர் வருகைகளின் பணப் பரிவர்த்தனைகள் மட்டும்
         visits_res = (
             supabase.table("customer_visits")
-            .select("denomination_details")
+            .select("denomination_details, created_at")
             .eq("branch_id", clean_b_id)
+            .gte("created_at", f"{today_str}T00:00:00")
             .execute()
         )
         if visits_res.data:
@@ -487,18 +492,19 @@ def get_current_branch_cash_drawer(branch_id):
                     in_notes = d_info.get("in", {})
                     out_notes = d_info.get("out", {})
                     for k in stock:
-                        val_in = float(in_notes.get(k, 0) or 0) if k == "coins" else int(in_notes.get(k, 0) or 0)
-                        val_out = float(out_notes.get(k, 0) or 0) if k == "coins" else int(out_notes.get(k, 0) or 0)
+                        val_in = float(in_notes.get(k, 0) or 0) if k == "coins" else int(float(in_notes.get(k, 0) or 0))
+                        val_out = float(out_notes.get(k, 0) or 0) if k == "coins" else int(float(out_notes.get(k, 0) or 0))
                         stock[k] += val_in
                         stock[k] -= val_out
 
-        # 3. HO மற்றும் கிளை இடையேயான பணப் பரிமாற்றம் (Approved)
+        # 🌟 3. இன்றைய HO மற்றும் கிளை இடையேயான ரொக்கப் பரிமாற்றம்
         fund_res = (
             supabase.table("branch_fund_transfers")
             .select("transfer_type, denomination_details")
             .eq("branch_id", clean_b_id)
             .eq("payment_mode", "Cash")
             .eq("status", "Approved")
+            .eq("transfer_date", today_str)
             .execute()
         )
         if fund_res.data:
@@ -506,18 +512,19 @@ def get_current_branch_cash_drawer(branch_id):
                 t_type = f_row.get("transfer_type")
                 t_den = f_row.get("denomination_details") or {}
                 for k in stock:
-                    notes_qty = float(t_den.get(k, 0) or 0) if k == "coins" else int(t_den.get(k, 0) or 0)
+                    notes_qty = float(t_den.get(k, 0) or 0) if k == "coins" else int(float(t_den.get(k, 0) or 0))
                     if t_type == "HO_TO_BRANCH":
                         stock[k] += notes_qty
                     elif t_type == "BRANCH_TO_HO":
                         stock[k] -= notes_qty
 
-        # 4. கிளைச் செலவுகள் (Approved)
+        # 🌟 4. இன்றைய கிளைச் செலவுகள்
         exp_res = (
             supabase.table("branch_expenses")
             .select("denomination_details")
             .eq("branch_id", clean_b_id)
             .eq("status", "Approved")
+            .eq("expense_date", today_str)
             .execute()
         )
         if exp_res.data:
@@ -530,8 +537,8 @@ def get_current_branch_cash_drawer(branch_id):
                     out_notes = e_den
                 
                 for k in stock:
-                    out_val = float(out_notes.get(k, 0) or 0) if k == "coins" else int(out_notes.get(k, 0) or 0)
-                    in_val = float(in_notes.get(k, 0) or 0) if k == "coins" else int(in_notes.get(k, 0) or 0)
+                    out_val = float(out_notes.get(k, 0) or 0) if k == "coins" else int(float(out_notes.get(k, 0) or 0))
+                    in_val = float(in_notes.get(k, 0) or 0) if k == "coins" else int(float(in_notes.get(k, 0) or 0))
                     stock[k] -= out_val
                     stock[k] += in_val
 
