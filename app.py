@@ -2274,113 +2274,113 @@ else:
                         ornament_file = st.file_uploader("நகை படம் (Ornament Photo)", type=["jpg", "jpeg", "png"], key="pledge_img")
                         detail_summary = [f"GL: {new_gl_no}", f"ஸ்கீம்: {scheme_name}", f"RPG: ₹{cur_rpg}", f"எடை: {net_weight}g"]
 
-        # 2. அடமானம் மீட்டல் (GL Release)
-        elif txn_category == "GL Release (அடமானம் மீட்டல்)":
-            r_col1, r_col2 = st.columns(2)
-            with r_col1:
-                rel_gl_no = st.text_input("மீட்கப்படும் கடன் எண் *")
-                principal_amount = st.number_input("அசல் தொகை (₹) *", min_value=0.0, step=500.0)
-            with r_col2:
-                interest_amount = st.number_input("வட்டித் தொகை (₹) *", min_value=0.0, step=50.0)
-                other_charges = st.number_input("இதர கட்டணம் (₹)", min_value=0.0, step=10.0)
-            received_amt = principal_amount + interest_amount + other_charges
-            detail_summary = [f"GL: {rel_gl_no}", f"அசல்: ₹{principal_amount}", f"வட்டி: ₹{interest_amount}"]
+                # 2. அடமானம் மீட்டல் (GL Release)
+                elif txn_category == "GL Release (அடமானம் மீட்டல்)":
+                    r_col1, r_col2 = st.columns(2)
+                    with r_col1:
+                        rel_gl_no = st.text_input("மீட்கப்படும் கடன் எண் *")
+                        principal_amount = st.number_input("அசல் தொகை (₹) *", min_value=0.0, step=500.0)
+                    with r_col2:
+                        interest_amount = st.number_input("வட்டித் தொகை (₹) *", min_value=0.0, step=50.0)
+                        other_charges = st.number_input("இதர கட்டணம் (₹)", min_value=0.0, step=10.0)
+                    received_amt = principal_amount + interest_amount + other_charges
+                    detail_summary = [f"GL: {rel_gl_no}", f"அசல்: ₹{principal_amount}", f"வட்டி: ₹{interest_amount}"]
 
-        # 3. அசல் வரவு & வட்டி வரவு
-        elif txn_category in ["Interest Payment (வட்டி வரவு)", "Part Payment (அசல் வரவு)"]:
-            i_col1, i_col2 = st.columns(2)
-            with i_col1:
-                part_gl_no = st.text_input("கடன் எண் *")
-                principal_amount = st.number_input("அசல் தொகை (₹)", min_value=0.0, step=100.0) if "Part" in txn_category else 0.0
-            with i_col2:
-                interest_amount = st.number_input("வட்டித் தொகை (₹)", min_value=0.0, step=50.0)
-            received_amt = principal_amount + interest_amount
-            detail_summary = [f"GL: {part_gl_no}", f"அசல்: ₹{principal_amount}", f"வட்டி: ₹{interest_amount}"]
+                # 3. அசல் வரவு & வட்டி வரவு
+                elif txn_category in ["Interest Payment (வட்டி வரவு)", "Part Payment (அசல் வரவு)"]:
+                    i_col1, i_col2 = st.columns(2)
+                    with i_col1:
+                        part_gl_no = st.text_input("கடன் எண் *")
+                        principal_amount = st.number_input("அசல் தொகை (₹)", min_value=0.0, step=100.0) if "Part" in txn_category else 0.0
+                    with i_col2:
+                        interest_amount = st.number_input("வட்டித் தொகை (₹)", min_value=0.0, step=50.0)
+                    received_amt = principal_amount + interest_amount
+                    detail_summary = [f"GL: {part_gl_no}", f"அசல்: ₹{principal_amount}", f"வட்டி: ₹{interest_amount}"]
 
-        # 4. Take Over
-        elif txn_category == "Take Over (பிற நிறுவன கடன் மீட்டல்)":
-            to_col1, to_col2 = st.columns(2)
-            with to_col1:
-                bank_source = st.text_input("முந்தைய நிறுவனம் *")
-                prev_loan_no = st.text_input("முந்தைய லோன் எண் *")
-            with to_col2:
-                paid_amt = st.number_input("செலுத்திய தொகை (₹) *", min_value=0.0, step=500.0)
-            detail_summary = [f"வங்கி: {bank_source}", f"கடன் எண்: {prev_loan_no}"]
+                # 4. Take Over
+                elif txn_category == "Take Over (பிற நிறுவன கடன் மீட்டல்)":
+                    to_col1, to_col2 = st.columns(2)
+                    with to_col1:
+                        bank_source = st.text_input("முந்தைய நிறுவனம் *")
+                        prev_loan_no = st.text_input("முந்தைய லோன் எண் *")
+                    with to_col2:
+                        paid_amt = st.number_input("செலுத்திய தொகை (₹) *", min_value=0.0, step=500.0)
+                    detail_summary = [f"வங்கி: {bank_source}", f"கடன் எண்: {prev_loan_no}"]
 
-        # 5. RD Open & FD Open
-        elif txn_category in ["RD Open (புதிய RD சேமிப்பு)", "FD Open (புதிய வைப்பு நிதி)"]:
-            f_col1, f_col2 = st.columns(2)
-            with f_col1:
-                acc_no = st.text_input("புதிய கணக்கு எண் *")
-                sel_scheme = st.selectbox("திட்டம் (Scheme) *", rd_scheme_options if "RD" in txn_category else fd_scheme_options)
-            with f_col2:
-                received_amt = st.number_input("வைப்பு / தவணைத் தொகை (₹) *", min_value=0.0, step=500.0)
-            
-            st.markdown("##### 👤 நாமினி விவரங்கள் (Nominee Details)")
-            nom_col1, nom_col2 = st.columns(2)
-            with nom_col1:
-                nominee_name = st.text_input("நாமினி பெயர்")
-                nominee_relation = st.text_input("உறவுமுறை")
-            with nom_col2:
-                nominee_address = st.text_area("நாமினி முகவரி", height=68)
-            detail_summary = [f"A/c: {acc_no}", f"Scheme: {sel_scheme}"]
+                # 5. RD Open & FD Open
+                elif txn_category in ["RD Open (புதிய RD சேமிப்பு)", "FD Open (புதிய வைப்பு நிதி)"]:
+                    f_col1, f_col2 = st.columns(2)
+                    with f_col1:
+                        acc_no = st.text_input("புதிய கணக்கு எண் *")
+                        sel_scheme = st.selectbox("திட்டம் (Scheme) *", rd_scheme_options if "RD" in txn_category else fd_scheme_options)
+                    with f_col2:
+                        received_amt = st.number_input("வைப்பு / தவணைத் தொகை (₹) *", min_value=0.0, step=500.0)
+                    
+                    st.markdown("##### 👤 நாமினி விவரங்கள் (Nominee Details)")
+                    nom_col1, nom_col2 = st.columns(2)
+                    with nom_col1:
+                        nominee_name = st.text_input("நாமினி பெயர்")
+                        nominee_relation = st.text_input("உறவுமுறை")
+                    with nom_col2:
+                        nominee_address = st.text_area("நாமினி முகவரி", height=68)
+                    detail_summary = [f"A/c: {acc_no}", f"Scheme: {sel_scheme}"]
 
-        # 6. RD & FD முதிர்வு / தவணைகள்
-        elif "RD" in txn_category or "FD" in txn_category:
-            d_col1, d_col2 = st.columns(2)
-            with d_col1:
-                acc_no = st.text_input("கணக்கு எண் *")
-            with d_col2:
-                if "Closure" in txn_category:
-                    principal_amount = st.number_input("முதலீடு செய்த/கட்டிய தொகை (₹) *", min_value=0.0, step=100.0)
-                    interest_amount = st.number_input("வட்டி தொகை (₹) *", min_value=0.0, step=50.0)
-                    paid_amt = principal_amount + interest_amount
-                    st.info(f"மொத்த முதிர்வுத் தொகை: ₹{paid_amt:,.2f}")
-                elif "Interest" in txn_category:
-                    paid_amt = st.number_input("வழங்கிய தொகை (₹) *", min_value=0.0, step=100.0)
-                else:
-                    received_amt = st.number_input("பெற்ற தவணைத் தொகை (₹) *", min_value=0.0, step=100.0)
-            detail_summary = [f"A/c: {acc_no}"]
+                # 6. RD & FD முதிர்வு / தவணைகள்
+                elif "RD" in txn_category or "FD" in txn_category:
+                    d_col1, d_col2 = st.columns(2)
+                    with d_col1:
+                        acc_no = st.text_input("கணக்கு எண் *")
+                    with d_col2:
+                        if "Closure" in txn_category:
+                            principal_amount = st.number_input("முதலீடு செய்த/கட்டிய தொகை (₹) *", min_value=0.0, step=100.0)
+                            interest_amount = st.number_input("வட்டி தொகை (₹) *", min_value=0.0, step=50.0)
+                            paid_amt = principal_amount + interest_amount
+                            st.info(f"மொத்த முதிர்வுத் தொகை: ₹{paid_amt:,.2f}")
+                        elif "Interest" in txn_category:
+                            paid_amt = st.number_input("வழங்கிய தொகை (₹) *", min_value=0.0, step=100.0)
+                        else:
+                            received_amt = st.number_input("பெற்ற தவணைத் தொகை (₹) *", min_value=0.0, step=100.0)
+                    detail_summary = [f"A/c: {acc_no}"]
 
-        # 7. GP (Gold Purchase)
-        elif txn_category == "GP (Gold Purchase)":
-            st.markdown("##### 🪙 தங்கம் வாங்குதல் (GP Details)")
-            gp_mode = st.radio("GP வகை தேர்வு செய்க *:", ["Direct (நேரடி கொள்முதல்)", "Takeover (பிற நிறுவன மீட்டல் வழி கொள்முதல்)"], horizontal=True)
-            is_takeover = "Takeover" in gp_mode
+                # 7. GP (Gold Purchase)
+                elif txn_category == "GP (Gold Purchase)":
+                    st.markdown("##### 🪙 தங்கம் வாங்குதல் (GP Details)")
+                    gp_mode = st.radio("GP வகை தேர்வு செய்க *:", ["Direct (நேரடி கொள்முதல்)", "Takeover (பிற நிறுவன மீட்டல் வழி கொள்முதல்)"], horizontal=True)
+                    is_takeover = "Takeover" in gp_mode
 
-            gp_col1, gp_col2 = st.columns(2)
-            with gp_col1:
-                branch_code = st.session_state.get("branch_code", st.session_state.branch[:3])
-                auto_gp_no = generate_gp_number(branch_code)
-                gp_number = st.text_input("1) ஜீபி எண் (Auto-generated):", value=auto_gp_no, disabled=True)
-            with gp_col2:
-                voucher_no = st.text_input("2) வவுச்சர் எண் *:", placeholder="எ.கா: VCH-1002")
+                    gp_col1, gp_col2 = st.columns(2)
+                    with gp_col1:
+                        branch_code = st.session_state.get("branch_code", st.session_state.branch[:3])
+                        auto_gp_no = generate_gp_number(branch_code)
+                        gp_number = st.text_input("1) ஜீபி எண் (Auto-generated):", value=auto_gp_no, disabled=True)
+                    with gp_col2:
+                        voucher_no = st.text_input("2) வவுச்சர் எண் *:", placeholder="எ.கா: VCH-1002")
 
-            st.markdown("---")
-            st.markdown("###### 📋 3) நகை விவரப் பட்டியல்:")
-            purity_options = ["916 KDM", "916 BIS Hallmarked", "22ct (91.6%)", "20ct", "18ct (75.0%)", "மற்றவை"]
+                    st.markdown("---")
+                    st.markdown("###### 📋 3) நகை விவரப் பட்டியல்:")
+                    purity_options = ["916 KDM", "916 BIS Hallmarked", "22ct (91.6%)", "20ct", "18ct (75.0%)", "மற்றவை"]
 
-            for idx, row in enumerate(st.session_state.gp_ornament_rows):
-                r_c1, r_c2, r_c3, r_c4, r_c5, r_c6 = st.columns([3, 2, 2.5, 2.5, 2.5, 1])
-                with r_c1:
-                    st.session_state.gp_ornament_rows[idx]["item"] = st.text_input(f"நகை #{idx+1}", value=row["item"], key=f"gp_item_{idx}", placeholder="எ.கா: செயின்")
-                with r_c2:
-                    st.session_state.gp_ornament_rows[idx]["count"] = st.number_input(f"எண்ணிக்கை #{idx+1}", min_value=1, value=int(row["count"]), step=1, key=f"gp_cnt_{idx}")
-                with r_c3:
-                    st.session_state.gp_ornament_rows[idx]["gross_wt"] = st.number_input(f"மொத்த எடை (g) #{idx+1}", min_value=0.0, value=float(row["gross_wt"]), step=0.01, format="%.3f", key=f"gp_gwt_{idx}")
-                with r_c4:
-                    st.session_state.gp_ornament_rows[idx]["net_wt"] = st.number_input(f"நிகர எடை (g) #{idx+1}", min_value=0.0, value=float(row["net_wt"]), step=0.01, format="%.3f", key=f"gp_nwt_{idx}")
-                with r_c5:
-                    curr_pur = row.get("purity", "916 KDM")
-                    pur_idx = purity_options.index(curr_pur) if curr_pur in purity_options else 0
-                    st.session_state.gp_ornament_rows[idx]["purity"] = st.selectbox(f"தூய்மை #{idx+1}", purity_options, index=pur_idx, key=f"gp_pur_{idx}")
-                with r_c6:
-                    st.write("")
-                    st.write("")
-                    if len(st.session_state.gp_ornament_rows) > 1:
-                        if st.button("❌", key=f"del_gp_row_{idx}", help="நீக்கு"):
-                            st.session_state.gp_ornament_rows.pop(idx)
-                            st.rerun()
+                    for idx, row in enumerate(st.session_state.gp_ornament_rows):
+                        r_c1, r_c2, r_c3, r_c4, r_c5, r_c6 = st.columns([3, 2, 2.5, 2.5, 2.5, 1])
+                        with r_c1:
+                            st.session_state.gp_ornament_rows[idx]["item"] = st.text_input(f"நகை #{idx+1}", value=row["item"], key=f"gp_item_{idx}", placeholder="எ.கா: செயின்")
+                        with r_c2:
+                            st.session_state.gp_ornament_rows[idx]["count"] = st.number_input(f"எண்ணிக்கை #{idx+1}", min_value=1, value=int(row["count"]), step=1, key=f"gp_cnt_{idx}")
+                        with r_c3:
+                            st.session_state.gp_ornament_rows[idx]["gross_wt"] = st.number_input(f"மொத்த எடை (g) #{idx+1}", min_value=0.0, value=float(row["gross_wt"]), step=0.01, format="%.3f", key=f"gp_gwt_{idx}")
+                        with r_c4:
+                            st.session_state.gp_ornament_rows[idx]["net_wt"] = st.number_input(f"நிகர எடை (g) #{idx+1}", min_value=0.0, value=float(row["net_wt"]), step=0.01, format="%.3f", key=f"gp_nwt_{idx}")
+                        with r_c5:
+                            curr_pur = row.get("purity", "916 KDM")
+                            pur_idx = purity_options.index(curr_pur) if curr_pur in purity_options else 0
+                            st.session_state.gp_ornament_rows[idx]["purity"] = st.selectbox(f"தூய்மை #{idx+1}", purity_options, index=pur_idx, key=f"gp_pur_{idx}")
+                        with r_c6:
+                            st.write("")
+                            st.write("")
+                            if len(st.session_state.gp_ornament_rows) > 1:
+                                if st.button("❌", key=f"del_gp_row_{idx}", help="நீக்கு"):
+                                    st.session_state.gp_ornament_rows.pop(idx)
+                                    st.rerun()
 
             if st.button("➕ கூடுதல் நகை சேர்க்க", key="btn_add_gp_row"):
                 st.session_state.gp_ornament_rows.append({"item": "", "count": 1, "gross_wt": 0.0, "net_wt": 0.0, "purity": "916 KDM"})
