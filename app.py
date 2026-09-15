@@ -1457,24 +1457,56 @@ else:
                     if vr.get("transactions"):
                         st.dataframe(pd.DataFrame(vr["transactions"]))
 
+        # -----------------------------------------------------------------
+        # tab8: கிளை துவக்க இருப்பு நிர்ணயம் (Opening Stock with 8 Denominations)
+        # -----------------------------------------------------------------
         with tab8:
-            st.subheader("💰 கிளை துவக்க இருப்பு நிர்ணயம்")
-            sel_op_branch = st.selectbox("கிளை:", list(branch_options.keys()), key="sel_op_b")
+            st.subheader("💰 கிளை துவக்க இருப்பு நிர்ணயம் (Branch Opening Cash Box)")
+            st.caption("தேர்ந்தெடுக்கப்பட்ட கிளையின் தொடக்க ரொக்க இருப்பு மற்றும் அனைத்து 8 டினாமினேஷன் நோட்டுகளை உள்ளிடவும்.")
+            
+            sel_op_branch = st.selectbox("கிளையைத் தேர்ந்தெடுக்கவும் *:", list(branch_options.keys()), key="sel_op_b")
+            
             with st.form("admin_op_form"):
-                op_500 = st.number_input("₹500", min_value=0, step=1)
-                op_200 = st.number_input("₹200", min_value=0, step=1)
-                op_100 = st.number_input("₹100", min_value=0, step=1)
-                op_50 = st.number_input("₹50", min_value=0, step=1)
-                calc_total = (op_500 * 500) + (op_200 * 200) + (op_100 * 100) + (op_50 * 50)
-                if st.form_submit_button("சேமி", type="primary"):
-                    supabase.table("branch_cash_box").upsert({
-                        "branch_id": branch_options[sel_op_branch],
-                        "entry_date": str(date.today()),
-                        "opening_balance": calc_total,
-                        "opening_denomination": {"500": op_500, "200": op_200, "100": op_100, "50": op_50}
-                    }, on_conflict="branch_id,entry_date").execute()
-                    st.success("சேமிக்கப்பட்டது!")
-                    st.rerun()
+                st.markdown("##### 💵 ரூபாய் நோட்டுகள் & நாணயங்கள் எண்ணிக்கை:")
+                
+                op_c1, op_c2, op_c3, op_c4 = st.columns(4)
+                with op_c1:
+                    op_500 = st.number_input("₹500 தாள்கள்", min_value=0, step=1, key="adm_op_500")
+                    op_20 = st.number_input("₹20 தாள்கள்", min_value=0, step=1, key="adm_op_20")
+                with op_c2:
+                    op_200 = st.number_input("₹200 தாள்கள்", min_value=0, step=1, key="adm_op_200")
+                    op_10 = st.number_input("₹10 தாள்கள்", min_value=0, step=1, key="adm_op_10")
+                with op_c3:
+                    op_100 = st.number_input("₹100 தாள்கள்", min_value=0, step=1, key="adm_op_100")
+                    op_5 = st.number_input("₹5 தாள்கள்", min_value=0, step=1, key="adm_op_5")
+                with op_c4:
+                    op_50 = st.number_input("₹50 தாள்கள்", min_value=0, step=1, key="adm_op_50")
+                    op_coins = st.number_input("நாணயங்கள் (₹)", min_value=0.0, step=1.0, key="adm_op_coins")
+
+                # மொத்த தொடக்க இருப்பு கணக்கீடு:
+                calc_total = (
+                    (op_500 * 500) + (op_200 * 200) + (op_100 * 100) + (op_50 * 50) +
+                    (op_20 * 20) + (op_10 * 10) + (op_5 * 5) + op_coins
+                )
+
+                st.markdown("---")
+                st.info(f"💼 **கணக்கிடப்பட்ட மொத்த துவக்க ரொக்கம்:** `₹{calc_total:,.2f}`")
+
+                if st.form_submit_button("துவக்க இருப்பைச் சேமி (Save Opening Balance)", type="primary"):
+                    try:
+                        supabase.table("branch_cash_box").upsert({
+                            "branch_id": branch_options[sel_op_branch],
+                            "entry_date": str(date.today()),
+                            "opening_balance": float(calc_total),
+                            "opening_denomination": {
+                                "500": int(op_500), "200": int(op_200), "100": int(op_100), "50": int(op_50),
+                                "20": int(op_20), "10": int(op_10), "5": int(op_5), "coins": float(op_coins)
+                            }
+                        }, on_conflict="branch_id,entry_date").execute()
+                        st.success(f"✅ {sel_op_branch} கிளைக்கான துவக்க இருப்பு ₹{calc_total:,.2f} வெற்றிகரமாகச் சேமிக்கப்பட்டது!")
+                        st.rerun()
+                    except Exception as err:
+                        st.error(f"சேமிப்பதில் பிழை: {err}")
 
         with tab9:
             st.subheader("🏦 தலைமையக பணப் பரிமாற்றம் (HO ⇄ Branch)")
