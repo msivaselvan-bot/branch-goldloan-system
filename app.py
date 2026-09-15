@@ -545,11 +545,7 @@ def render_staff_attribution_report(selected_branch_id=None):
     rupees_per_point = float(set_res[0].get("rupees_per_point", 5.0)) if set_res else 5.0
     penalty_per_lakh = float(set_res[0].get("negative_growth_penalty_per_lakh", 15.0)) if set_res else 15.0
 
-    try:
-        inc_rules_res = supabase.table("staff_incentive_rules").select("*").eq("is_active", True).execute()
-        inc_rules = inc_rules_res.data or []
-    except Exception as rule_err:
-        inc_rules = []
+    inc_rules = supabase.table("staff_incentive_rules").select("*").eq("is_active", True).execute().data or []
     rule_dict = {}
     for r in inc_rules:
         t_type = r.get("transaction_type")
@@ -2032,505 +2028,574 @@ else:
                             else:
                                 st.warning("⚠️ தயவுசெய்து ஆவணங்களைப் பதிவேற்றம் செய்யவும்.")
 
-with branch_tab1:
-        staff_res = supabase.table("users").select("name").eq("branch_id", st.session_state.branch_id).eq("is_active", True).execute()
-        current_staff_list = ["Walk-in (நேரடி வருகை)"] + [s["name"] for s in staff_res.data] if staff_res.data else ["Walk-in (நேரடி வருகை)"]
+        with branch_tab1:
+            staff_res = supabase.table("users").select("name").eq("branch_id", st.session_state.branch_id).eq("is_active", True).execute()
+            current_staff_list = ["Walk-in (நேரடி வருகை)"] + [s["name"] for s in staff_res.data] if staff_res.data else ["Walk-in (நேரடி வருகை)"]
 
-    # =========================================================================
-    # படி 1: வாடிக்கையாளர் வருகைப் பதிவு (Visit Token)
-    # =========================================================================
-        if st.session_state.current_visit is None:
-            st.subheader("படி 1: வாடிக்கையாளர் வருகைப் பதிவு (Visit Token)")
-            v_type = st.radio("வாடிக்கையாளர் வகை:", ["ஏற்கனவே உள்ள வாடிக்கையாளர் (Existing Customer)", "புதிய வாடிக்கையாளர் பதிவு (New Customer)"], horizontal=True)
+            if st.session_state.current_visit is None:
+                st.subheader("படி 1: வாடிக்கையாளர் வருகைப் பதிவு (Visit Token)")
+                v_type = st.radio("வாடிக்கையாளர் வகை:", ["ஏற்கனவே உள்ள வாடிக்கையாளர் (Existing Customer)", "புதிய வாடிக்கையாளர் பதிவு (New Customer)"], horizontal=True)
 
-        if "Existing" in v_type:
-            search_query = st.text_input("பெயர் / மொபைல் எண் / Customer ID:", placeholder="எ.கா: ராம் அல்லது 98765...", key="live_cust_search")
-            if len(search_query.strip()) >= 2:
-                q = search_query.strip()
-                cust_filter_query = (
-                    supabase.table("customers").select("*").eq("is_active", True)
-                    .neq("kyc_status", "Rejected").neq("kyc_status", "Pending_KYC_Approval")
-                )
-                if st.session_state.user_role not in ["Admin", "Auditor", "Operations"]:
-                    cust_filter_query = cust_filter_query.eq("branch_id", st.session_state.branch_id)
+                if "Existing" in v_type:
+                    search_query = st.text_input("பெயர் / மொபைல் எண் / Customer ID:", placeholder="எ.கா: ராம் அல்லது 98765...", key="live_cust_search")
+                    if len(search_query.strip()) >= 2:
+                        q = search_query.strip()
+                        cust_filter_query = (
+                            supabase.table("customers").select("*").eq("is_active", True)
+                            .neq("kyc_status", "Rejected").neq("kyc_status", "Pending_KYC_Approval")
+                        )
+                        if st.session_state.user_role not in ["Admin", "Auditor", "Operations"]:
+                            cust_filter_query = cust_filter_query.eq("branch_id", st.session_state.branch_id)
 
-                matched_custs = cust_filter_query.or_(f"name.ilike.%{q}%,mobile.ilike.%{q}%,customer_code.ilike.%{q}%").limit(20).execute().data or []
-                if matched_custs:
-                    cust_dropdown_dict = {f"{c['name']} | {c.get('customer_code', '')} | 📞 {c.get('mobile', '')}": c for c in matched_custs}
-                    selected_label = st.selectbox("வாடிக்கையாளர் பட்டியல்:", options=list(cust_dropdown_dict.keys()), key="dd_cust_sel")
-                    selected_cust = cust_dropdown_dict[selected_label]
+                        matched_custs = cust_filter_query.or_(f"name.ilike.%{q}%,mobile.ilike.%{q}%,customer_code.ilike.%{q}%").limit(20).execute().data or []
+                        if matched_custs:
+                            cust_dropdown_dict = {f"{c['name']} | {c.get('customer_code', '')} | 📞 {c.get('mobile', '')}": c for c in matched_custs}
+                            selected_label = st.selectbox("வாடிக்கையாளர் பட்டியல்:", options=list(cust_dropdown_dict.keys()), key="dd_cust_sel")
+                            selected_cust = cust_dropdown_dict[selected_label]
 
-                    existing_req_check = (
-                        supabase.table("customer_update_requests").select("*")
-                        .eq("customer_id", selected_cust["id"]).eq("status", "Pending_Approval").order("id", desc=True).limit(1).execute().data or []
-                    )
-                    has_pending_update_req = len(existing_req_check) > 0
+                            existing_req_check = (
+                                supabase.table("customer_update_requests").select("*")
+                                .eq("customer_id", selected_cust["id"]).eq("status", "Pending_Approval").order("id", desc=True).limit(1).execute().data or []
+                            )
+                            has_pending_update_req = len(existing_req_check) > 0
 
-                    with st.container(border=True):
-                        c_col1, c_col2, c_col3 = st.columns([1, 2.5, 1])
-                        with c_col1:
-                            if selected_cust.get("photo_url"):
-                                st.image(selected_cust["photo_url"], width=120)
-                            else:
-                                st.info("📷 படம் இல்லை")
-                        with c_col2:
-                            st.markdown(f"### {selected_cust['name']} <small style='color:gray;'>({selected_cust.get('customer_code', '')})</small>", unsafe_allow_html=True)
-                            st.write(f"📞 **முதன்மை:** {selected_cust.get('mobile', '-')} | **கூடுதல்:** {selected_cust.get('mobile2', '-')}")
-                            st.write(f"👨‍👦 **கார்டியன்:** {selected_cust.get('guardian_name', '-')} | 🏠 **முகவரி:** {selected_cust.get('address', '-')}")
-                            if has_pending_update_req:
-                                st.warning(f"⏳ **விவரத் திருத்தக் கோரிக்கை ஆப்பரேஷன்ஸ் ஒப்புதலுக்கு நிலுவையில் உள்ளது!**")
-                        with c_col3:
-                            if st.button("வருகையைத் தொடங்கு ➔", key=f"start_v_{selected_cust['id']}", type="primary", use_container_width=True):
-                                st.session_state.current_visit = {
-                                    "visit_no": generate_short_visit_no(), "customer_id": selected_cust["id"],
-                                    "customer_name": selected_cust["name"], "customer_code": selected_cust.get("customer_code", ""),
-                                    "mobile": selected_cust.get("mobile", ""), "step": "TRANSACTIONS"
-                                }
-                                st.session_state.transactions_cart = []
+                            with st.container(border=True):
+                                c_col1, c_col2, c_col3 = st.columns([1, 2.5, 1])
+                                with c_col1:
+                                    if selected_cust.get("photo_url"):
+                                        st.image(selected_cust["photo_url"], width=120)
+                                    else:
+                                        st.info("📷 படம் இல்லை")
+                                with c_col2:
+                                    st.markdown(f"### {selected_cust['name']} <small style='color:gray;'>({selected_cust.get('customer_code', '')})</small>", unsafe_allow_html=True)
+                                    st.write(f"📞 **முதன்மை:** {selected_cust.get('mobile', '-')} | **கூடுதல்:** {selected_cust.get('mobile2', '-')}")
+                                    st.write(f"👨‍👦 **கார்டியன்:** {selected_cust.get('guardian_name', '-')} | 🏠 **முகவரி:** {selected_cust.get('address', '-')}")
+                                    if has_pending_update_req:
+                                        st.warning(f"⏳ **விவரத் திருத்தக் கோரிக்கை ஆப்பரேஷன்ஸ் ஒப்புதலுக்கு நிலுவையில் உள்ளது!**")
+                                with c_col3:
+                                    if st.button("வருகையைத் தொடங்கு ➔", key=f"start_v_{selected_cust['id']}", type="primary", use_container_width=True):
+                                        st.session_state.current_visit = {
+                                            "visit_no": generate_short_visit_no(), "customer_id": selected_cust["id"],
+                                            "customer_name": selected_cust["name"], "customer_code": selected_cust.get("customer_code", ""),
+                                            "mobile": selected_cust.get("mobile", ""), "step": "TRANSACTIONS"
+                                        }
+                                        st.rerun()
+
+                            with st.expander(f"✏️ {selected_cust['name']} விவரங்களில் மாற்றம் செய்ய கோரிக்கை அனுப்புக"):
+                                if has_pending_update_req:
+                                    st.error("🚫 ஏற்கனவே அனுப்பிய விவரத் திருத்தக் கோரிக்கை ஆப்பரேஷன்ஸ் ஒப்புதலுக்காக நிலுவையில் உள்ளது!")
+                                else:
+                                    # படிவம் (Form)
+                                    u_c1, u_c2 = st.columns(2)
+                                    with u_c1:
+                                        req_name = st.text_input("பெயர்", value=selected_cust.get("name", "") or "", key=f"rn_{selected_cust['id']}")
+                                        req_guard = st.text_input("கார்டியன் பெயர்", value=selected_cust.get("guardian_name", "") or "", key=f"rg_{selected_cust['id']}")
+                                        req_mob = st.text_input("புதிய முதன்மை மொபைல் எண்", value=selected_cust.get("mobile", "") or "", key=f"rm_{selected_cust['id']}")
+                                        req_mob2 = st.text_input("கூடுதல் மொபைல் எண்", value=selected_cust.get("mobile2", "") or "", key=f"rm2_{selected_cust['id']}")
+                                    with u_c2:
+                                        req_addr = st.text_area("புதிய முகவரி", value=selected_cust.get("address", "") or "", height=80, key=f"ra_{selected_cust['id']}")
+                                        req_reason = st.text_input("விவர மாற்றத்திற்கான காரணம் *:", placeholder="எ.கா: முகவரி மாற்றம்", key=f"rr_{selected_cust['id']}")
+
+                                    doc_r1, doc_r2, doc_r3 = st.columns(3)
+                                    with doc_r1:
+                                        req_photo = st.file_uploader("புதிய புகைப்படம்:", type=["jpg", "jpeg", "png"], key=f"r_p_{selected_cust['id']}")
+                                    with doc_r2:
+                                        req_id_doc = st.file_uploader("புதிய அடையாள ஆவணம்:", type=["jpg", "jpeg", "png", "pdf"], key=f"r_id_{selected_cust['id']}")
+                                    with doc_r3:
+                                        req_proof = st.file_uploader("மாற்றத்திற்கான ஆதாரம்:", type=["jpg", "jpeg", "png", "pdf"], key=f"r_prf_{selected_cust['id']}")
+
+                                    if st.button("ஆப்பரேஷன்ஸ் ஒப்புதலுக்கு அனுப்புக ➔", key=f"btn_send_req_{selected_cust['id']}", type="primary"):
+                                        if not req_reason.strip():
+                                            st.error("⚠️ தயவுசெய்து மாற்றத்திற்கான காரணத்தைக் குறிப்பிடவும்!")
+                                        else:
+                                            with st.spinner("கோரிக்கை அனுப்பப்படுகிறது..."):
+                                                try:
+                                                    new_photo_link = upload_single_file(req_photo, "customer_photos") if req_photo else selected_cust.get("photo_url")
+                                                    new_id_link = upload_single_file(req_id_doc, "customer_id_proofs") if req_id_doc else selected_cust.get("id_proof_url")
+                                                    proof_link = upload_single_file(req_proof, "update_proofs") if req_proof else None
+
+                                                    request_payload = {
+                                                        "customer_id": selected_cust["id"],
+                                                        "branch_id": st.session_state.branch_id,
+                                                        "requested_by": st.session_state.username,
+                                                        "updated_data": {
+                                                            "name": req_name.strip(),
+                                                            "guardian_name": req_guard.strip(),
+                                                            "mobile": req_mob.strip(),
+                                                            "mobile2": req_mob2.strip(),
+                                                            "address": req_addr.strip(),
+                                                            "photo_url": new_photo_link,
+                                                            "id_proof_url": new_id_link
+                                                        },
+                                                        "change_reason": req_reason.strip(),
+                                                        "proof_document_url": proof_link,
+                                                        "status": "Pending_Approval"
+                                                    }
+
+                                                    insert_res = supabase.table("customer_update_requests").insert(request_payload).execute()
+
+                                                    if insert_res.data:
+                                                        st.success("✅ கோரிக்கை ஆப்பரேஷன்ஸ் குழுவுக்கு வெற்றிகரமாக அனுப்பப்பட்டது!")
+                                                        st.rerun()
+                                                    else:
+                                                        st.error("டேட்டாபேஸில் பதிவு செய்ய முடியவில்லை. விவரங்களைச் சரிபார்க்கவும்.")
+                                                except Exception as err:
+                                                    st.error(f"❌ கோரிக்கை அனுப்புவதில் பிழை: {err}")
+
+                else:
+                    st.markdown("##### 📝 புதிய வாடிக்கையாளர் பதிவுப் படிவம் (New KYC Registration)")
+                    with st.form("new_customer_form", clear_on_submit=True):
+                        col_n1, col_n2, col_n3 = st.columns(3)
+                        with col_n1:
+                            new_name = st.text_input("வாடிக்கையாளர் பெயர் *")
+                            new_guardian = st.text_input("கார்டியன் / தந்தை / கணவர் பெயர்")
+                            new_dob = st.date_input("பிறந்த தேதி", min_value=datetime(1940, 1, 1), max_value=datetime.today())
+                            new_gender = st.selectbox("பாலினம்", ["ஆண் (Male)", "பெண் (Female)", "மற்றவை (Other)"])
+                            new_photo = st.file_uploader("1. வாடிக்கையாளர் புகைப்படம் *", type=["jpg", "jpeg", "png"])
+                        with col_n2:
+                            new_mob1 = st.text_input("முதன்மை மொபைல் எண் *")
+                            new_mob2 = st.text_input("கூடுதல் மொபைல் எண்")
+                            new_id_no = st.text_input("அடையாள எண் (ID Card Number) *")
+                            new_id_doc = st.file_uploader("2. அடையாள அட்டை ஆவணம் *", type=["jpg", "jpeg", "png", "pdf"])
+                        with col_n3:
+                            new_address = st.text_area("முழு முகவரி *", height=85)
+                            new_nominee = st.text_input("நாமினி பெயர்")
+                            new_relation = st.text_input("உறவுமுறை")
+                            new_addr_doc = st.file_uploader("3. முகவரி சான்று ஆவணம் *", type=["jpg", "jpeg", "png", "pdf"])
+
+                        if st.form_submit_button("வாடிக்கையாளரைப் பதிவு செய்து ஒப்புதலுக்கு அனுப்புக", type="primary"):
+                            if new_name.strip() and new_mob1.strip() and new_address.strip():
+                                photo_url = upload_single_file(new_photo, "customer_photos")
+                                id_doc_url = upload_single_file(new_id_doc, "customer_id_proofs")
+                                addr_doc_url = upload_single_file(new_addr_doc, "customer_address_proofs")
+
+                                tcode = f"CUST-{datetime.now().strftime('%m%d%H%M%S')}"
+                                supabase.table("customers").insert({
+                                    "branch_id": st.session_state.branch_id, "customer_code": tcode,
+                                    "name": new_name.strip(), "guardian_name": new_guardian.strip(),
+                                    "dob": str(new_dob), "gender": new_gender, "mobile": new_mob1.strip(), "mobile2": new_mob2.strip(),
+                                    "address": new_address.strip(), "nominee_name": new_nominee.strip(), "nominee_relation": new_relation.strip(),
+                                    "photo_url": photo_url, "id_proof_url": id_doc_url, "address_proof_url": addr_doc_url,
+                                    "kyc_status": "Pending_KYC_Approval", "is_active": False
+                                }).execute()
+                                st.success(f"✅ வாடிக்கையாளர் {new_name} பதிவு செய்யப்பட்டு ஒப்புதலுக்கு அனுப்பப்பட்டது!")
                                 st.rerun()
 
-                    with st.expander(f"✏️ {selected_cust['name']} விவரங்களில் மாற்றம் செய்ய கோரிக்கை அனுப்புக"):
-                        if has_pending_update_req:
-                            st.error("🚫 ஏற்கனவே அனுப்பிய விவரத் திருத்தக் கோரிக்கை ஆப்பரேஷன்ஸ் ஒப்புதலுக்காக நிலுவையில் உள்ளது!")
+            elif st.session_state.current_visit["step"] == "TRANSACTIONS":
+                visit = st.session_state.current_visit
+                st.success(f"வாடிக்கையாளர்: **{visit['customer_name']}** (வருகை எண்: **{visit['visit_no']}**)")
+                st.subheader("படி 2: வணிக நடவடிக்கைகள் சேர்த்தல்")
+
+                active_g_schemes = supabase.table("gold_loan_schemes").select("*").eq("is_active", True).execute().data or []
+                active_fd_schemes = supabase.table("fd_schemes").select("*").eq("is_active", True).execute().data or []
+                active_rd_schemes = supabase.table("rd_schemes").select("*").eq("is_active", True).execute().data or []
+
+                g_scheme_map = {s["scheme_name"]: s for s in active_g_schemes}
+                gold_scheme_options = list(g_scheme_map.keys()) if g_scheme_map else ["General 12%"]
+                fd_scheme_options = [s["scheme_name"] for s in active_fd_schemes] if active_fd_schemes else ["Standard FD 9.5%"]
+                rd_scheme_options = [s["scheme_name"] for s in active_rd_schemes] if active_rd_schemes else ["Standard RD 10%"]
+
+                form_ver = st.session_state.form_reset_counter
+
+                txn_category = st.selectbox(
+                    "நடவடிக்கை வகை:",
+                    [
+                        "Pledge (புதிய நகைக் கடன்)", "GL Release (அடமானம் மீட்டல்)",
+                        "Interest Payment (வட்டி வரவு)", "Part Payment (அசல் வரவு)",
+                        "Take Over (பிற நிறுவன கடன் மீட்டல்)", "RD Open (புதிய RD சேமிப்பு)",
+                        "RD Due (RD தவணை)", "RD Closure (RD முதிர்வு)",
+                        "FD Open (புதிய வைப்பு நிதி)", "FD Interest (FD வட்டி)",
+                        "FD Closure (FD முதிர்வு)", "GP (Gold Purchase)", "GS (Gold Sale)"
+                    ],
+                    key="dyn_txn_sel"
+                )
+
+                with st.form("txn_entry_form", clear_on_submit=True):
+
+                # பொது மாறிகள் வரையறை
+                    col_st1, col_st2 = st.columns(2)
+                with col_st1:
+                    staff = st.selectbox("காரணப் பணியாளர்:", current_staff_list)
+                with col_st2:
+                    custom_remarks = st.text_input("கூடுதல் குறிப்பு:", placeholder="எ.கா: சிறப்பு தள்ளுபடி")
+
+                st.markdown("---")
+                paid_amt, received_amt, detail_summary = 0.0, 0.0, []
+                ornament_details = None
+                other_charges = 0.0
+                total_weight = 0.0
+                net_weight = 0.0
+                gp_number = None
+                ref1_name, ref1_phone = None, None
+                ref2_name, ref2_phone = None, None
+                principal_amount = 0.0
+                interest_amount = 0.0
+                nominee_name, nominee_relation, nominee_address = None, None, None
+                ornament_file = None
+
+                # 1. நகைக்கடன் (Pledge)
+                if txn_category == "Pledge (புதிய நகைக் கடன்)":
+                    p_col1, p_col2, p_col3 = st.columns(3)
+                    with p_col1:
+                        new_gl_no = st.text_input("புதிய கடன் எண் (GL No) *")
+                        scheme_name = st.selectbox("அட்மின் நகைக் கடன் திட்டம் (Scheme) *", gold_scheme_options)
+                        sel_scheme_obj = g_scheme_map.get(scheme_name, {})
+                        cur_rpg = float(sel_scheme_obj.get("rate_per_gram", 0) or 0)
+                        if cur_rpg > 0:
+                            st.info(f"💎 **இந்த ஸ்கீமின் RPG:** `₹{cur_rpg:,.2f} / gram`")
+                    with p_col2:
+                        total_weight = st.number_input("மொத்த எடை (Gross Weight - gms) *", min_value=0.0, step=0.001, format="%.3f")
+                        net_weight = st.number_input("நிகர எடை (Net Weight - gms) *", min_value=0.0, step=0.001, format="%.3f")
+                        item_count = st.number_input("நகை எண்ணிக்கை", min_value=1, step=1)
+                    with p_col3:
+                        max_eligible_calc = net_weight * cur_rpg if cur_rpg > 0 else 0.0
+                        if cur_rpg > 0 and net_weight > 0:
+                            st.success(f"⚖️ அதிகபட்ச கடன்: **₹{max_eligible_calc:,.2f}**")
+                        paid_amt = st.number_input("கடன் தொகை (Paid ₹) *", min_value=0.0, step=500.0)
+                        other_charges = st.number_input("இதர கட்டணங்கள் (Other Charges ₹)", min_value=0.0, step=10.0)
+
+                    ornament_details = st.text_area("நகை விபரம் (Ornament Details)")
+                    ornament_file = st.file_uploader("நகை படம் (Ornament Photo)", type=["jpg", "jpeg", "png"], key="pledge_img")
+                    detail_summary = [f"GL: {new_gl_no}", f"ஸ்கீம்: {scheme_name}", f"RPG: ₹{cur_rpg}", f"எடை: {net_weight}g"]
+
+                # 2. அடமானம் மீட்டல் (GL Release)
+                elif txn_category == "GL Release (அடமானம் மீட்டல்)":
+                    r_col1, r_col2 = st.columns(2)
+                    with r_col1:
+                        rel_gl_no = st.text_input("மீட்கப்படும் கடன் எண் *")
+                        principal_amount = st.number_input("அசல் தொகை (₹) *", min_value=0.0, step=500.0)
+                    with r_col2:
+                        interest_amount = st.number_input("வட்டித் தொகை (₹) *", min_value=0.0, step=50.0)
+                        other_charges = st.number_input("இதர கட்டணம் (₹)", min_value=0.0, step=10.0)
+                    received_amt = principal_amount + interest_amount + other_charges
+                    detail_summary = [f"GL: {rel_gl_no}", f"அசல்: ₹{principal_amount}", f"வட்டி: ₹{interest_amount}"]
+
+                # 3. அசல் வரவு & வட்டி வரவு
+                elif txn_category in ["Interest Payment (வட்டி வரவு)", "Part Payment (அசல் வரவு)"]:
+                    i_col1, i_col2 = st.columns(2)
+                    with i_col1:
+                        part_gl_no = st.text_input("கடன் எண் *")
+                        principal_amount = st.number_input("அசல் தொகை (₹)", min_value=0.0, step=100.0) if "Part" in txn_category else 0.0
+                    with i_col2:
+                        interest_amount = st.number_input("வட்டித் தொகை (₹)", min_value=0.0, step=50.0)
+                    received_amt = principal_amount + interest_amount
+                    detail_summary = [f"GL: {part_gl_no}", f"அசல்: ₹{principal_amount}", f"வட்டி: ₹{interest_amount}"]
+
+                # 4. Take Over
+                elif txn_category == "Take Over (பிற நிறுவன கடன் மீட்டல்)":
+                    to_col1, to_col2 = st.columns(2)
+                    with to_col1:
+                        bank_source = st.text_input("முந்தைய நிறுவனம் *")
+                        prev_loan_no = st.text_input("முந்தைய லோன் எண் *")
+                    with to_col2:
+                        paid_amt = st.number_input("செலுத்திய தொகை (₹) *", min_value=0.0, step=500.0)
+                    detail_summary = [f"வங்கி: {bank_source}", f"கடன் எண்: {prev_loan_no}"]
+
+                # 5. RD Open & FD Open (நாமினி விவரங்களுடன்)
+                elif txn_category in ["RD Open (புதிய RD சேமிப்பு)", "FD Open (புதிய வைப்பு நிதி)"]:
+                    f_col1, f_col2 = st.columns(2)
+                    with f_col1:
+                        acc_no = st.text_input("புதிய கணக்கு எண் *")
+                        sel_scheme = st.selectbox("திட்டம் (Scheme) *", rd_scheme_options if "RD" in txn_category else fd_scheme_options)
+                    with f_col2:
+                        received_amt = st.number_input("வைப்பு / தவணைத் தொகை (₹) *", min_value=0.0, step=500.0)
+                    
+                    st.markdown("##### 👤 நாமினி விவரங்கள் (Nominee Details)")
+                    nom_col1, nom_col2 = st.columns(2)
+                    with nom_col1:
+                        nominee_name = st.text_input("நாமினி பெயர்")
+                        nominee_relation = st.text_input("உறவுமுறை")
+                    with nom_col2:
+                        nominee_address = st.text_area("நாமினி முகவரி", height=68)
+                    detail_summary = [f"A/c: {acc_no}", f"Scheme: {sel_scheme}"]
+
+                # 6. RD & FD முதிர்வு / தவணைகள்
+                elif "RD" in txn_category or "FD" in txn_category:
+                    d_col1, d_col2 = st.columns(2)
+                    with d_col1:
+                        acc_no = st.text_input("கணக்கு எண் *")
+                    with d_col2:
+                        if "Closure" in txn_category:
+                            principal_amount = st.number_input("முதலீடு செய்த/கட்டிய தொகை (₹) *", min_value=0.0, step=100.0)
+                            interest_amount = st.number_input("வட்டி தொகை (₹) *", min_value=0.0, step=50.0)
+                            paid_amt = principal_amount + interest_amount
+                            st.info(f"மொத்த முதிர்வுத் தொகை: ₹{paid_amt:,.2f}")
+                        elif "Interest" in txn_category:
+                            paid_amt = st.number_input("வழங்கிய தொகை (₹) *", min_value=0.0, step=100.0)
                         else:
-                            u_c1, u_c2 = st.columns(2)
-                            with u_c1:
-                                req_name = st.text_input("பெயர்", value=selected_cust.get("name", "") or "", key=f"rn_{selected_cust['id']}")
-                                req_guard = st.text_input("கார்டியன் பெயர்", value=selected_cust.get("guardian_name", "") or "", key=f"rg_{selected_cust['id']}")
-                                req_mob = st.text_input("புதிய முதன்மை மொபைல் எண்", value=selected_cust.get("mobile", "") or "", key=f"rm_{selected_cust['id']}")
-                                req_mob2 = st.text_input("கூடுதல் மொபைல் எண்", value=selected_cust.get("mobile2", "") or "", key=f"rm2_{selected_cust['id']}")
-                            with u_c2:
-                                req_addr = st.text_area("புதிய முகவரி", value=selected_cust.get("address", "") or "", height=80, key=f"ra_{selected_cust['id']}")
-                                req_reason = st.text_input("விவர மாற்றத்திற்கான காரணம் *:", placeholder="எ.கா: முகவரி மாற்றம்", key=f"rr_{selected_cust['id']}")
+                            received_amt = st.number_input("பெற்ற தவணைத் தொகை (₹) *", min_value=0.0, step=100.0)
+                    detail_summary = [f"A/c: {acc_no}"]
 
-                            doc_r1, doc_r2, doc_r3 = st.columns(3)
-                            with doc_r1:
-                                req_photo = st.file_uploader("புதிய புகைப்படம்:", type=["jpg", "jpeg", "png"], key=f"r_p_{selected_cust['id']}")
-                            with doc_r2:
-                                req_id_doc = st.file_uploader("புதிய அடையாள ஆவணம்:", type=["jpg", "jpeg", "png", "pdf"], key=f"r_id_{selected_cust['id']}")
-                            with doc_r3:
-                                req_proof = st.file_uploader("மாற்றத்திற்கான ஆதாரம்:", type=["jpg", "jpeg", "png", "pdf"], key=f"r_prf_{selected_cust['id']}")
+                # 7. GP (Gold Purchase - தங்கம் வாங்குதல்)
+                elif txn_category == "GP (Gold Purchase)":
+                    st.markdown("##### 🪙 தங்கம் வாங்குதல் (GP Details)")
+                    
+                    # GP வகை தேர்வு
+                    gp_mode = st.radio(
+                        "GP வகை தேர்வு செய்க *:",
+                        ["Direct (நேரடி கொள்முதல்)", "Takeover (பிற நிறுவன மீட்டல் வழி கொள்முதல்)"],
+                        horizontal=True
+                    )
+                    is_takeover = "Takeover" in gp_mode
 
-                            if st.button("ஆப்பரேஷன்ஸ் ஒப்புதலுக்கு அனுப்புக ➔", key=f"btn_send_req_{selected_cust['id']}", type="primary"):
-                                if not req_reason.strip():
-                                    st.error("⚠️ தயவுசெய்து மாற்றத்திற்கான காரணத்தைக் குறிப்பிடவும்!")
-                                else:
-                                    with st.spinner("கோரிக்கை அனுப்பப்படுகிறது..."):
-                                        try:
-                                            new_photo_link = upload_single_file(req_photo, "customer_photos") if req_photo else selected_cust.get("photo_url")
-                                            new_id_link = upload_single_file(req_id_doc, "customer_id_proofs") if req_id_doc else selected_cust.get("id_proof_url")
-                                            proof_link = upload_single_file(req_proof, "update_proofs") if req_proof else None
+                    # 1. GP எண் & வவுச்சர் எண்
+                    gp_col1, gp_col2 = st.columns(2)
+                    with gp_col1:
+                        branch_code = st.session_state.get("branch_code", st.session_state.branch[:3])
+                        auto_gp_no = generate_gp_number(branch_code)
+                        gp_number = st.text_input("1) ஜீபி எண் (Auto-generated):", value=auto_gp_no, disabled=True)
+                    with gp_col2:
+                        voucher_no = st.text_input("2) வவுச்சர் எண் *:", placeholder="எ.கா: VCH-1002")
 
-                                            request_payload = {
-                                                "customer_id": selected_cust["id"],
-                                                "branch_id": st.session_state.branch_id,
-                                                "requested_by": st.session_state.username,
-                                                "updated_data": {
-                                                    "name": req_name.strip(),
-                                                    "guardian_name": req_guard.strip(),
-                                                    "mobile": req_mob.strip(),
-                                                    "mobile2": req_mob2.strip(),
-                                                    "address": req_addr.strip(),
-                                                    "photo_url": new_photo_link,
-                                                    "id_proof_url": new_id_link
-                                                },
-                                                "change_reason": req_reason.strip(),
-                                                "proof_document_url": proof_link,
-                                                "status": "Pending_Approval"
-                                            }
+                    st.markdown("---")
+                    # 3. நகை விவரப் பட்டியல் (Dynamic List Rows)
+                    st.markdown("###### 📋 3) நகை விவரப் பட்டியல் (நகை - எண்ணிக்கை - மொத்த எடை - நிகர எடை - தூய்மை):")
+                    
+                    purity_options = ["916 KDM", "916 BIS Hallmarked", "22ct (91.6%)", "20ct", "18ct (75.0%)", "மற்றவை"]
 
-                                            insert_res = supabase.table("customer_update_requests").insert(request_payload).execute()
-                                            if insert_res.data:
-                                                st.success("✅ கோரிக்கை ஆப்பரேஷன்ஸ் குழுவுக்கு வெற்றிகரமாக அனுப்பப்பட்டது!")
-                                                st.rerun()
-                                            else:
-                                                st.error("டேட்டாபேஸில் பதிவு செய்ய முடியவில்லை. விவரங்களைச் சரிபார்க்கவும்.")
-                                        except Exception as err:
-                                            st.error(f"❌ கோரிக்கை அனுப்புவதில் பிழை: {err}")
+                    for idx, row in enumerate(st.session_state.gp_ornament_rows):
+                        r_c1, r_c2, r_c3, r_c4, r_c5, r_c6 = st.columns([3, 2, 2.5, 2.5, 2.5, 1])
+                        with r_c1:
+                            st.session_state.gp_ornament_rows[idx]["item"] = st.text_input(
+                                f"நகை #{idx+1}", value=row["item"], key=f"gp_item_{idx}", placeholder="எ.கா: செயின், வளையல்"
+                            )
+                        with r_c2:
+                            st.session_state.gp_ornament_rows[idx]["count"] = st.number_input(
+                                f"எண்ணிக்கை #{idx+1}", min_value=1, value=int(row["count"]), step=1, key=f"gp_cnt_{idx}"
+                            )
+                        with r_c3:
+                            st.session_state.gp_ornament_rows[idx]["gross_wt"] = st.number_input(
+                                f"மொத்த எடை (g) #{idx+1}", min_value=0.0, value=float(row["gross_wt"]), step=0.01, format="%.3f", key=f"gp_gwt_{idx}"
+                            )
+                        with r_c4:
+                            st.session_state.gp_ornament_rows[idx]["net_wt"] = st.number_input(
+                                f"நிகர எடை (g) #{idx+1}", min_value=0.0, value=float(row["net_wt"]), step=0.01, format="%.3f", key=f"gp_nwt_{idx}"
+                            )
+                        with r_c5:
+                            curr_pur = row.get("purity", "916 KDM")
+                            pur_idx = purity_options.index(curr_pur) if curr_pur in purity_options else 0
+                            st.session_state.gp_ornament_rows[idx]["purity"] = st.selectbox(
+                                f"தூய்மை #{idx+1}", purity_options, index=pur_idx, key=f"gp_pur_{idx}"
+                            )
+                        with r_c6:
+                            st.write("")
+                            st.write("")
+                            if len(st.session_state.gp_ornament_rows) > 1:
+                                if st.button("❌", key=f"del_gp_row_{idx}", help="இந்த வரியை நீக்கு"):
+                                    st.session_state.gp_ornament_rows.pop(idx)
+                                    st.rerun()
 
-        else:
-            st.markdown("##### 📝 புதிய வாடிக்கையாளர் பதிவுப் படிவம் (New KYC Registration)")
-            with st.form("new_customer_form", clear_on_submit=True):
-                col_n1, col_n2, col_n3 = st.columns(3)
-                with col_n1:
-                    new_name = st.text_input("வாடிக்கையாளர் பெயர் *")
-                    new_guardian = st.text_input("கார்டியன் / தந்தை / கணவர் பெயர்")
-                    new_dob = st.date_input("பிறந்த தேதி", min_value=datetime(1940, 1, 1), max_value=datetime.today())
-                    new_gender = st.selectbox("பாலினம்", ["ஆண் (Male)", "பெண் (Female)", "மற்றவை (Other)"])
-                    new_photo = st.file_uploader("1. வாடிக்கையாளர் புகைப்படம் *", type=["jpg", "jpeg", "png"])
-                with col_n2:
-                    new_mob1 = st.text_input("முதன்மை மொபைல் எண் *")
-                    new_mob2 = st.text_input("கூடுதல் மொபைல் எண்")
-                    new_id_no = st.text_input("அடையாள எண் (ID Card Number) *")
-                    new_id_doc = st.file_uploader("2. அடையாள அட்டை ஆவணம் *", type=["jpg", "jpeg", "png", "pdf"])
-                with col_n3:
-                    new_address = st.text_area("முழு முகவரி *", height=85)
-                    new_nominee = st.text_input("நாமினி பெயர்")
-                    new_relation = st.text_input("உறவுமுறை")
-                    new_addr_doc = st.file_uploader("3. முகவரி சான்று ஆவணம் *", type=["jpg", "jpeg", "png", "pdf"])
-
-                if st.form_submit_button("வாடிக்கையாளரைப் பதிவு செய்து ஒப்புதலுக்கு அனுப்புக", type="primary"):
-                    if new_name.strip() and new_mob1.strip() and new_address.strip():
-                        photo_url = upload_single_file(new_photo, "customer_photos")
-                        id_doc_url = upload_single_file(new_id_doc, "customer_id_proofs")
-                        addr_doc_url = upload_single_file(new_addr_doc, "customer_address_proofs")
-
-                        tcode = f"CUST-{datetime.now().strftime('%m%d%H%M%S')}"
-                        supabase.table("customers").insert({
-                            "branch_id": st.session_state.branch_id, "customer_code": tcode,
-                            "name": new_name.strip(), "guardian_name": new_guardian.strip(),
-                            "dob": str(new_dob), "gender": new_gender, "mobile": new_mob1.strip(), "mobile2": new_mob2.strip(),
-                            "address": new_address.strip(), "nominee_name": new_nominee.strip(), "nominee_relation": new_relation.strip(),
-                            "photo_url": photo_url, "id_proof_url": id_doc_url, "address_proof_url": addr_doc_url,
-                            "kyc_status": "Pending_KYC_Approval", "is_active": False
-                        }).execute()
-                        st.success(f"✅ வாடிக்கையாளர் {new_name} பதிவு செய்யப்பட்டு ஒப்புதலுக்கு அனுப்பப்பட்டது!")
+                    # கூடுதல் நகை வரி சேர்க்கும் பொத்தான்
+                    if st.button("➕ கூடுதல் நகை சேர்க்க", key="btn_add_gp_row"):
+                        st.session_state.gp_ornament_rows.append(
+                            {"item": "", "count": 1, "gross_wt": 0.0, "net_wt": 0.0, "purity": "916 KDM"}
+                        )
                         st.rerun()
 
-                elif st.session_state.current_visit and st.session_state.current_visit.get("step") == "TRANSACTIONS":
-                    visit = st.session_state.current_visit
-                    st.success(f"வாடிக்கையாளர்: **{visit.get('customer_name', '')}** (வருகை எண்: **{visit.get('visit_no', '')}**)")
-                    st.subheader("படி 2: வணிக நடவடிக்கைகள் சேர்த்தல்")
+                    # தானியங்கி எடைக் கணக்கீடுகள்
+                    calc_total_gross = sum(float(r["gross_wt"]) for r in st.session_state.gp_ornament_rows)
+                    calc_total_net = sum(float(r["net_wt"]) for r in st.session_state.gp_ornament_rows)
+                    calc_total_items = sum(int(r["count"]) for r in st.session_state.gp_ornament_rows)
 
-        # 🌟 இந்த selectbox வரி 2240-க்கு மேலே கட்டாயம் இருக்க வேண்டும்:
-        txn_category = st.selectbox(
-            "நடவடிக்கை வகை:",
-            [
-                "Pledge (புதிய நகைக் கடன்)", "GL Release (அடமானம் மீட்டல்)",
-                "Interest Payment (வட்டி வரவு)", "Part Payment (அசல் வரவு)",
-                "Take Over (பிற நிறுவன கடன் மீட்டல்)", "RD Open (புதிய RD சேமிப்பு)",
-                "RD Due (RD தவணை)", "RD Closure (RD முதிர்வு)",
-                "FD Open (புதிய வைப்பு நிதி)", "FD Interest (FD வட்டி)",
-                "FD Closure (FD முதிர்வு)", "GP (Gold Purchase)", "GS (Gold Sale)"
-            ],
-            key="dyn_txn_sel"
-        )
+                    st.markdown("---")
+                    st.markdown("###### ⚖️ எடை மற்றும் தொகை விவரங்கள்:")
+                    w_col1, w_col2, w_col3 = st.columns(3)
+                    with w_col1:
+                        total_weight = st.number_input("4) மொத்த எடை (Gross Wt - g):", value=calc_total_gross, format="%.3f", disabled=True)
+                    with w_col2:
+                        net_weight = st.number_input("5) மொத்த நிகர எடை (Net Wt - g):", value=calc_total_net, format="%.3f", disabled=True)
+                    with w_col3:
+                        total_gp_value = st.number_input("6) மொத்த மதிப்பு (Total Value - ₹) *:", min_value=0.0, step=500.0, format="%.2f")
 
-        col_st1, col_st2 = st.columns(2)
-        with col_st1:
-            staff = st.selectbox("காரணப் பணியாளர்:", current_staff_list)
-        with col_st2:
-            custom_remarks = st.text_input("கூடுதல் குறிப்பு:", placeholder="எ.கா: சிறப்பு தள்ளுபடி")
+                    # Takeover எனில் அட்வான்ஸ் மற்றும் மீதித் தொகை
+                    advance_paid = 0.0
+                    balance_payable = total_gp_value
+                    if is_takeover:
+                        t_col1, t_col2 = st.columns(2)
+                        with t_col1:
+                            advance_paid = st.number_input("7) அட்வான்ஸ் பெற்ற தொகை (₹):", min_value=0.0, max_value=float(total_gp_value), step=500.0, format="%.2f")
+                        with t_col2:
+                            balance_payable = max(0.0, float(total_gp_value) - float(advance_paid))
+                            st.number_input("8) மீதி தொகை (Balance Payable - ₹):", value=balance_payable, format="%.2f", disabled=True)
 
-        st.markdown("---")
-        paid_amt, received_amt, detail_summary = 0.0, 0.0, []
-        ornament_details = None
-        other_charges = 0.0
-        total_weight = 0.0
-        net_weight = 0.0
-        gp_number = None
-        ref1_name, ref1_phone = None, None
-        ref2_name, ref2_phone = None, None
-        principal_amount = 0.0
-        interest_amount = 0.0
-        nominee_name, nominee_relation, nominee_address = None, None, None
-        ornament_file = None
+                    st.markdown("---")
+                    st.markdown("###### 📸 புகைப்படங்கள்:")
+                    img_c1, img_c2 = st.columns(2)
+                    with img_c1:
+                        cust_with_ornaments_img = st.file_uploader("வாடிக்கையாளர் படம் நகையுடன் *:", type=["jpg", "jpeg", "png"], key="gp_cust_img")
+                    with img_c2:
+                        ornaments_summary_img = st.file_uploader("நகைகள் அனைத்தும் அடங்கிய விபர படம் *:", type=["jpg", "jpeg", "png"], key="gp_orn_img")
 
-        # 1. நகைக்கடன் (Pledge) - வரி 2240
-        if txn_category == "Pledge (புதிய நகைக் கடன்)":
-            p_col1, p_col2, p_col3 = st.columns(3)
-            with p_col1:
-                new_gl_no = st.text_input("புதிய கடன் எண் (GL No) *")
-                scheme_name = st.selectbox("அட்மின் நகைக் கடன் திட்டம் (Scheme) *", gold_scheme_options)
-                sel_scheme_obj = g_scheme_map.get(scheme_name, {})
-                cur_rpg = float(sel_scheme_obj.get("rate_per_gram", 0) or 0)
-                if cur_rpg > 0:
-                    st.info(f"💎 **இந்த ஸ்கீமின் RPG:** `₹{cur_rpg:,.2f} / gram`")
-            with p_col2:
-                total_weight = st.number_input("மொத்த எடை (Gross Weight - gms) *", min_value=0.0, step=0.001, format="%.3f")
-                net_weight = st.number_input("நிகர எடை (Net Weight - gms) *", min_value=0.0, step=0.001, format="%.3f")
-                item_count = st.number_input("நகை எண்ணிக்கை", min_value=1, step=1)
-            with p_col3:
-                max_eligible_calc = net_weight * cur_rpg if cur_rpg > 0 else 0.0
-                if cur_rpg > 0 and net_weight > 0:
-                    st.success(f"⚖️ அதிகபட்ச கடன்: **₹{max_eligible_calc:,.2f}**")
-                paid_amt = st.number_input("கடன் தொகை (Paid ₹) *", min_value=0.0, step=500.0)
-                other_charges = st.number_input("இதர கட்டணங்கள் (Other Charges ₹)", min_value=0.0, step=10.0)
+                    st.markdown("---")
+                    st.markdown("###### 👥 பரிந்துரையாளர் விவரங்கள் (References):")
+                    ref1_c1, ref1_c2, ref1_c3, ref1_c4 = st.columns(4)
+                    with ref1_c1:
+                        gp_ref1_name = st.text_input("ரெபரண்ஸ் 1 - பெயர்:", key="gp_r1_n")
+                    with ref1_c2:
+                        gp_ref1_addr = st.text_input("முகவரி:", key="gp_r1_a")
+                    with ref1_c3:
+                        gp_ref1_rel = st.text_input("உறவுமுறை:", key="gp_r1_r")
+                    with ref1_c4:
+                        gp_ref1_phone = st.text_input("மொபைல் எண்:", key="gp_r1_p")
 
-            ornament_details = st.text_area("நகை விபரம் (Ornament Details)")
-            ornament_file = st.file_uploader("நகை படம் (Ornament Photo)", type=["jpg", "jpeg", "png"], key="pledge_img")
-            detail_summary = [f"GL: {new_gl_no}", f"ஸ்கீம்: {scheme_name}", f"RPG: ₹{cur_rpg}", f"எடை: {net_weight}g"]
+                    ref2_c1, ref2_c2, ref2_c3, ref2_c4 = st.columns(4)
+                    with ref2_c1:
+                        gp_ref2_name = st.text_input("ரெபரண்ஸ் 2 - பெயர்:", key="gp_r2_n")
+                    with ref2_c2:
+                        gp_ref2_addr = st.text_input("முகவரி:", key="gp_r2_a")
+                    with ref2_c3:
+                        gp_ref2_rel = st.text_input("உறவுமுறை:", key="gp_r2_r")
+                    with ref2_c4:
+                        gp_ref2_phone = st.text_input("மொபைல் எண்:", key="gp_r2_p")
 
-        # 2. அடமானம் மீட்டல் (GL Release)
-        elif txn_category == "GL Release (அடமானம் மீட்டல்)":
-            r_col1, r_col2 = st.columns(2)
-            with r_col1:
-                rel_gl_no = st.text_input("மீட்கப்படும் கடன் எண் *")
-                principal_amount = st.number_input("அசல் தொகை (₹) *", min_value=0.0, step=500.0)
-            with r_col2:
-                interest_amount = st.number_input("வட்டித் தொகை (₹) *", min_value=0.0, step=50.0)
-                other_charges = st.number_input("இதர கட்டணம் (₹)", min_value=0.0, step=10.0)
-            received_amt = principal_amount + interest_amount + other_charges
-            detail_summary = [f"GL: {rel_gl_no}", f"அசல்: ₹{principal_amount}", f"வட்டி: ₹{interest_amount}"]
+                    # கையில் கொடுக்கப்படும் தொகை
+                    paid_amt = balance_payable if is_takeover else total_gp_value
+                    received_amt = 0.0
 
-        # 3. அசல் வரவு & வட்டி வரவு
-        elif txn_category in ["Interest Payment (வட்டி வரவு)", "Part Payment (அசல் வரவு)"]:
-            i_col1, i_col2 = st.columns(2)
-            with i_col1:
-                part_gl_no = st.text_input("கடன் எண் *")
-                principal_amount = st.number_input("அசல் தொகை (₹)", min_value=0.0, step=100.0) if "Part" in txn_category else 0.0
-            with i_col2:
-                interest_amount = st.number_input("வட்டித் தொகை (₹)", min_value=0.0, step=50.0)
-            received_amt = principal_amount + interest_amount
-            detail_summary = [f"GL: {part_gl_no}", f"அசல்: ₹{principal_amount}", f"வட்டி: ₹{interest_amount}"]
+                    # சுருக்கக் குறிப்புகள்
+                    detail_summary = [
+                        f"GP வகை: {gp_mode}",
+                        f"வவுச்சர்: {voucher_no.strip() if voucher_no else '-'}",
+                        f"உருப்படிகள்: {calc_total_items} nos",
+                        f"நிகர எடை: {calc_total_net:.3f}g"
+                    ]
 
-        # 4. Take Over
-        elif txn_category == "Take Over (பிற நிறுவன கடன் மீட்டல்)":
-            to_col1, to_col2 = st.columns(2)
-            with to_col1:
-                bank_source = st.text_input("முந்தைய நிறுவனம் *")
-                prev_loan_no = st.text_input("முந்தைய லோன் எண் *")
-            with to_col2:
-                paid_amt = st.number_input("செலுத்திய தொகை (₹) *", min_value=0.0, step=500.0)
-            detail_summary = [f"வங்கி: {bank_source}", f"கடன் எண்: {prev_loan_no}"]
+                    if is_takeover:
+                        detail_summary.append(f"அட்வான்ஸ்: ₹{advance_paid:,.2f} | மீதி: ₹{balance_payable:,.2f}")
+                    if st.button("➕ பட்டியலில் சேர் (Add to Cart)", type="primary", key="btn_add_gp_to_cart"):
+                        # 1. வவுச்சர் எண் சரிபார்ப்பு
+                        if not voucher_no.strip():
+                            st.warning("⚠️ தயவுசெய்து வவுச்சர் எண்ணை உள்ளிடவும்!")
+                        # 2. மொத்த மதிப்பு சரிபார்ப்பு
+                        elif total_gp_value <= 0:
+                            st.warning("⚠️ மொத்த மதிப்பு ₹0-க்கு மேல் இருக்க வேண்டும்!")
+                        else:
+                            try:
+                                with st.spinner("விவரங்கள் கார்ட்டில் சேர்க்கப்படுகின்றன..."):
+                                    # படங்கள் இருந்தால் பதிவேற்றுதல் (இல்லாவிடில் None)
+                                    cust_pic_url = upload_ornament_image(cust_with_ornaments_img) if cust_with_ornaments_img else None
+                                    orn_pic_url = upload_ornament_image(ornaments_summary_img) if ornaments_summary_img else None
 
-        # 5. RD Open & FD Open
-        elif txn_category in ["RD Open (புதிய RD சேமிப்பு)", "FD Open (புதிய வைப்பு நிதி)"]:
-            f_col1, f_col2 = st.columns(2)
-            with f_col1:
-                acc_no = st.text_input("புதிய கணக்கு எண் *")
-                sel_scheme = st.selectbox("திட்டம் (Scheme) *", rd_scheme_options if "RD" in txn_category else fd_scheme_options)
-            with f_col2:
-                received_amt = st.number_input("வைப்பு / தவணைத் தொகை (₹) *", min_value=0.0, step=500.0)
-            
-            st.markdown("##### 👤 நாமினி விவரங்கள் (Nominee Details)")
-            nom_col1, nom_col2 = st.columns(2)
-            with nom_col1:
-                nominee_name = st.text_input("நாமினி பெயர்")
-                nominee_relation = st.text_input("உறவுமுறை")
-            with nom_col2:
-                nominee_address = st.text_area("நாமினி முகவரி", height=68)
-            detail_summary = [f"A/c: {acc_no}", f"Scheme: {sel_scheme}"]
+                                    # நகை பட்டியல் விவரங்கள் தொகுப்பு
+                                    orn_list_details = []
+                                    for idx, r in enumerate(st.session_state.gp_ornament_rows):
+                                        if r.get("item", "").strip():
+                                            orn_list_details.append(
+                                                f"{idx+1}. {r['item']} ({r.get('count', 1)} nos) - "
+                                                f"Gross: {r.get('gross_wt', 0.0)}g, Net: {r.get('net_wt', 0.0)}g, "
+                                                f"Purity: {r.get('purity', '916 KDM')}"
+                                            )
+                                    full_ornament_text = "\n".join(orn_list_details) if orn_list_details else "விவரங்கள் உள்ளிடப்படவில்லை"
 
-        # 6. RD & FD முதிர்வு / தவணைகள்
-        elif "RD" in txn_category or "FD" in txn_category:
-            d_col1, d_col2 = st.columns(2)
-            with d_col1:
-                acc_no = st.text_input("கணக்கு எண் *")
-            with d_col2:
-                if "Closure" in txn_category:
-                    principal_amount = st.number_input("முதலீடு செய்த/கட்டிய தொகை (₹) *", min_value=0.0, step=100.0)
-                    interest_amount = st.number_input("வட்டி தொகை (₹) *", min_value=0.0, step=50.0)
-                    paid_amt = principal_amount + interest_amount
-                    st.info(f"மொத்த முதிர்வுத் தொகை: ₹{paid_amt:,.2f}")
-                elif "Interest" in txn_category:
-                    paid_amt = st.number_input("வழங்கிய தொகை (₹) *", min_value=0.0, step=100.0)
-                else:
-                    received_amt = st.number_input("பெற்ற தவணைத் தொகை (₹) *", min_value=0.0, step=100.0)
-            detail_summary = [f"A/c: {acc_no}"]
+                                    # சுருக்கக் குறிப்பு
+                                    gp_remarks = f"GP வகை: {gp_mode} | வவுச்சர்: {voucher_no.strip()} | உருப்படிகள்: {calc_total_items} nos | நிகர எடை: {calc_total_net:.3f}g"
+                                    if is_takeover:
+                                        gp_remarks += f" | அட்வான்ஸ்: ₹{advance_paid:,.2f} | மீதி: ₹{balance_payable:,.2f}"
 
-        # 7. GP (Gold Purchase)
-        elif txn_category == "GP (Gold Purchase)":
-            st.markdown("##### 🪙 தங்கம் வாங்குதல் (GP Details)")
-            gp_mode = st.radio("GP வகை தேர்வு செய்க *:", ["Direct (நேரடி கொள்முதல்)", "Takeover (பிற நிறுவன மீட்டல் வழி கொள்முதல்)"], horizontal=True)
-            is_takeover = "Takeover" in gp_mode
+                                    # கார்ட்டில் சேர்த்தல்
+                                    st.session_state.transactions_cart.append({
+                                        "transaction_type": f"GP - {gp_mode}",
+                                        "staff_name": staff,
+                                        "paid_amount": float(paid_amt),              # கையில் வழங்கப்படும் தொகை
+                                        "received_amount": 0.0,
+                                        "amount": float(total_gp_value),
+                                        "remarks": gp_remarks,
+                                        "ornament_details": full_ornament_text,
+                                        "other_charges": 0.0,
+                                        "ornament_image_url": orn_pic_url,
+                                        "customer_photo_url": cust_pic_url,
+                                        "total_weight": float(calc_total_gross),
+                                        "net_weight": float(calc_total_net),
+                                        "gp_number": gp_number,
+                                        "voucher_no": voucher_no.strip(),
+                                        "ref1_name": f"{gp_ref1_name} ({gp_ref1_rel})" if gp_ref1_name else "",
+                                        "ref1_phone": f"{gp_ref1_phone} - {gp_ref1_addr}".strip(" -"),
+                                        "ref2_name": f"{gp_ref2_name} ({gp_ref2_rel})" if gp_ref2_name else "",
+                                        "ref2_phone": f"{gp_ref2_phone} - {gp_ref2_addr}".strip(" -"),
+                                        "principal_amount": float(total_gp_value),
+                                        "interest_amount": 0.0
+                                    })
 
-            gp_col1, gp_col2 = st.columns(2)
-            with gp_col1:
-                branch_code = st.session_state.get("branch_code", st.session_state.branch[:3])
-                auto_gp_no = generate_gp_number(branch_code)
-                gp_number = st.text_input("1) ஜீபி எண் (Auto-generated):", value=auto_gp_no, disabled=True)
-            with gp_col2:
-                voucher_no = st.text_input("2) வவுச்சர் எண் *:", placeholder="எ.கா: VCH-1002")
+                                    # படிவத்தை மீட்டமைத்தல் (Reset)
+                                    st.session_state.gp_ornament_rows = [
+                                        {"item": "", "count": 1, "gross_wt": 0.0, "net_wt": 0.0, "purity": "916 KDM"}
+                                    ]
+                                    st.success("✅ GP நடவடிக்கை வெற்றிகரமாகப் பட்டியலில் சேர்க்கப்பட்டது!")
+                                    st.rerun()
 
-            st.markdown("---")
-            st.markdown("###### 📋 3) நகை விவரப் பட்டியல்:")
-            purity_options = ["916 KDM", "916 BIS Hallmarked", "22ct (91.6%)", "20ct", "18ct (75.0%)", "மற்றவை"]
+                            except Exception as err:
+                                st.error(f"❌ கார்ட்டில் சேர்ப்பதில் பிழை ஏற்பட்டுள்ளது: {err}")
 
-            for idx, row in enumerate(st.session_state.gp_ornament_rows):
-                r_c1, r_c2, r_c3, r_c4, r_c5, r_c6 = st.columns([3, 2, 2.5, 2.5, 2.5, 1])
-                with r_c1:
-                    st.session_state.gp_ornament_rows[idx]["item"] = st.text_input(f"நகை #{idx+1}", value=row["item"], key=f"gp_item_{idx}", placeholder="எ.கா: செயின்")
-                with r_c2:
-                    st.session_state.gp_ornament_rows[idx]["count"] = st.number_input(f"எண்ணிக்கை #{idx+1}", min_value=1, value=int(row["count"]), step=1, key=f"gp_cnt_{idx}")
-                with r_c3:
-                    st.session_state.gp_ornament_rows[idx]["gross_wt"] = st.number_input(f"மொத்த எடை (g) #{idx+1}", min_value=0.0, value=float(row["gross_wt"]), step=0.01, format="%.3f", key=f"gp_gwt_{idx}")
-                with r_c4:
-                    st.session_state.gp_ornament_rows[idx]["net_wt"] = st.number_input(f"நிகர எடை (g) #{idx+1}", min_value=0.0, value=float(row["net_wt"]), step=0.01, format="%.3f", key=f"gp_nwt_{idx}")
-                with r_c5:
-                    curr_pur = row.get("purity", "916 KDM")
-                    pur_idx = purity_options.index(curr_pur) if curr_pur in purity_options else 0
-                    st.session_state.gp_ornament_rows[idx]["purity"] = st.selectbox(f"தூய்மை #{idx+1}", purity_options, index=pur_idx, key=f"gp_pur_{idx}")
-                with r_c6:
-                    st.write("")
-                    st.write("")
-                    if len(st.session_state.gp_ornament_rows) > 1:
-                        if st.button("❌", key=f"del_gp_row_{idx}", help="நீக்கு"):
-                            st.session_state.gp_ornament_rows.pop(idx)
-                            st.rerun()
+                # 8. GS (Gold Sale - தங்கம் விற்பனை)
+                elif txn_category == "GS (Gold Sale)":
+                    gs_col1, gs_col2, gs_col3 = st.columns(3)
+                    with gs_col1:
+                        gs_bill_no = st.text_input("விற்பனை பில் எண் *")
+                        total_weight = st.number_input("மொத்த எடை (Gross Wt - g) *", min_value=0.0, step=0.001, format="%.3f")
+                    with gs_col2:
+                        gs_item_name = st.text_input("பொருள் பெயர்")
+                        net_weight = st.number_input("நிகர எடை (Net Wt - g) *", min_value=0.0, step=0.001, format="%.3f")
+                    with gs_col3:
+                        received_amt = st.number_input("பெற்ற தொகை (Received ₹) *", min_value=0.0, step=500.0)
 
-            if st.button("➕ கூடுதல் நகை சேர்க்க", key="btn_add_gp_row"):
-                st.session_state.gp_ornament_rows.append({"item": "", "count": 1, "gross_wt": 0.0, "net_wt": 0.0, "purity": "916 KDM"})
-                st.rerun()
+                    ornament_details = st.text_area("நகை விபரம் (Ornament Details)", key="gs_details")
+                    ornament_file = st.file_uploader("நகை படம் (Ornament Photo)", type=["jpg", "jpeg", "png"], key="gs_img")
+                    detail_summary = [f"பில்: {gs_bill_no}", f"பொருள்: {gs_item_name}", f"எடை: {net_weight}g"]
 
-            calc_total_gross = sum(float(r["gross_wt"]) for r in st.session_state.gp_ornament_rows)
-            calc_total_net = sum(float(r["net_wt"]) for r in st.session_state.gp_ornament_rows)
-            calc_total_items = sum(int(r["count"]) for r in st.session_state.gp_ornament_rows)
+                # கார்ட்டில் சேர்க்கும் பட்டன் (GP அல்லாத பிற நடவடிக்கைகளுக்கு மட்டும்)
+                if txn_category != "GP (Gold Purchase)":
 
-            st.markdown("---")
-            w_col1, w_col2, w_col3 = st.columns(3)
-            with w_col1:
-                total_weight = st.number_input("4) மொத்த எடை (Gross Wt - g):", value=calc_total_gross, format="%.3f", disabled=True)
-            with w_col2:
-                net_weight = st.number_input("5) மொத்த நிகர எடை (Net Wt - g):", value=calc_total_net, format="%.3f", disabled=True)
-            with w_col3:
-                total_gp_value = st.number_input("6) மொத்த மதிப்பு (Total Value - ₹) *:", min_value=0.0, step=500.0, format="%.2f")
+                    if st.button("➕ பட்டியலில் சேர் (Add to Cart)", type="primary", key="btn_add_to_cart_main"):
+                    # 🌟 1. மாறிகளை முன்னிருப்பாக வரையறுத்தல் (NameError வராமல் தடுக்க)
+                        actual_paid_amt = 0.0
+                        # நகைக்கடனாக இருந்தால் இதர கட்டணங்களைக் கழித்து நிகரத் தொகையைக் கணக்கிடுதல்
+                    if "Pledge" in txn_category:
+                        actual_paid_amt = max(0.0, float(paid_amt) - float(other_charges))
+                    else:
+                        actual_paid_amt = float(paid_amt) if 'paid_amt' in locals() else 0.0
 
-            advance_paid = 0.0
-            balance_payable = total_gp_value
-            if is_takeover:
-                t_col1, t_col2 = st.columns(2)
-                with t_col1:
-                    advance_paid = st.number_input("7) அட்வான்ஸ் பெற்ற தொகை (₹):", min_value=0.0, max_value=float(total_gp_value), step=500.0, format="%.2f")
-                with t_col2:
-                    balance_payable = max(0.0, float(total_gp_value) - float(advance_paid))
-                    st.number_input("8) மீதி தொகை (Balance Payable - ₹):", value=balance_payable, format="%.2f", disabled=True)
+                    chk_received = float(received_amt) if 'received_amt' in locals() else 0.0
 
-            st.markdown("---")
-            img_c1, img_c2 = st.columns(2)
-            with img_c1:
-                cust_with_ornaments_img = st.file_uploader("வாடிக்கையாளர் படம் நகையுடன் *:", type=["jpg", "jpeg", "png"], key="gp_cust_img")
-            with img_c2:
-                ornaments_summary_img = st.file_uploader("நகைகள் விபர படம் *:", type=["jpg", "jpeg", "png"], key="gp_orn_img")
+                    if actual_paid_amt > 0 or chk_received > 0:
+                        all_remarks = " | ".join(detail_summary)
+                        if custom_remarks.strip():
+                            all_remarks += f" ({custom_remarks.strip()})"
+                        
+                        img_url = upload_ornament_image(ornament_file) if ('ornament_file' in locals() and ornament_file) else None
 
-            ref1_c1, ref1_c2, ref1_c3, ref1_c4 = st.columns(4)
-            with ref1_c1:
-                gp_ref1_name = st.text_input("ரெபரண்ஸ் 1 - பெயர்:", key="gp_r1_n")
-            with ref1_c2:
-                gp_ref1_addr = st.text_input("முகவரி:", key="gp_r1_a")
-            with ref1_c3:
-                gp_ref1_rel = st.text_input("உறவுமுறை:", key="gp_r1_r")
-            with ref1_c4:
-                gp_ref1_phone = st.text_input("மொபைல் எண்:", key="gp_r1_p")
+                        st.session_state.transactions_cart.append({
+                            "transaction_type": txn_category,
+                            "staff_name": staff,
+                            "paid_amount": float(actual_paid_amt),
+                            "received_amount": float(chk_received),
+                            "amount": float(actual_paid_amt if actual_paid_amt > 0 else chk_received),
+                            "remarks": all_remarks,
+                            "ornament_details": ornament_details if 'ornament_details' in locals() else "",
+                            "other_charges": float(other_charges) if 'other_charges' in locals() else 0.0,
+                            "ornament_image_url": img_url,
+                            "total_weight": float(total_weight) if 'total_weight' in locals() else 0.0,
+                            "net_weight": float(net_weight) if 'net_weight' in locals() else 0.0,
+                            "gp_number": gp_number if 'gp_number' in locals() else "",
+                            "ref1_name": ref1_name if 'ref1_name' in locals() else "",
+                            "ref1_phone": ref1_phone if 'ref1_phone' in locals() else "",
+                            "ref2_name": ref2_name if 'ref2_name' in locals() else "",
+                            "ref2_phone": ref2_phone if 'ref2_phone' in locals() else "",
+                            "principal_amount": float(paid_amt) if 'paid_amt' in locals() else 0.0,
+                            "interest_amount": float(interest_amount) if 'interest_amount' in locals() else 0.0,
+                            "nominee_name": nominee_name if 'nominee_name' in locals() else "",
+                            "nominee_relation": nominee_relation if 'nominee_relation' in locals() else "",
+                            "nominee_address": nominee_address if 'nominee_address' in locals() else "",
+                        })
 
-            ref2_c1, ref2_c2, ref2_c3, ref2_c4 = st.columns(4)
-            with ref2_c1:
-                gp_ref2_name = st.text_input("ரெபரண்ஸ் 2 - பெயர்:", key="gp_r2_n")
-            with ref2_c2:
-                gp_ref2_addr = st.text_input("முகவரி:", key="gp_r2_a")
-            with ref2_c3:
-                gp_ref2_rel = st.text_input("உறவுமுறை:", key="gp_r2_r")
-            with ref2_c4:
-                gp_ref2_phone = st.text_input("மொபைல் எண்:", key="gp_r2_p")
+                        # ஃபீல்டுகளை ரீசெட் செய்ய கவுண்ட்டரை கூட்டுதல்
+                        if "form_reset_counter" not in st.session_state:
+                            st.session_state.form_reset_counter = 0
+                        st.session_state.form_reset_counter += 1
 
-            paid_amt = balance_payable if is_takeover else total_gp_value
-            received_amt = 0.0
-
-            gp_remarks = f"GP வகை: {gp_mode} | வவுச்சர்: {voucher_no.strip() if voucher_no else '-'} | உருப்படிகள்: {calc_total_items} nos | நிகர எடை: {calc_total_net:.3f}g"
-            if is_takeover:
-                gp_remarks += f" | அட்வான்ஸ்: ₹{advance_paid:,.2f} | மீதி: ₹{balance_payable:,.2f}"
-
-            if st.button("➕ பட்டியலில் சேர் (Add to Cart)", type="primary", key="btn_add_gp_to_cart"):
-                if not voucher_no.strip():
-                    st.warning("⚠️ தயவுசெய்து வவுச்சர் எண்ணை உள்ளிடவும்!")
-                elif total_gp_value <= 0:
-                    st.warning("⚠️ மொத்த மதிப்பு ₹0-க்கு மேல் இருக்க வேண்டும்!")
-                else:
-                    try:
-                        with st.spinner("விவரங்கள் கார்ட்டில் சேர்க்கப்படுகின்றன..."):
-                            cust_pic_url = upload_ornament_image(cust_with_ornaments_img) if cust_with_ornaments_img else None
-                            orn_pic_url = upload_ornament_image(ornaments_summary_img) if ornaments_summary_img else None
-
-                            orn_list_details = []
-                            for idx, r in enumerate(st.session_state.gp_ornament_rows):
-                                if r.get("item", "").strip():
-                                    orn_list_details.append(
-                                        f"{idx+1}. {r['item']} ({r.get('count', 1)} nos) - Gross: {r.get('gross_wt', 0.0)}g, Net: {r.get('net_wt', 0.0)}g, Purity: {r.get('purity', '916 KDM')}"
-                                    )
-                            full_ornament_text = "\n".join(orn_list_details) if orn_list_details else "விவரங்கள் இல்லை"
-
-                            st.session_state.transactions_cart.append({
-                                "transaction_type": f"GP - {gp_mode}",
-                                "staff_name": staff,
-                                "paid_amount": float(paid_amt),
-                                "received_amount": 0.0,
-                                "amount": float(total_gp_value),
-                                "remarks": gp_remarks,
-                                "ornament_details": full_ornament_text,
-                                "other_charges": 0.0,
-                                "ornament_image_url": orn_pic_url,
-                                "customer_photo_url": cust_pic_url,
-                                "total_weight": float(calc_total_gross),
-                                "net_weight": float(calc_total_net),
-                                "gp_number": gp_number,
-                                "voucher_no": voucher_no.strip(),
-                                "ref1_name": f"{gp_ref1_name} ({gp_ref1_rel})" if gp_ref1_name else "",
-                                "ref1_phone": f"{gp_ref1_phone} - {gp_ref1_addr}".strip(" -"),
-                                "ref2_name": f"{gp_ref2_name} ({gp_ref2_rel})" if gp_ref2_name else "",
-                                "ref2_phone": f"{gp_ref2_phone} - {gp_ref2_addr}".strip(" -"),
-                                "principal_amount": float(total_gp_value),
-                                "interest_amount": 0.0
-                            })
-
-                            st.session_state.gp_ornament_rows = [{"item": "", "count": 1, "gross_wt": 0.0, "net_wt": 0.0, "purity": "916 KDM"}]
-                            st.success("✅ GP நடவடிக்கை வெற்றிகரமாகப் பட்டியலில் சேர்க்கப்பட்டது!")
-                            st.rerun()
-                    except Exception as err:
-                        st.error(f"❌ கார்ட்டில் சேர்ப்பதில் பிழை: {err}")
-
-        # 8. GS (Gold Sale)
-        elif txn_category == "GS (Gold Sale)":
-            gs_col1, gs_col2, gs_col3 = st.columns(3)
-            with gs_col1:
-                gs_bill_no = st.text_input("விற்பனை பில் எண் *")
-                total_weight = st.number_input("மொத்த எடை (Gross Wt - g) *", min_value=0.0, step=0.001, format="%.3f")
-            with gs_col2:
-                gs_item_name = st.text_input("பொருள் பெயர்")
-                net_weight = st.number_input("நிகர எடை (Net Wt - g) *", min_value=0.0, step=0.001, format="%.3f")
-            with gs_col3:
-                received_amt = st.number_input("பெற்ற தொகை (Received ₹) *", min_value=0.0, step=500.0)
-
-            ornament_details = st.text_area("நகை விபரம் (Ornament Details)", key="gs_details")
-            ornament_file = st.file_uploader("நகை படம் (Ornament Photo)", type=["jpg", "jpeg", "png"], key="gs_img")
-            detail_summary = [f"பில்: {gs_bill_no}", f"பொருள்: {gs_item_name}", f"எடை: {net_weight}g"]
-
-        # =========================================================================
-        # 🌟 கார்ட்டில் சேர்க்கும் பட்டன் (GP அல்லாத பிற நடவடிக்கைகளுக்கு மட்டும்)
-        # =========================================================================
-        if txn_category != "GP (Gold Purchase)":
-            if st.button("➕ பட்டியலில் சேர் (Add to Cart)", type="primary", key="btn_add_to_cart_main"):
-                if "Pledge" in txn_category:
-                    actual_paid_amt = max(0.0, float(paid_amt) - float(other_charges))
-                else:
-                    actual_paid_amt = float(paid_amt)
-
-                chk_received = float(received_amt)
-
-                if actual_paid_amt > 0 or chk_received > 0:
-                    all_remarks = " | ".join(detail_summary)
-                    if custom_remarks.strip():
-                        all_remarks += f" ({custom_remarks.strip()})"
-
-                    img_url = upload_ornament_image(ornament_file) if ornament_file else None
-
-                    st.session_state.transactions_cart.append({
-                        "transaction_type": txn_category,
-                        "staff_name": staff,
-                        "paid_amount": float(actual_paid_amt),
-                        "received_amount": float(chk_received),
-                        "amount": float(actual_paid_amt if actual_paid_amt > 0 else chk_received),
-                        "remarks": all_remarks,
-                        "ornament_details": ornament_details or "",
-                        "other_charges": float(other_charges),
-                        "ornament_image_url": img_url,
-                        "total_weight": float(total_weight),
-                        "net_weight": float(net_weight),
-                        "gp_number": gp_number or "",
-                        "ref1_name": ref1_name or "",
-                        "ref1_phone": ref1_phone or "",
-                        "ref2_name": ref2_name or "",
-                        "ref2_phone": ref2_phone or "",
-                        "principal_amount": float(paid_amt),
-                        "interest_amount": float(interest_amount),
-                        "nominee_name": nominee_name or "",
-                        "nominee_relation": nominee_relation or "",
-                        "nominee_address": nominee_address or "",
-                    })
-
-                    st.success(f"'{txn_category}' வெற்றிகரமாகப் பட்டியலில் சேர்க்கப்பட்டது!")
-                    st.rerun()
-                else:
-                    st.error("தொகையைச் சரியாக உள்ளிடவும்.")
+                        st.success(f"'{txn_category}' வெற்றிகரமாகப் பட்டியலில் சேர்க்கப்பட்டது!")
+                        st.rerun()
+                    else:
+                        st.error("தொகையைச் சரியாக உள்ளிடவும்.")
                     
                     # 🌟 உறுதி ஆவணப் பதிவிறக்கப் பகுதி (Session State இருக்கும் வரை மறையாது)
                 if st.session_state.get("current_declaration"):
@@ -2545,55 +2610,50 @@ with branch_tab1:
                             type="primary",
                             key=f"dl_btn_{st.session_state.get('declaration_gl_no')}"
                         )
-                    st.write(f"கார்ட்டில் உள்ள மொத்த உருப்படிகள்: {len(st.session_state.transactions_cart)}")
 
-        # =========================================================================
-        # 🛒 கார்ட் பட்டியல் காட்டும் பகுதி
-        # =========================================================================
-        if len(st.session_state.transactions_cart) > 0:
-            st.markdown("### 🛒 நடவடிக்கைகள் பட்டியல்:")
-            df_cart = pd.DataFrame(st.session_state.transactions_cart)
-            display_cols = [c for c in ["transaction_type", "paid_amount", "received_amount", "net_weight", "remarks"] if c in df_cart.columns]
-            st.dataframe(df_cart[display_cols] if display_cols else df_cart, use_container_width=True)
+                if st.session_state.transactions_cart:
+                    st.markdown("### 🛒 நடவடிக்கைகள் பட்டியல்:")
+                    df_cart = pd.DataFrame(st.session_state.transactions_cart)
+                    st.dataframe(df_cart, use_container_width=True)
 
-            total_paid = sum(float(x.get("paid_amount", 0)) for x in st.session_state.transactions_cart)
-            total_received = sum(float(x.get("received_amount", 0)) for x in st.session_state.transactions_cart)
-            net_amount = total_paid - total_received
+                    total_paid = df_cart["paid_amount"].sum()
+                    total_received = df_cart["received_amount"].sum()
+                    net_amount = total_paid - total_received
 
-            c1, c2, c3 = st.columns(3)
-            c1.metric("மொத்த பட்டுவாடா", f"₹{total_paid:,.2f}")
-            c2.metric("மொத்த வரவு", f"₹{total_received:,.2f}")
-            c3.metric("நிகரத் தொகை", f"₹{abs(net_amount):,.2f}")
+                    c1, c2, c3 = st.columns(3)
+                    c1.metric("மொத்த பட்டுவாடா", f"₹{total_paid:,.2f}")
+                    c2.metric("மொத்த வரவு", f"₹{total_received:,.2f}")
+                    c3.metric("நிகரத் தொகை", f"₹{abs(net_amount):,.2f}")
 
-            cart_b1, cart_b2 = st.columns([4, 1])
-            with cart_b1:
-                if st.button("பணம் செலுத்தும் முறை மற்றும் OTP பிரிவிற்குச் செல் ➔", type="primary", key="btn_goto_otp"):
-                    st.session_state.current_visit["net_amount"] = net_amount
-                    st.session_state.current_visit["total_paid"] = total_paid
-                    st.session_state.current_visit["total_received"] = total_received
-                    st.session_state.current_visit["step"] = "CASH_OTP"
-                    st.rerun()
-            with cart_b2:
-                if st.button("பட்டியலை அழி", key="btn_clear_cart"):
-                    st.session_state.transactions_cart = []
-                    st.rerun()
+                    cart_b1, cart_b2 = st.columns([4, 1])
+                    with cart_b1:
+                        if st.button("பணம் செலுத்தும் முறை மற்றும் OTP பிரிவிற்குச் செல் ➔", type="primary"):
+                            st.session_state.current_visit["net_amount"] = net_amount
+                            st.session_state.current_visit["total_paid"] = total_paid
+                            st.session_state.current_visit["total_received"] = total_received
+                            st.session_state.current_visit["step"] = "CASH_OTP"
+                            st.rerun()
+                    with cart_b2:
+                        if st.button("பட்டியலை அழி"):
+                            st.session_state.transactions_cart = []
+                            st.rerun()
 
             # -----------------------------------------------------------------
             # Step 3: பணப் பரிமாற்றம், 8 ரூபாய் நோட்டுகள் & OTP சரிபார்ப்பு
             # -----------------------------------------------------------------
-                elif st.session_state.current_visit["step"] == "CASH_OTP":
-                    visit = st.session_state.current_visit
-                    net_target = visit["net_amount"]
-                    total_needed_abs = abs(net_target)
-                    current_drawer = get_current_branch_cash_drawer(st.session_state.branch_id)
-                    otp_already_sent = "generated_otp" in st.session_state and st.session_state.generated_otp is not None
+            elif st.session_state.current_visit["step"] == "CASH_OTP":
+                visit = st.session_state.current_visit
+                net_target = visit["net_amount"]
+                total_needed_abs = abs(net_target)
+                current_drawer = get_current_branch_cash_drawer(st.session_state.branch_id)
+                otp_already_sent = "generated_otp" in st.session_state and st.session_state.generated_otp is not None
 
-                    st.subheader("படி 3: பணப் பரிமாற்ற முறை & நோட்டுகள் / மீதித் தொகை கணக்கீடு")
-                    hdr_text = (
-                        f"💸 வாடிக்கையாளருக்கு வழங்க வேண்டிய நிகரத் தொகை (Pay-OUT): ₹{net_target:,.2f}"
-                        if net_target > 0
-                        else f"💰 வாடிக்கையாளரிடம் பெற வேண்டிய நிகரத் தொகை (Pay-IN): ₹{total_needed_abs:,.2f}"
-                    )
+                st.subheader("படி 3: பணப் பரிமாற்ற முறை & நோட்டுகள் / மீதித் தொகை கணக்கீடு")
+                hdr_text = (
+                    f"💸 வாடிக்கையாளருக்கு வழங்க வேண்டிய நிகரத் தொகை (Pay-OUT): ₹{net_target:,.2f}"
+                    if net_target > 0
+                    else f"💰 வாடிக்கையாளரிடம் பெற வேண்டிய நிகரத் தொகை (Pay-IN): ₹{total_needed_abs:,.2f}"
+                )
                 st.info(f"**{hdr_text}** (வாடிக்கையாளர்: {visit['customer_name']})")
 
                 with st.container(border=True):
@@ -2778,33 +2838,19 @@ with branch_tab1:
                                     visit_res = supabase.table("customer_visits").insert(visit_data).execute()
                                     created_visit_id = visit_res.data[0]["id"]
 
-                                    # கார்ட்டில் உள்ள ஒவ்வொரு பரிவர்த்தனையையும் சேமித்தல்
                                     for txn in st.session_state.transactions_cart:
-                                        txn_data = {
-                                            **txn, 
-                                            "visit_id": created_visit_id, 
-                                            "branch_id": st.session_state.branch_id
-                                        }
-                                        try:
-                                            # 1. txn_data கொண்டு முழுமையாகச் சேமிக்க முயற்சித்தல்
-                                            supabase.table("transactions").insert(txn_data).execute()
-                                        except Exception as e:
-                                            # 2. காலம்கள் இல்லாத பட்சத்தில் பாதுகாப்பான மாற்று முயற்சி
-                                            clean_txn = {k: v for k, v in txn_data.items() if k not in ["voucher_no", "customer_photo_url"]}
-                                            try:
-                                                supabase.table("transactions").insert(clean_txn).execute()
-                                                st.warning("⚠️ கூடுதல் ஃபீல்டுகள் டேட்டாபேஸில் காலம் இல்லாததால் நீக்கப்பட்டு சேமிக்கப்பட்டது.")
-                                            except Exception as retry_err:
-                                                st.error(f"முழுமையான பிழை விவரம்: {retry_err}")
-                                                raise retry_err
+                                        txn["visit_id"] = created_visit_id
+                                        supabase.table("transactions").insert(txn).execute()
 
-                                    # லூப் முடிந்த பின் ஸ்டேட் ரீசெட் செய்தல்
                                     st.success(f"🎉 வருகை {visit['visit_no']} வெற்றிகரமாக நிறைவுபெற்றது!")
                                     st.session_state.current_visit = None
                                     st.session_state.transactions_cart = []
                                     st.session_state.generated_otp = None
+
+                                    # புதிய உறுதி ஆவண மாறிகளை அழிக்கும் வரிகள்:
                                     st.session_state.current_declaration = None
                                     st.session_state.declaration_gl_no = None
+
                                     st.rerun()
                             else:
                                 st.error("தவறான OTP! சரியாக உள்ளிடவும்.")
