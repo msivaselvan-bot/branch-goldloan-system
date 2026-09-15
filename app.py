@@ -2213,38 +2213,38 @@ else:
                         fd_scheme_options = [s["scheme_name"] for s in active_fd_schemes] if active_fd_schemes else ["Standard FD 9.5%"]
                         rd_scheme_options = [s["scheme_name"] for s in active_rd_schemes] if active_rd_schemes else ["Standard RD 10%"]
 
-                        txn_category = st.selectbox(
-                            "நடவடிக்கை வகை:",
-                            [
-                                "Pledge (புதிய நகைக் கடன்)", "GL Release (அடமானம் மீட்டல்)",
-                                "Interest Payment (வட்டி வரவு)", "Part Payment (அசல் வரவு)",
-                                "Take Over (பிற நிறுவன கடன் மீட்டல்)", "RD Open (புதிய RD சேமிப்பு)",
-                                "RD Due (RD தவணை)", "RD Closure (RD முதிர்வு)",
-                                "FD Open (புதிய வைப்பு நிதி)", "FD Interest (FD வட்டி)",
-                                "FD Closure (FD முதிர்வு)", "GP (Gold Purchase)", "GS (Gold Sale)"
-                            ],
-                            key="dyn_txn_sel"
-                        )
+        txn_category = st.selectbox(
+            "நடவடிக்கை வகை:",
+            [
+                "Pledge (புதிய நகைக் கடன்)", "GL Release (அடமானம் மீட்டல்)",
+                "Interest Payment (வட்டி வரவு)", "Part Payment (அசல் வரவு)",
+                "Take Over (பிற நிறுவன கடன் மீட்டல்)", "RD Open (புதிய RD சேமிப்பு)",
+                "RD Due (RD தவணை)", "RD Closure (RD முதிர்வு)",
+                "FD Open (புதிய வைப்பு நிதி)", "FD Interest (FD வட்டி)",
+                "FD Closure (FD முதிர்வு)", "GP (Gold Purchase)", "GS (Gold Sale)"
+            ],
+            key="dyn_txn_sel"
+        )
 
-                        col_st1, col_st2 = st.columns(2)
-                        with col_st1:
-                            staff = st.selectbox("காரணப் பணியாளர்:", current_staff_list)
-                        with col_st2:
-                            custom_remarks = st.text_input("கூடுதல் குறிப்பு:", placeholder="எ.கா: சிறப்பு தள்ளுபடி")
+        col_st1, col_st2 = st.columns(2)
+        with col_st1:
+            staff = st.selectbox("காரணப் பணியாளர்:", current_staff_list)
+        with col_st2:
+            custom_remarks = st.text_input("கூடுதல் குறிப்பு:", placeholder="எ.கா: சிறப்பு தள்ளுபடி")
 
-                        st.markdown("---")
-                        paid_amt, received_amt, detail_summary = 0.0, 0.0, []
-                        ornament_details = None
-                        other_charges = 0.0
-                        total_weight = 0.0
-                        net_weight = 0.0
-                        gp_number = None
-                        ref1_name, ref1_phone = None, None
-                        ref2_name, ref2_phone = None, None
-                        principal_amount = 0.0
-                        interest_amount = 0.0
-                        nominee_name, nominee_relation, nominee_address = None, None, None
-                        ornament_file = None
+        st.markdown("---")
+        paid_amt, received_amt, detail_summary = 0.0, 0.0, []
+        ornament_details = None
+        other_charges = 0.0
+        total_weight = 0.0
+        net_weight = 0.0
+        gp_number = None
+        ref1_name, ref1_phone = None, None
+        ref2_name, ref2_phone = None, None
+        principal_amount = 0.0
+        interest_amount = 0.0
+        nominee_name, nominee_relation, nominee_address = None, None, None
+        ornament_file = None
 
         # 1. நகைக்கடன் (Pledge)
         if txn_category == "Pledge (புதிய நகைக் கடன்)":
@@ -2256,20 +2256,20 @@ else:
                 cur_rpg = float(sel_scheme_obj.get("rate_per_gram", 0) or 0)
                 if cur_rpg > 0:
                     st.info(f"💎 **இந்த ஸ்கீமின் RPG:** `₹{cur_rpg:,.2f} / gram`")
-            with p_col2:
-                total_weight = st.number_input("மொத்த எடை (Gross Weight - gms) *", min_value=0.0, step=0.001, format="%.3f")
-                net_weight = st.number_input("நிகர எடை (Net Weight - gms) *", min_value=0.0, step=0.001, format="%.3f")
-                item_count = st.number_input("நகை எண்ணிக்கை", min_value=1, step=1)
-            with p_col3:
-                max_eligible_calc = net_weight * cur_rpg if cur_rpg > 0 else 0.0
-                if cur_rpg > 0 and net_weight > 0:
-                    st.success(f"⚖️ அதிகபட்ச கடன்: **₹{max_eligible_calc:,.2f}**")
-                paid_amt = st.number_input("கடன் தொகை (Paid ₹) *", min_value=0.0, step=500.0)
-                other_charges = st.number_input("இதர கட்டணங்கள் (Other Charges ₹)", min_value=0.0, step=10.0)
+                    with p_col2:
+                        total_weight = st.number_input("மொத்த எடை (Gross Weight - gms) *", min_value=0.0, step=0.001, format="%.3f")
+                        net_weight = st.number_input("நிகர எடை (Net Weight - gms) *", min_value=0.0, step=0.001, format="%.3f")
+                        item_count = st.number_input("நகை எண்ணிக்கை", min_value=1, step=1)
+                    with p_col3:
+                        max_eligible_calc = net_weight * cur_rpg if cur_rpg > 0 else 0.0
+                        if cur_rpg > 0 and net_weight > 0:
+                            st.success(f"⚖️ அதிகபட்ச கடன்: **₹{max_eligible_calc:,.2f}**")
+                        paid_amt = st.number_input("கடன் தொகை (Paid ₹) *", min_value=0.0, step=500.0)
+                        other_charges = st.number_input("இதர கட்டணங்கள் (Other Charges ₹)", min_value=0.0, step=10.0)
 
-            ornament_details = st.text_area("நகை விபரம் (Ornament Details)")
-            ornament_file = st.file_uploader("நகை படம் (Ornament Photo)", type=["jpg", "jpeg", "png"], key="pledge_img")
-            detail_summary = [f"GL: {new_gl_no}", f"ஸ்கீம்: {scheme_name}", f"RPG: ₹{cur_rpg}", f"எடை: {net_weight}g"]
+                    ornament_details = st.text_area("நகை விபரம் (Ornament Details)")
+                    ornament_file = st.file_uploader("நகை படம் (Ornament Photo)", type=["jpg", "jpeg", "png"], key="pledge_img")
+                    detail_summary = [f"GL: {new_gl_no}", f"ஸ்கீம்: {scheme_name}", f"RPG: ₹{cur_rpg}", f"எடை: {net_weight}g"]
 
         # 2. அடமானம் மீட்டல் (GL Release)
         elif txn_category == "GL Release (அடமானம் மீட்டல்)":
