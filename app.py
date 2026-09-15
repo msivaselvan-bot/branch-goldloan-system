@@ -2838,19 +2838,33 @@ else:
                                     visit_res = supabase.table("customer_visits").insert(visit_data).execute()
                                     created_visit_id = visit_res.data[0]["id"]
 
+                                    # கார்ட்டில் உள்ள ஒவ்வொரு பரிவர்த்தனையையும் சேமித்தல்
                                     for txn in st.session_state.transactions_cart:
-                                        txn["visit_id"] = created_visit_id
-                                        supabase.table("transactions").insert(txn).execute()
+                                        txn_data = {
+                                            **txn, 
+                                            "visit_id": created_visit_id, 
+                                            "branch_id": st.session_state.branch_id
+                                        }
+                                        try:
+                                            # 1. txn_data கொண்டு முழுமையாகச் சேமிக்க முயற்சித்தல்
+                                            supabase.table("transactions").insert(txn_data).execute()
+                                        except Exception as e:
+                                            # 2. காலம்கள் இல்லாத பட்சத்தில் பாதுகாப்பான மாற்று முயற்சி
+                                            clean_txn = {k: v for k, v in txn_data.items() if k not in ["voucher_no", "customer_photo_url"]}
+                                            try:
+                                                supabase.table("transactions").insert(clean_txn).execute()
+                                                st.warning("⚠️ கூடுதல் ஃபீல்டுகள் டேட்டாபேஸில் காலம் இல்லாததால் நீக்கப்பட்டு சேமிக்கப்பட்டது.")
+                                            except Exception as retry_err:
+                                                st.error(f"முழுமையான பிழை விவரம்: {retry_err}")
+                                                raise retry_err
 
+                                    # லூப் முடிந்த பின் ஸ்டேட் ரீசெட் செய்தல்
                                     st.success(f"🎉 வருகை {visit['visit_no']} வெற்றிகரமாக நிறைவுபெற்றது!")
                                     st.session_state.current_visit = None
                                     st.session_state.transactions_cart = []
                                     st.session_state.generated_otp = None
-
-                                    # புதிய உறுதி ஆவண மாறிகளை அழிக்கும் வரிகள்:
                                     st.session_state.current_declaration = None
                                     st.session_state.declaration_gl_no = None
-
                                     st.rerun()
                             else:
                                 st.error("தவறான OTP! சரியாக உள்ளிடவும்.")
