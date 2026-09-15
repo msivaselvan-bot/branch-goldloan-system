@@ -2291,10 +2291,18 @@ else:
             # ---------------------------------------------------------------------
             # படி 2: வணிக நடவடிக்கைகள் சேர்த்தல் (TRANSACTIONS)
             # ---------------------------------------------------------------------
+            # ---------------------------------------------------------------------
+            # படி 2: வணிக நடவடிக்கைகள் சேர்த்தல் (TRANSACTIONS)
+            # ---------------------------------------------------------------------
             elif st.session_state.current_visit and st.session_state.current_visit.get("step") == "TRANSACTIONS":
                 visit = st.session_state.current_visit
                 st.success(f"வாடிக்கையாளர்: **{visit['customer_name']}** (வருகை எண்: **{visit['visit_no']}**)")
                 st.subheader("படி 2: வணிக நடவடிக்கைகள் சேர்த்தல்")
+
+                # 🌟 ஃபார்ம் ரீசெட் கவுண்டர் (இங்கேதான் வைக்க வேண்டும்)
+                if "form_reset_counter" not in st.session_state:
+                    st.session_state.form_reset_counter = 0
+                fc = st.session_state.form_reset_counter
 
                 active_g_schemes = supabase.table("gold_loan_schemes").select("*").eq("is_active", True).execute().data or []
                 active_fd_schemes = supabase.table("fd_schemes").select("*").eq("is_active", True).execute().data or []
@@ -2350,19 +2358,19 @@ else:
                             st.info(f"💎 **இந்த ஸ்கீமின் RPG:** `₹{cur_rpg:,.2f} / gram`")
                     
                     with p_col2:
-                        total_weight = st.number_input("மொத்த எடை (Gross Weight - gms) *", min_value=0.0, step=0.001, format="%.3f")
-                        net_weight = st.number_input("நிகர எடை (Net Weight - gms) *", min_value=0.0, step=0.001, format="%.3f")
+                        total_weight = st.number_input("மொத்த எடை (Gross Weight - gms) *", min_value=0.0, step=0.001, format="%.3f", key=f"gwt_in_{fc}")
+                        net_weight = st.number_input("நிகர எடை (Net Weight - gms) *", min_value=0.0, step=0.001, format="%.3f", key=f"nwt_in_{fc}")
                         item_count = st.number_input("நகை எண்ணிக்கை", min_value=1, step=1)
                     
                     with p_col3:
                         max_eligible_calc = net_weight * cur_rpg if cur_rpg > 0 else 0.0
                         if cur_rpg > 0 and net_weight > 0:
                             st.success(f"⚖️ அதிகபட்ச கடன்: **₹{max_eligible_calc:,.2f}**")
-                        paid_amt = st.number_input("கடன் தொகை (Paid ₹) *", min_value=0.0, step=500.0)
-                        other_charges = st.number_input("இதர கட்டணங்கள் (Other Charges ₹)", min_value=0.0, step=10.0)
+                        paid_amt = st.number_input("கடன் தொகை (Paid ₹) *", min_value=0.0, step=500.0, key=f"amt_in_{fc}")
+                        other_charges = st.number_input("இதர கட்டணங்கள் (Other Charges ₹)", min_value=0.0, step=10.0, key=f"chg_in_{fc}")
 
-                    ornament_details = st.text_area("நகை விபரம் (Ornament Details)")
-                    ornament_file = st.file_uploader("நகை படம் (Ornament Photo)", type=["jpg", "jpeg", "png"], key="pledge_img")
+                    ornament_details = st.text_area("நகை விபரம்", key=f"orn_det_{fc}")
+                    ornament_file = st.file_uploader("நகை படம்", type=["jpg", "jpeg", "png"], key=f"orn_file_{fc}")
                     detail_summary = [f"GL: {new_gl_no}", f"ஸ்கீம்: {scheme_name}", f"RPG: ₹{cur_rpg}", f"எடை: {net_weight}g"]
 
                 # 2. அடமானம் மீட்டல் (GL Release)
@@ -2640,24 +2648,30 @@ else:
                                 "nominee_address": nominee_address if ('nominee_address' in locals() and nominee_address) else "",
                             })
 
-                            if "Pledge" in txn_category:
-                                decl_payload = {
-                                    "customer_name": visit.get("customer_name", ""),
-                                    "address": visit.get("address", ""),
-                                    "contact_number": visit.get("mobile", ""),
-                                    "branch_name": st.session_state.get("branch", ""),
-                                    "pledge_date": datetime.now().strftime("%d-%m-%Y"),
-                                    "loan_number": new_gl_no if 'new_gl_no' in locals() else "",
-                                    "loan_amount": paid_amt if 'paid_amt' in locals() else 0.0,
-                                    "current_date": datetime.now().strftime("%d-%m-%Y")
-                                }
-                                st.session_state.declaration_gl_no = new_gl_no if 'new_gl_no' in locals() else "GL"
-                                st.session_state.current_declaration = generate_declaration_html(decl_payload)
+                    if "Pledge" in txn_category:
+                        decl_payload = {
+                            "customer_name": visit.get("customer_name", ""),
+                            "address": visit.get("address", ""),
+                            "contact_number": visit.get("mobile", ""),
+                            "branch_name": st.session_state.get("branch", ""),
+                            "pledge_date": datetime.now().strftime("%d-%m-%Y"),
+                            "loan_number": new_gl_no if 'new_gl_no' in locals() else "",
+                            "loan_amount": paid_amt if 'paid_amt' in locals() else 0.0,
+                            "current_date": datetime.now().strftime("%d-%m-%Y")
+                        }
+                        st.session_state.declaration_gl_no = new_gl_no if 'new_gl_no' in locals() else "GL"
+                        st.session_state.current_declaration = generate_declaration_html(decl_payload)
 
-                            st.success(f"'{txn_category}' வெற்றிகரமாகப் பட்டியலில் சேர்க்கப்பட்டது!")
-                            st.rerun()
-                        else:
-                            st.error("தொகையைச் சரியாக உள்ளிடவும்.")
+                    # 🌟 2. கார்ட்டில் சேர்க்கப்பட்ட பிறகு பீல்டுகளை ரீசெட் செய்தல்
+                    if "form_reset_counter" not in st.session_state:
+                        st.session_state.form_reset_counter = 0
+                    st.session_state.form_reset_counter += 1
+
+                    # 🌟 3. GP வகைக்கான நகை வரிசையை ஆரம்ப நிலைக்கு மாற்றுதல்
+                    st.session_state.gp_ornament_rows = [{"item": "", "count": 1, "gross_wt": 0.0, "net_wt": 0.0, "purity": "916 KDM"}]
+
+                    st.success(f"'{txn_category}' வெற்றிகரமாகப் பட்டியலில் சேர்க்கப்பட்டது!")
+                    st.rerun()
 
                 # உறுதி ஆவணப் பதிவிறக்கப் பகுதி
                 if st.session_state.get("current_declaration"):
