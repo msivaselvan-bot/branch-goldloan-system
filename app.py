@@ -2032,16 +2032,16 @@ else:
                             else:
                                 st.warning("⚠️ தயவுசெய்து ஆவணங்களைப் பதிவேற்றம் செய்யவும்.")
 
-        with branch_tab1:
-    staff_res = supabase.table("users").select("name").eq("branch_id", st.session_state.branch_id).eq("is_active", True).execute()
-    current_staff_list = ["Walk-in (நேரடி வருகை)"] + [s["name"] for s in staff_res.data] if staff_res.data else ["Walk-in (நேரடி வருகை)"]
+with branch_tab1:
+        staff_res = supabase.table("users").select("name").eq("branch_id", st.session_state.branch_id).eq("is_active", True).execute()
+        current_staff_list = ["Walk-in (நேரடி வருகை)"] + [s["name"] for s in staff_res.data] if staff_res.data else ["Walk-in (நேரடி வருகை)"]
 
     # =========================================================================
     # படி 1: வாடிக்கையாளர் வருகைப் பதிவு (Visit Token)
     # =========================================================================
-    if st.session_state.current_visit is None:
-        st.subheader("படி 1: வாடிக்கையாளர் வருகைப் பதிவு (Visit Token)")
-        v_type = st.radio("வாடிக்கையாளர் வகை:", ["ஏற்கனவே உள்ள வாடிக்கையாளர் (Existing Customer)", "புதிய வாடிக்கையாளர் பதிவு (New Customer)"], horizontal=True)
+        if st.session_state.current_visit is None:
+            st.subheader("படி 1: வாடிக்கையாளர் வருகைப் பதிவு (Visit Token)")
+            v_type = st.radio("வாடிக்கையாளர் வகை:", ["ஏற்கனவே உள்ள வாடிக்கையாளர் (Existing Customer)", "புதிய வாடிக்கையாளர் பதிவு (New Customer)"], horizontal=True)
 
         if "Existing" in v_type:
             search_query = st.text_input("பெயர் / மொபைல் எண் / Customer ID:", placeholder="எ.கா: ராம் அல்லது 98765...", key="live_cust_search")
