@@ -1482,25 +1482,47 @@ else:
             st.caption("தேர்ந்தெடுக்கப்பட்ட கிளையின் தொடக்க ரொக்க இருப்பு மற்றும் அனைத்து 8 டினாமினேஷன் நோட்டுகளை உள்ளிடவும்.")
             
             sel_op_branch = st.selectbox("கிளையைத் தேர்ந்தெடுக்கவும் *:", list(branch_options.keys()), key="sel_op_b")
+            selected_b_id = int(branch_options[sel_op_branch])
             
-            with st.form("admin_op_form"):
+            # 🌟 தேர்ந்தெடுக்கப்பட்ட கிளையின் சமீபத்திய பதிவை எடுத்து கட்டங்களில் முன்கூட்டியே நிரப்புதல் (Pre-fill)
+            latest_b_record = (
+                supabase.table("branch_cash_box")
+                .select("id, entry_date, opening_denomination")
+                .eq("branch_id", selected_b_id)
+                .order("id", desc=True)
+                .limit(1)
+                .execute()
+            )
+            
+            prev_den = {"500": 0, "200": 0, "100": 0, "50": 0, "20": 0, "10": 0, "5": 0, "coins": 0.0}
+            if latest_b_record.data and latest_b_record.data[0].get("opening_denomination"):
+                raw_d = latest_b_record.data[0]["opening_denomination"]
+                if isinstance(raw_d, str):
+                    try:
+                        raw_d = json.loads(raw_d)
+                    except Exception:
+                        raw_d = {}
+                for k in prev_den:
+                    prev_den[k] = float(raw_d.get(k, 0) or 0) if k == "coins" else int(raw_d.get(k, 0) or 0)
+
+            # விட்ஜெட் கீ கிளையின் ID-யோடு இணைக்கப்படுவதால் பழைய கேச்சிங் சிக்கல் வராது
+            with st.form(f"admin_op_form_{selected_b_id}"):
                 st.markdown("##### 💵 ரூபாய் நோட்டுகள் & நாணயங்கள் எண்ணிக்கை:")
                 
                 op_c1, op_c2, op_c3, op_c4 = st.columns(4)
                 with op_c1:
-                    op_500 = st.number_input("₹500 தாள்கள்", min_value=0, step=1, key="adm_op_500")
-                    op_20 = st.number_input("₹20 தாள்கள்", min_value=0, step=1, key="adm_op_20")
+                    op_500 = st.number_input("₹500 தாள்கள்", min_value=0, value=int(prev_den["500"]), step=1, key=f"adm_op_500_{selected_b_id}")
+                    op_20 = st.number_input("₹20 தாள்கள்", min_value=0, value=int(prev_den["20"]), step=1, key=f"adm_op_20_{selected_b_id}")
                 with op_c2:
-                    op_200 = st.number_input("₹200 தாள்கள்", min_value=0, step=1, key="adm_op_200")
-                    op_10 = st.number_input("₹10 தாள்கள்", min_value=0, step=1, key="adm_op_10")
+                    op_200 = st.number_input("₹200 தாள்கள்", min_value=0, value=int(prev_den["200"]), step=1, key=f"adm_op_200_{selected_b_id}")
+                    op_10 = st.number_input("₹10 தாள்கள்", min_value=0, value=int(prev_den["10"]), step=1, key=f"adm_op_10_{selected_b_id}")
                 with op_c3:
-                    op_100 = st.number_input("₹100 தாள்கள்", min_value=0, step=1, key="adm_op_100")
-                    op_5 = st.number_input("₹5 தாள்கள்", min_value=0, step=1, key="adm_op_5")
+                    op_100 = st.number_input("₹100 தாள்கள்", min_value=0, value=int(prev_den["100"]), step=1, key=f"adm_op_100_{selected_b_id}")
+                    op_5 = st.number_input("₹5 தாள்கள்", min_value=0, value=int(prev_den["5"]), step=1, key=f"adm_op_5_{selected_b_id}")
                 with op_c4:
-                    op_50 = st.number_input("₹50 தாள்கள்", min_value=0, step=1, key="adm_op_50")
-                    op_coins = st.number_input("நாணயங்கள் (₹)", min_value=0.0, step=1.0, key="adm_op_coins")
+                    op_50 = st.number_input("₹50 தாள்கள்", min_value=0, value=int(prev_den["50"]), step=1, key=f"adm_op_50_{selected_b_id}")
+                    op_coins = st.number_input("நாணயங்கள் (₹)", min_value=0.0, value=float(prev_den["coins"]), step=1.0, key=f"adm_op_coins_{selected_b_id}")
 
-                # மொத்த தொடக்க இருப்பு கணக்கீடு:
                 calc_total = (
                     (op_500 * 500) + (op_200 * 200) + (op_100 * 100) + (op_50 * 50) +
                     (op_20 * 20) + (op_10 * 10) + (op_5 * 5) + op_coins
@@ -1511,20 +1533,26 @@ else:
 
                 if st.form_submit_button("துவக்க இருப்பைச் சேமி (Save Opening Balance)", type="primary"):
                     try:
-                        selected_b_id = int(branch_options[sel_op_branch])
                         today_str = str(date.today())
+                        
+                        den_payload = {
+                            "500": int(op_500),
+                            "200": int(op_200),
+                            "100": int(op_100),
+                            "50": int(op_50),
+                            "20": int(op_20),
+                            "10": int(op_10),
+                            "5": int(op_5),
+                            "coins": float(op_coins)
+                        }
 
                         payload = {
                             "branch_id": selected_b_id,
                             "entry_date": today_str,
                             "opening_balance": float(calc_total),
-                            "opening_denomination": {
-                                "500": int(op_500), "200": int(op_200), "100": int(op_100), "50": int(op_50),
-                                "20": int(op_20), "10": int(op_10), "5": int(op_5), "coins": float(op_coins)
-                            }
+                            "opening_denomination": den_payload
                         }
 
-                        # 🌟 1. இன்றைய தேதிக்கு ஏற்கனவே பதிவு உள்ளதா எனப் பார்த்தல்
                         existing_check = (
                             supabase.table("branch_cash_box")
                             .select("id")
@@ -1534,12 +1562,10 @@ else:
                         )
 
                         if existing_check.data and len(existing_check.data) > 0:
-                            # ஏற்கனவே இருந்தால் அதை Update செய்தல்
                             rec_id = existing_check.data[0]["id"]
                             supabase.table("branch_cash_box").update(payload).eq("id", rec_id).execute()
-                            st.success(f"✅ {sel_op_branch} கிளைக்கான இன்றைய இருப்பு வெற்றிகரமாகப் புதுப்பிக்கப்பட்டது!")
+                            st.success(f"✅ {sel_op_branch} கிளைக்கான இருப்பு வெற்றிகரமாகப் புதுப்பிக்கப்பட்டது! (₹500 தாள்கள்: {op_500})")
                         else:
-                            # புதிய பதிவாக Insert செய்தல்
                             supabase.table("branch_cash_box").insert(payload).execute()
                             st.success(f"✅ {sel_op_branch} கிளைக்கான துவக்க இருப்பு ₹{calc_total:,.2f} சேமிக்கப்பட்டது!")
 
