@@ -2610,32 +2610,36 @@ else:
                             key=f"dl_btn_{st.session_state.get('declaration_gl_no')}"
                         )
 
-                if st.session_state.transactions_cart:
-                    st.markdown("### 🛒 நடவடிக்கைகள் பட்டியல்:")
-                    df_cart = pd.DataFrame(st.session_state.transactions_cart)
-                    st.dataframe(df_cart, use_container_width=True)
+                st.markdown("---")
+        if len(st.session_state.transactions_cart) > 0:
+            st.markdown("### 🛒 நடவடிக்கைகள் பட்டியல்:")
+            df_cart = pd.DataFrame(st.session_state.transactions_cart)
+            display_cols = [c for c in ["transaction_type", "paid_amount", "received_amount", "net_weight", "remarks"] if c in df_cart.columns]
+            st.dataframe(df_cart[display_cols] if display_cols else df_cart, use_container_width=True)
 
-                    total_paid = df_cart["paid_amount"].sum()
-                    total_received = df_cart["received_amount"].sum()
-                    net_amount = total_paid - total_received
+            total_paid = sum(float(x.get("paid_amount", 0)) for x in st.session_state.transactions_cart)
+            total_received = sum(float(x.get("received_amount", 0)) for x in st.session_state.transactions_cart)
+            net_amount = total_paid - total_received
 
-                    c1, c2, c3 = st.columns(3)
-                    c1.metric("மொத்த பட்டுவாடா", f"₹{total_paid:,.2f}")
-                    c2.metric("மொத்த வரவு", f"₹{total_received:,.2f}")
-                    c3.metric("நிகரத் தொகை", f"₹{abs(net_amount):,.2f}")
+            c1, c2, c3 = st.columns(3)
+            c1.metric("மொத்த பட்டுவாடா", f"₹{total_paid:,.2f}")
+            c2.metric("மொத்த வரவு", f"₹{total_received:,.2f}")
+            c3.metric("நிகரத் தொகை", f"₹{abs(net_amount):,.2f}")
 
-                    cart_b1, cart_b2 = st.columns([4, 1])
-                    with cart_b1:
-                        if st.button("பணம் செலுத்தும் முறை மற்றும் OTP பிரிவிற்குச் செல் ➔", type="primary"):
-                            st.session_state.current_visit["net_amount"] = net_amount
-                            st.session_state.current_visit["total_paid"] = total_paid
-                            st.session_state.current_visit["total_received"] = total_received
-                            st.session_state.current_visit["step"] = "CASH_OTP"
-                            st.rerun()
-                    with cart_b2:
-                        if st.button("பட்டியலை அழி"):
-                            st.session_state.transactions_cart = []
-                            st.rerun()
+            cart_b1, cart_b2 = st.columns([4, 1])
+            with cart_b1:
+                if st.button("பணம் செலுத்தும் முறை மற்றும் OTP பிரிவிற்குச் செல் ➔", type="primary", key="btn_goto_otp"):
+                    st.session_state.current_visit["net_amount"] = net_amount
+                    st.session_state.current_visit["total_paid"] = total_paid
+                    st.session_state.current_visit["total_received"] = total_received
+                    st.session_state.current_visit["step"] = "CASH_OTP"
+                    st.rerun()
+            with cart_b2:
+                if st.button("பட்டியலை அழி", key="btn_clear_cart"):
+                    st.session_state.transactions_cart = []
+                    st.rerun()
+        else:
+            st.info("ℹ️ இதுவரை நடவடிக்கைகள் எதுவும் பட்டியலில் சேர்க்கப்படவில்லை.")
 
             # -----------------------------------------------------------------
             # Step 3: பணப் பரிமாற்றம், 8 ரூபாய் நோட்டுகள் & OTP சரிபார்ப்பு
