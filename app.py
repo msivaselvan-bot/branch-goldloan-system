@@ -545,7 +545,11 @@ def render_staff_attribution_report(selected_branch_id=None):
     rupees_per_point = float(set_res[0].get("rupees_per_point", 5.0)) if set_res else 5.0
     penalty_per_lakh = float(set_res[0].get("negative_growth_penalty_per_lakh", 15.0)) if set_res else 15.0
 
-    inc_rules = supabase.table("staff_incentive_rules").select("*").eq("is_active", True).execute().data or []
+    try:
+        inc_rules_res = supabase.table("staff_incentive_rules").select("*").eq("is_active", True).execute()
+        inc_rules = inc_rules_res.data or []
+    except Exception as rule_err:
+        inc_rules = []
     rule_dict = {}
     for r in inc_rules:
         t_type = r.get("transaction_type")
