@@ -2543,12 +2543,10 @@ else:
                     detail_summary = [f"பில்: {gs_bill_no}", f"பொருள்: {gs_item_name}", f"எடை: {net_weight}g"]
 
                 # கார்ட்டில் சேர்க்கும் பட்டன் (GP அல்லாத பிற நடவடிக்கைகளுக்கு மட்டும்)
-                if txn_category != "GP (Gold Purchase)":
+            if txn_category != "GP (Gold Purchase)":
 
-                    if st.button("➕ பட்டியலில் சேர் (Add to Cart)", type="primary", key="btn_add_to_cart_main"):
-                    # 🌟 1. மாறிகளை முன்னிருப்பாக வரையறுத்தல் (NameError வராமல் தடுக்க)
-                        actual_paid_amt = 0.0
-                        # நகைக்கடனாக இருந்தால் இதர கட்டணங்களைக் கழித்து நிகரத் தொகையைக் கணக்கிடுதல்
+                if st.button("➕ பட்டியலில் சேர் (Add to Cart)", type="primary", key="btn_add_to_cart_main"):
+                # 🌟 1. மாறிகளை முதலில் கணக்கிடுதல்
                     if "Pledge" in txn_category:
                         actual_paid_amt = max(0.0, float(paid_amt) - float(other_charges))
                     else:
@@ -2556,46 +2554,48 @@ else:
 
                     chk_received = float(received_amt) if 'received_amt' in locals() else 0.0
 
+                # 🌟 2. இப்போது தொகையைச் சரிபார்த்தல்
                     if actual_paid_amt > 0 or chk_received > 0:
                         all_remarks = " | ".join(detail_summary)
-                        if custom_remarks.strip():
-                            all_remarks += f" ({custom_remarks.strip()})"
-                        
-                        img_url = upload_ornament_image(ornament_file) if ('ornament_file' in locals() and ornament_file) else None
+                    if custom_remarks.strip():
+                        all_remarks += f" ({custom_remarks.strip()})"
+                    
+                    img_url = upload_ornament_image(ornament_file) if ('ornament_file' in locals() and ornament_file) else None
 
-                        st.session_state.transactions_cart.append({
-                            "transaction_type": txn_category,
-                            "staff_name": staff,
-                            "paid_amount": float(actual_paid_amt),
-                            "received_amount": float(chk_received),
-                            "amount": float(actual_paid_amt if actual_paid_amt > 0 else chk_received),
-                            "remarks": all_remarks,
-                            "ornament_details": ornament_details if 'ornament_details' in locals() else "",
-                            "other_charges": float(other_charges) if 'other_charges' in locals() else 0.0,
-                            "ornament_image_url": img_url,
-                            "total_weight": float(total_weight) if 'total_weight' in locals() else 0.0,
-                            "net_weight": float(net_weight) if 'net_weight' in locals() else 0.0,
-                            "gp_number": gp_number if 'gp_number' in locals() else "",
-                            "ref1_name": ref1_name if 'ref1_name' in locals() else "",
-                            "ref1_phone": ref1_phone if 'ref1_phone' in locals() else "",
-                            "ref2_name": ref2_name if 'ref2_name' in locals() else "",
-                            "ref2_phone": ref2_phone if 'ref2_phone' in locals() else "",
-                            "principal_amount": float(paid_amt) if 'paid_amt' in locals() else 0.0,
-                            "interest_amount": float(interest_amount) if 'interest_amount' in locals() else 0.0,
-                            "nominee_name": nominee_name if 'nominee_name' in locals() else "",
-                            "nominee_relation": nominee_relation if 'nominee_relation' in locals() else "",
-                            "nominee_address": nominee_address if 'nominee_address' in locals() else "",
-                        })
+                    # 3. கார்ட்டில் சேர்த்தல்
+                    st.session_state.transactions_cart.append({
+                        "transaction_type": txn_category,
+                        "staff_name": staff,
+                        "paid_amount": float(actual_paid_amt),
+                        "received_amount": float(chk_received),
+                        "amount": float(actual_paid_amt if actual_paid_amt > 0 else chk_received),
+                        "remarks": all_remarks,
+                        "ornament_details": ornament_details if 'ornament_details' in locals() else "",
+                        "other_charges": float(other_charges) if 'other_charges' in locals() else 0.0,
+                        "ornament_image_url": img_url,
+                        "total_weight": float(total_weight) if 'total_weight' in locals() else 0.0,
+                        "net_weight": float(net_weight) if 'net_weight' in locals() else 0.0,
+                        "gp_number": gp_number if 'gp_number' in locals() else "",
+                        "ref1_name": ref1_name if 'ref1_name' in locals() else "",
+                        "ref1_phone": ref1_phone if 'ref1_phone' in locals() else "",
+                        "ref2_name": ref2_name if 'ref2_name' in locals() else "",
+                        "ref2_phone": ref2_phone if 'ref2_phone' in locals() else "",
+                        "principal_amount": float(paid_amt) if 'paid_amt' in locals() else 0.0,
+                        "interest_amount": float(interest_amount) if 'interest_amount' in locals() else 0.0,
+                        "nominee_name": nominee_name if 'nominee_name' in locals() else "",
+                        "nominee_relation": nominee_relation if 'nominee_relation' in locals() else "",
+                        "nominee_address": nominee_address if 'nominee_address' in locals() else "",
+                    })
 
-                        # ஃபீல்டுகளை ரீசெட் செய்ய கவுண்ட்டரை கூட்டுதல்
-                        if "form_reset_counter" not in st.session_state:
-                            st.session_state.form_reset_counter = 0
-                        st.session_state.form_reset_counter += 1
+                    # 4. படிவ ஃபீல்டுகளை ரீசெட் செய்ய கவுண்ட்டரை கூட்டுதல்
+                    if "form_reset_counter" not in st.session_state:
+                        st.session_state.form_reset_counter = 0
+                    st.session_state.form_reset_counter += 1
 
-                        st.success(f"'{txn_category}' வெற்றிகரமாகப் பட்டியலில் சேர்க்கப்பட்டது!")
-                        st.rerun()
-                    else:
-                        st.error("தொகையைச் சரியாக உள்ளிடவும்.")
+                    st.success("வெற்றிகரமாகச் சேர்க்கப்பட்டது!")
+                    st.rerun()
+                else:
+                    st.error("தொகையைச் சரியாக உள்ளிடவும்.")
                     
                     # 🌟 உறுதி ஆவணப் பதிவிறக்கப் பகுதி (Session State இருக்கும் வரை மறையாது)
                 if st.session_state.get("current_declaration"):
