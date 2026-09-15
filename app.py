@@ -444,27 +444,40 @@ def send_fast2sms_otp(mobile_no: str, otp_code: str):
     except Exception as e:
         return False, f"இணைப்புப் பிழை: {e}"
 
-def get_current_branch_cash_drawer(branch_id: int):
-    empty_stock = {"500": 0, "200": 0, "100": 0, "50": 0, "20": 0, "10": 0, "5": 0, "coins": 0}
+def get_current_branch_cash_drawer(branch_id):
+    empty_stock = {"500": 0, "200": 0, "100": 0, "50": 0, "20": 0, "10": 0, "5": 0, "coins": 0.0}
+    if not branch_id:
+        return empty_stock
+
     try:
+        clean_b_id = int(branch_id)
+        stock = empty_stock.copy()
+
+        # 1. அட்மின் பதிவு செய்த மிகச் சமீபத்திய துவக்க இருப்பை எடுத்தல் (கடைசி பதிவு)
         box_res = (
             supabase.table("branch_cash_box")
             .select("opening_denomination")
-            .eq("branch_id", branch_id)
-            .order("entry_date", desc=True)
+            .eq("branch_id", clean_b_id)
+            .order("id", desc=True)
             .limit(1)
             .execute()
         )
-        stock = empty_stock.copy()
+        
         if box_res.data and box_res.data[0].get("opening_denomination"):
             op_data = box_res.data[0]["opening_denomination"]
+            if isinstance(op_data, str):
+                try:
+                    op_data = json.loads(op_data)
+                except Exception:
+                    op_data = {}
             for k in stock:
-                stock[k] = int(op_data.get(k, 0) or 0)
+                stock[k] = float(op_data.get(k, 0) or 0) if k == "coins" else int(op_data.get(k, 0) or 0)
 
+        # 2. வாடிக்கையாளர் வருகைகளின் பணப் பரிவர்த்தனைகள்
         visits_res = (
             supabase.table("customer_visits")
             .select("denomination_details")
-            .eq("branch_id", branch_id)
+            .eq("branch_id", clean_b_id)
             .execute()
         )
         if visits_res.data:
@@ -474,13 +487,16 @@ def get_current_branch_cash_drawer(branch_id: int):
                     in_notes = d_info.get("in", {})
                     out_notes = d_info.get("out", {})
                     for k in stock:
-                        stock[k] += int(in_notes.get(k, 0) or 0)
-                        stock[k] -= int(out_notes.get(k, 0) or 0)
+                        val_in = float(in_notes.get(k, 0) or 0) if k == "coins" else int(in_notes.get(k, 0) or 0)
+                        val_out = float(out_notes.get(k, 0) or 0) if k == "coins" else int(out_notes.get(k, 0) or 0)
+                        stock[k] += val_in
+                        stock[k] -= val_out
 
+        # 3. HO மற்றும் கிளை இடையேயான பணப் பரிமாற்றம் (Approved)
         fund_res = (
             supabase.table("branch_fund_transfers")
             .select("transfer_type, denomination_details")
-            .eq("branch_id", branch_id)
+            .eq("branch_id", clean_b_id)
             .eq("payment_mode", "Cash")
             .eq("status", "Approved")
             .execute()
@@ -490,17 +506,17 @@ def get_current_branch_cash_drawer(branch_id: int):
                 t_type = f_row.get("transfer_type")
                 t_den = f_row.get("denomination_details") or {}
                 for k in stock:
-                    notes_qty = int(t_den.get(k, 0) or 0)
+                    notes_qty = float(t_den.get(k, 0) or 0) if k == "coins" else int(t_den.get(k, 0) or 0)
                     if t_type == "HO_TO_BRANCH":
                         stock[k] += notes_qty
                     elif t_type == "BRANCH_TO_HO":
                         stock[k] -= notes_qty
 
-        # அங்கீகரிக்கப்பட்ட கிளைச் செலவுகளுக்கான நோட்டுகளைக் கழித்து, மீதி வாங்கியதைச் சேர்த்தல்
+        # 4. கிளைச் செலவுகள் (Approved)
         exp_res = (
             supabase.table("branch_expenses")
             .select("denomination_details")
-            .eq("branch_id", branch_id)
+            .eq("branch_id", clean_b_id)
             .eq("status", "Approved")
             .execute()
         )
@@ -514,16 +530,17 @@ def get_current_branch_cash_drawer(branch_id: int):
                     out_notes = e_den
                 
                 for k in stock:
-                    stock[k] -= int(out_notes.get(k, 0) or 0)
-                    stock[k] += int(in_notes.get(k, 0) or 0)
+                    out_val = float(out_notes.get(k, 0) or 0) if k == "coins" else int(out_notes.get(k, 0) or 0)
+                    in_val = float(in_notes.get(k, 0) or 0) if k == "coins" else int(in_notes.get(k, 0) or 0)
+                    stock[k] -= out_val
+                    stock[k] += in_val
 
         for k in stock:
-            stock[k] = max(0, stock[k])
+            stock[k] = max(0.0 if k == "coins" else 0, stock[k])
 
         return stock
     except Exception:
         return empty_stock
-
 # ==============================================================================
 # காரணப் பணியாளர் அறிக்கை (Incentive & Attribution Report)
 # ==============================================================================
@@ -1494,15 +1511,16 @@ else:
 
                 if st.form_submit_button("துவக்க இருப்பைச் சேமி (Save Opening Balance)", type="primary"):
                     try:
-                        supabase.table("branch_cash_box").upsert({
-                            "branch_id": branch_options[sel_op_branch],
+                        selected_b_id = int(branch_options[sel_op_branch])
+                        supabase.table("branch_cash_box").insert({
+                            "branch_id": selected_b_id,
                             "entry_date": str(date.today()),
                             "opening_balance": float(calc_total),
                             "opening_denomination": {
                                 "500": int(op_500), "200": int(op_200), "100": int(op_100), "50": int(op_50),
                                 "20": int(op_20), "10": int(op_10), "5": int(op_5), "coins": float(op_coins)
                             }
-                        }, on_conflict="branch_id,entry_date").execute()
+                        }).execute()
                         st.success(f"✅ {sel_op_branch} கிளைக்கான துவக்க இருப்பு ₹{calc_total:,.2f} வெற்றிகரமாகச் சேமிக்கப்பட்டது!")
                         st.rerun()
                     except Exception as err:
