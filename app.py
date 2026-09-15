@@ -2051,11 +2051,11 @@ else:
             st.subheader("படி 1: வாடிக்கையாளர் வருகைப் பதிவு (Visit Token)")
             v_type = st.radio("வாடிக்கையாளர் வகை:", ["ஏற்கனவே உள்ள வாடிக்கையாளர் (Existing Customer)", "புதிய வாடிக்கையாளர் பதிவு (New Customer)"], horizontal=True)
 
-        if "Existing" in v_type:
-            search_query = st.text_input("பெயர் / மொபைல் எண் / Customer ID:", placeholder="எ.கா: ராம் அல்லது 98765...", key="live_cust_search")
-            if len(search_query.strip()) >= 2:
-                q = search_query.strip()
-                cust_filter_query = (
+            if "Existing" in v_type:
+                search_query = st.text_input("பெயர் / மொபைல் எண் / Customer ID:", placeholder="எ.கா: ராம் அல்லது 98765...", key="live_cust_search")
+                if len(search_query.strip()) >= 2:
+                    q = search_query.strip()
+                    cust_filter_query = (
                     supabase.table("customers").select("*").eq("is_active", True)
                     .neq("kyc_status", "Rejected").neq("kyc_status", "Pending_KYC_Approval")
                 )
