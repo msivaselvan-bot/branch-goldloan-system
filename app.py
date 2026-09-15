@@ -2188,9 +2188,9 @@ with branch_tab1:
                         st.rerun()
 
                 elif st.session_state.current_visit and st.session_state.current_visit.get("step") == "TRANSACTIONS":
-        visit = st.session_state.current_visit
-        st.success(f"வாடிக்கையாளர்: **{visit.get('customer_name', '')}** (வருகை எண்: **{visit.get('visit_no', '')}**)")
-        st.subheader("படி 2: வணிக நடவடிக்கைகள் சேர்த்தல்")
+                    visit = st.session_state.current_visit
+                    st.success(f"வாடிக்கையாளர்: **{visit.get('customer_name', '')}** (வருகை எண்: **{visit.get('visit_no', '')}**)")
+                    st.subheader("படி 2: வணிக நடவடிக்கைகள் சேர்த்தல்")
 
         # 🌟 இந்த selectbox வரி 2240-க்கு மேலே கட்டாயம் இருக்க வேண்டும்:
         txn_category = st.selectbox(
