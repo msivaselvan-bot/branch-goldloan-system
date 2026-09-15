@@ -2786,10 +2786,10 @@ else:
                         else:
                             st.success("✅ நோட்டுகள் மற்றும் பேலன்ஸ் சில்லறை சரியாகப் பொருந்தியது!")
 
-                with col_den2:
-                    st.markdown("#### 📲 OTP சரிபார்ப்பு")
-                    st.write(f"வாடிக்கையாளர்: **{visit['customer_name']}**")
-                    st.write(f"மொபைல் எண்: `{visit['mobile']}`")
+                    with col_den2:
+                        st.markdown("#### 📲 OTP சரிபார்ப்பு")
+                        st.write(f"வாடிக்கையாளர்: **{visit['customer_name']}**")
+                        st.write(f"மொபைல் எண்: `{visit['mobile']}`")
 
                     if not is_ready:
                         st.warning("⚠️ ரொக்க நோட்டுகளும் பேலன்ஸ் சில்லறையும் சரியாக அமைந்ததும் OTP இயங்கும்.")
