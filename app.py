@@ -2199,19 +2199,20 @@ else:
     # =========================================================================
     # படி 2: வணிக நடவடிக்கைகள் சேர்த்தல் (TRANSACTIONS)
     # =========================================================================
-                elif st.session_state.current_visit and st.session_state.current_visit.get("step") == "TRANSACTIONS":
-                    visit = st.session_state.current_visit
-                    st.success(f"வாடிக்கையாளர்: **{visit['customer_name']}** (வருகை எண்: **{visit['visit_no']}**)")
-                    st.subheader("படி 2: வணிக நடவடிக்கைகள் சேர்த்தல்")
+    elif st.session_state.current_visit and st.session_state.current_visit.get("step") == "TRANSACTIONS":
+        visit = st.session_state.current_visit
+        st.success(f"வாடிக்கையாளர்: **{visit['customer_name']}** (வருகை எண்: **{visit['visit_no']}**)")
+        st.subheader("படி 2: வணிக நடவடிக்கைகள் சேர்த்தல்")
 
-                    active_g_schemes = supabase.table("gold_loan_schemes").select("*").eq("is_active", True).execute().data or []
-                    active_fd_schemes = supabase.table("fd_schemes").select("*").eq("is_active", True).execute().data or []
-                    active_rd_schemes = supabase.table("rd_schemes").select("*").eq("is_active", True).execute().data or []
+        # 🌟 அட்மின் திட்டங்களை டேட்டாபேஸிலிருந்து எடுத்தல்
+        active_g_schemes = supabase.table("gold_loan_schemes").select("*").eq("is_active", True).execute().data or []
+        active_fd_schemes = supabase.table("fd_schemes").select("*").eq("is_active", True).execute().data or []
+        active_rd_schemes = supabase.table("rd_schemes").select("*").eq("is_active", True).execute().data or []
 
-                    g_scheme_map = {s["scheme_name"]: s for s in active_g_schemes}
-                    gold_scheme_options = list(g_scheme_map.keys()) if g_scheme_map else ["General 12%"]
-                    fd_scheme_options = [s["scheme_name"] for s in active_fd_schemes] if active_fd_schemes else ["Standard FD 9.5%"]
-                    rd_scheme_options = [s["scheme_name"] for s in active_rd_schemes] if active_rd_schemes else ["Standard RD 10%"]
+        g_scheme_map = {s["scheme_name"]: s for s in active_g_schemes}
+        gold_scheme_options = list(g_scheme_map.keys()) if g_scheme_map else ["General 12%"]
+        fd_scheme_options = [s["scheme_name"] for s in active_fd_schemes] if active_fd_schemes else ["Standard FD 9.5%"]
+        rd_scheme_options = [s["scheme_name"] for s in active_rd_schemes] if active_rd_schemes else ["Standard RD 10%"]
 
         txn_category = st.selectbox(
             "நடவடிக்கை வகை:",
@@ -2272,7 +2273,7 @@ else:
             ornament_details = st.text_area("நகை விபரம் (Ornament Details)")
             ornament_file = st.file_uploader("நகை படம் (Ornament Photo)", type=["jpg", "jpeg", "png"], key="pledge_img")
             detail_summary = [f"GL: {new_gl_no}", f"ஸ்கீம்: {scheme_name}", f"RPG: ₹{cur_rpg}", f"எடை: {net_weight}g"]
-            
+
         # 2. அடமானம் மீட்டல் (GL Release)
         elif txn_category == "GL Release (அடமானம் மீட்டல்)":
             r_col1, r_col2 = st.columns(2)
