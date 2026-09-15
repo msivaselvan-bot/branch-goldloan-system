@@ -2491,21 +2491,21 @@ else:
                     except Exception as err:
                         st.error(f"❌ கார்ட்டில் சேர்ப்பதில் பிழை: {err}")
 
-        # 8. GS (Gold Sale)
-        elif txn_category == "GS (Gold Sale)":
-            gs_col1, gs_col2, gs_col3 = st.columns(3)
-            with gs_col1:
-                gs_bill_no = st.text_input("விற்பனை பில் எண் *")
-                total_weight = st.number_input("மொத்த எடை (Gross Wt - g) *", min_value=0.0, step=0.001, format="%.3f")
-            with gs_col2:
-                gs_item_name = st.text_input("பொருள் பெயர்")
-                net_weight = st.number_input("நிகர எடை (Net Wt - g) *", min_value=0.0, step=0.001, format="%.3f")
-            with gs_col3:
-                received_amt = st.number_input("பெற்ற தொகை (Received ₹) *", min_value=0.0, step=500.0)
+            # 8. GS (Gold Sale)
+            elif txn_category == "GS (Gold Sale)":
+                gs_col1, gs_col2, gs_col3 = st.columns(3)
+                with gs_col1:
+                    gs_bill_no = st.text_input("விற்பனை பில் எண் *")
+                    total_weight = st.number_input("மொத்த எடை (Gross Wt - g) *", min_value=0.0, step=0.001, format="%.3f")
+                with gs_col2:
+                    gs_item_name = st.text_input("பொருள் பெயர்")
+                    net_weight = st.number_input("நிகர எடை (Net Wt - g) *", min_value=0.0, step=0.001, format="%.3f")
+                with gs_col3:
+                    received_amt = st.number_input("பெற்ற தொகை (Received ₹) *", min_value=0.0, step=500.0)
 
-            ornament_details = st.text_area("நகை விபரம் (Ornament Details)", key="gs_details")
-            ornament_file = st.file_uploader("நகை படம் (Ornament Photo)", type=["jpg", "jpeg", "png"], key="gs_img")
-            detail_summary = [f"பில்: {gs_bill_no}", f"பொருள்: {gs_item_name}", f"எடை: {net_weight}g"]
+                ornament_details = st.text_area("நகை விபரம் (Ornament Details)", key="gs_details")
+                ornament_file = st.file_uploader("நகை படம் (Ornament Photo)", type=["jpg", "jpeg", "png"], key="gs_img")
+                detail_summary = [f"பில்: {gs_bill_no}", f"பொருள்: {gs_item_name}", f"எடை: {net_weight}g"]
 
         # கார்ட்டில் சேர்க்கும் பட்டன் (GP அல்லாத பிற நடவடிக்கைகளுக்கு மட்டும்)
         if txn_category != "GP (Gold Purchase)":
