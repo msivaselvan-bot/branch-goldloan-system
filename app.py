@@ -246,6 +246,11 @@ def upload_single_file(file_obj, folder_name):
 # ==============================================================================
 def generate_declaration_html(data):
     """தமிழ் டிக்ளரேஷன் உறுதி ஆவணம் உருவாக்கும் முறை"""
+    try:
+        loan_amt_val = float(data.get('loan_amount', 0) or 0)
+    except (ValueError, TypeError):
+        loan_amt_val = 0.0
+
     html_content = f"""<!DOCTYPE html>
 <html lang="ta">
 <head>
@@ -327,7 +332,7 @@ def generate_declaration_html(data):
     <div class="header">கடன் தொடர்பான உறுதி ஆவணம்</div>
 
     <div class="content">
-        நான் மேற்கூறிய முகவரியில் வசித்து வருகிறேன். நான் தங்களிடம் <b>{data.get('pledge_date', '')}</b> அன்று கடன் எண் <b>{data.get('loan_number', '')}</b> மீது கடனாக <b>₹{data.get('loan_amount', 0):,.2f}</b> ரூபாய் பெற்றுள்ளேன். எனக்கு பணத்தேவை அதிகமாக உள்ளபடியால் தாங்கள் சாதாரணமாக கொடுக்கும் நகைக்கான கடனைவிட எனது வேண்டுகோளால் அதிகமான பணத்தினை மேலே உள்ள நகைகடனுக்கு பெற்றுள்ளேன். மேலும் மேற்கூறிய கடனுக்கு மாதம் தோறும் வட்டி கட்டுவேன் எனவும் மூன்று மாதத்தில் திருப்பிக்கொள்வேன் எனவும் உறுதியளிக்கிறேன். மீறினால் நிறுவனமே எனது நகைகளை விற்று எனது கடனை நேர் செய்து கொள்ளலாம் எனவும் இதன் மூலம் உறுதியளிக்கிறேன். எனது கடனுக்கு காலம் மூன்று மாதமே என்பதனை நன்கு அறிவேன் மூன்று மாதங்களில் கடன் நேர் செய்யப்படவில்லை எனில் அடகு வைத்த நகை மீது எனக்கு எந்த உரிமையும் இல்லை என்பதனை நன்கு அறிவேன்.
+        நான் மேற்கூறிய முகவரியில் வசித்து வருகிறேன். நான் தங்களிடம் <b>{data.get('pledge_date', '')}</b> அன்று கடன் எண் <b>{data.get('loan_number', '')}</b> மீது கடனாக <b>₹{loan_amt_val:,.2f}</b> ரூபாய் பெற்றுள்ளேன். எனக்கு பணத்தேவை அதிகமாக உள்ளபடியால் தாங்கள் சாதாரணமாக கொடுக்கும் நகைக்கான கடனைவிட எனது வேண்டுகோளால் அதிகமான பணத்தினை மேலே உள்ள நகைகடனுக்கு பெற்றுள்ளேன். மேலும் மேற்கூறிய கடனுக்கு மாதம் தோறும் வட்டி கட்டுவேன் எனவும் மூன்று மாதத்தில் திருப்பிக்கொள்வேன் எனவும் உறுதியளிக்கிறேன். மீறினால் நிறுவனமே எனது நகைகளை விற்று எனது கடனை நேர் செய்து கொள்ளலாம் எனவும் இதன் மூலம் உறுதியளிக்கிறேன். எனது கடனுக்கு காலம் மூன்று மாதமே என்பதனை நன்கு அறிவேன் மூன்று மாதங்களில் கடன் நேர் செய்யப்படவில்லை எனில் அடகு வைத்த நகை மீது எனக்கு எந்த உரிமையும் இல்லை என்பதனை நன்கு அறிவேன்.
     </div>
 
     <table class="footer-table">
@@ -2533,6 +2538,20 @@ else:
                         "nominee_address": nominee_address if ('nominee_address' in locals() and nominee_address) else "",
                     })
 
+                    if "Pledge" in txn_category:
+                        decl_payload = {
+                            "customer_name": visit.get("customer_name", ""),
+                            "address": visit.get("address", ""),
+                            "contact_number": visit.get("mobile", ""),
+                            "branch_name": st.session_state.get("branch", ""),
+                            "pledge_date": datetime.now().strftime("%d-%m-%Y"),
+                            "loan_number": new_gl_no if 'new_gl_no' in locals() else "",
+                            "loan_amount": paid_amt if 'paid_amt' in locals() else 0.0,
+                            "current_date": datetime.now().strftime("%d-%m-%Y")
+                        }
+                        st.session_state.declaration_gl_no = new_gl_no if 'new_gl_no' in locals() else "GL"
+                        st.session_state.current_declaration = generate_declaration_html(decl_payload)
+
                     if "form_reset_counter" not in st.session_state:
                         st.session_state.form_reset_counter = 0
                     st.session_state.form_reset_counter += 1
@@ -2544,16 +2563,25 @@ else:
 
         # உறுதி ஆவணப் பதிவிறக்கப் பகுதி
         if st.session_state.get("current_declaration"):
+            gl_no_val = st.session_state.get("declaration_gl_no", "GL")
+            html_data = st.session_state.current_declaration
+            
+            # தமிழ் எழுத்துக்கள் உடையாமல் இருக்க UTF-8 உறுதிப்படுத்துதல்
+            if isinstance(html_data, str):
+                html_bytes = html_data.encode("utf-8")
+            else:
+                html_bytes = html_data
+
             st.markdown("---")
             with st.container(border=True):
                 st.warning("⚠️ **கவனிக்க:** இந்த நகைக் கடனின் கால அளவு 6 மாதங்கள் அல்லது அதற்கும் குறைவாக உள்ளதால் உறுதி ஆவணம் அவசியமாகிறது.")
                 st.download_button(
-                    label=f"📄 உறுதி ஆவணத்தைப் பதிவிறக்குக (Print Declaration - GL: {st.session_state.get('declaration_gl_no')})",
-                    data=st.session_state.current_declaration,
-                    file_name=f"Declaration_{st.session_state.get('declaration_gl_no')}.html",
-                    mime="text/html",
+                    label=f"📄 உறுதி ஆவணத்தைப் பதிவிறக்குக (Print Declaration - GL: {gl_no_val})",
+                    data=html_bytes,
+                    file_name=f"Declaration_{gl_no_val}.html",
+                    mime="text/html; charset=utf-8",
                     type="primary",
-                    key=f"dl_btn_{st.session_state.get('declaration_gl_no')}"
+                    key=f"dl_btn_{gl_no_val}"
                 )
 
         # 🛒 நடவடிக்கைகள் பட்டியல் காட்டும் பகுதி
