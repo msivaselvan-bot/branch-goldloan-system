@@ -2547,7 +2547,8 @@ else:
                     detail_summary = [f"பில்: {gs_bill_no}", f"பொருள்: {gs_item_name}", f"எடை: {net_weight}g"]
 
                 # கார்ட்டில் சேர்க்கும் பட்டன் (GP அல்லாத பிற நடவடிக்கைகளுக்கு மட்டும்)
-            if txn_category != "GP (Gold Purchase)":
+            current_txn_cat = txn_category if 'txn_category' in locals() else st.session_state.get("dyn_txn_sel", "")
+            if current_txn_cat != "GP (Gold Purchase)":
 
                 if st.button("➕ பட்டியலில் சேர் (Add to Cart)", type="primary", key="btn_add_to_cart_main"):
                 # 🌟 1. மாறிகளை முதலில் கணக்கிடுதல்
