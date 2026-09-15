@@ -2610,14 +2610,26 @@ else:
                             type="primary",
                             key=f"dl_btn_{st.session_state.get('declaration_gl_no')}"
                         )
+                    st.write(f"கார்ட்டில் உள்ள மொத்த உருப்படிகள்: {len(st.session_state.transactions_cart)}")
 
-                if st.session_state.transactions_cart:
+                # 🛒 கார்ட் பட்டியல் காட்டும் பகுதி
+                if len(st.session_state.transactions_cart) > 0:
                     st.markdown("### 🛒 நடவடிக்கைகள் பட்டியல்:")
-                    df_cart = pd.DataFrame(st.session_state.transactions_cart)
-                    st.dataframe(df_cart, use_container_width=True)
+                    
+                    try:
+                        df_cart = pd.DataFrame(st.session_state.transactions_cart)
+                        display_cols = [col for col in ["transaction_type", "paid_amount", "received_amount", "net_weight", "remarks"] if col in df_cart.columns]
+                        if display_cols:
+                            st.dataframe(df_cart[display_cols], use_container_width=True)
+                        else:
+                            st.dataframe(df_cart, use_container_width=True)
+                    except Exception as df_err:
+                        st.warning(f"அட்டவணை அமைப்பதில் பிழை: {df_err}")
+                        for idx, item in enumerate(st.session_state.transactions_cart):
+                            st.write(f"{idx+1}. {item.get('transaction_type')} - வழங்கியது: ₹{item.get('paid_amount', 0)} | பெற்றது: ₹{item.get('received_amount', 0)}")
 
-                    total_paid = df_cart["paid_amount"].sum()
-                    total_received = df_cart["received_amount"].sum()
+                    total_paid = sum(float(x.get("paid_amount", 0)) for x in st.session_state.transactions_cart)
+                    total_received = sum(float(x.get("received_amount", 0)) for x in st.session_state.transactions_cart)
                     net_amount = total_paid - total_received
 
                     c1, c2, c3 = st.columns(3)
@@ -2627,14 +2639,14 @@ else:
 
                     cart_b1, cart_b2 = st.columns([4, 1])
                     with cart_b1:
-                        if st.button("பணம் செலுத்தும் முறை மற்றும் OTP பிரிவிற்குச் செல் ➔", type="primary"):
+                        if st.button("பணம் செலுத்தும் முறை மற்றும் OTP பிரிவிற்குச் செல் ➔", type="primary", key="btn_goto_otp"):
                             st.session_state.current_visit["net_amount"] = net_amount
                             st.session_state.current_visit["total_paid"] = total_paid
                             st.session_state.current_visit["total_received"] = total_received
                             st.session_state.current_visit["step"] = "CASH_OTP"
                             st.rerun()
                     with cart_b2:
-                        if st.button("பட்டியலை அழி"):
+                        if st.button("பட்டியலை அழி", key="btn_clear_cart"):
                             st.session_state.transactions_cart = []
                             st.rerun()
 
