@@ -2610,7 +2610,10 @@ else:
                             key=f"dl_btn_{st.session_state.get('declaration_gl_no')}"
                         )
 
-                st.markdown("---")
+        # =========================================================================
+        # 🛒 நடவடிக்கைகள் பட்டியல் காட்டும் பகுதி
+        # =========================================================================
+        st.markdown("---")
         if len(st.session_state.transactions_cart) > 0:
             st.markdown("### 🛒 நடவடிக்கைகள் பட்டியல்:")
             df_cart = pd.DataFrame(st.session_state.transactions_cart)
@@ -2638,8 +2641,6 @@ else:
                 if st.button("பட்டியலை அழி", key="btn_clear_cart"):
                     st.session_state.transactions_cart = []
                     st.rerun()
-                else:
-                    st.info("ℹ️ இதுவரை நடவடிக்கைகள் எதுவும் பட்டியலில் சேர்க்கப்படவில்லை.")
 
                 # -----------------------------------------------------------------
                 # Step 3: பணப் பரிமாற்றம், 8 ரூபாய் நோட்டுகள் & OTP சரிபார்ப்பு
