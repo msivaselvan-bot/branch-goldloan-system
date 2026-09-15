@@ -1512,16 +1512,37 @@ else:
                 if st.form_submit_button("துவக்க இருப்பைச் சேமி (Save Opening Balance)", type="primary"):
                     try:
                         selected_b_id = int(branch_options[sel_op_branch])
-                        supabase.table("branch_cash_box").insert({
+                        today_str = str(date.today())
+
+                        payload = {
                             "branch_id": selected_b_id,
-                            "entry_date": str(date.today()),
+                            "entry_date": today_str,
                             "opening_balance": float(calc_total),
                             "opening_denomination": {
                                 "500": int(op_500), "200": int(op_200), "100": int(op_100), "50": int(op_50),
                                 "20": int(op_20), "10": int(op_10), "5": int(op_5), "coins": float(op_coins)
                             }
-                        }).execute()
-                        st.success(f"✅ {sel_op_branch} கிளைக்கான துவக்க இருப்பு ₹{calc_total:,.2f} வெற்றிகரமாகச் சேமிக்கப்பட்டது!")
+                        }
+
+                        # 🌟 1. இன்றைய தேதிக்கு ஏற்கனவே பதிவு உள்ளதா எனப் பார்த்தல்
+                        existing_check = (
+                            supabase.table("branch_cash_box")
+                            .select("id")
+                            .eq("branch_id", selected_b_id)
+                            .eq("entry_date", today_str)
+                            .execute()
+                        )
+
+                        if existing_check.data and len(existing_check.data) > 0:
+                            # ஏற்கனவே இருந்தால் அதை Update செய்தல்
+                            rec_id = existing_check.data[0]["id"]
+                            supabase.table("branch_cash_box").update(payload).eq("id", rec_id).execute()
+                            st.success(f"✅ {sel_op_branch} கிளைக்கான இன்றைய இருப்பு வெற்றிகரமாகப் புதுப்பிக்கப்பட்டது!")
+                        else:
+                            # புதிய பதிவாக Insert செய்தல்
+                            supabase.table("branch_cash_box").insert(payload).execute()
+                            st.success(f"✅ {sel_op_branch} கிளைக்கான துவக்க இருப்பு ₹{calc_total:,.2f} சேமிக்கப்பட்டது!")
+
                         st.rerun()
                     except Exception as err:
                         st.error(f"சேமிப்பதில் பிழை: {err}")
