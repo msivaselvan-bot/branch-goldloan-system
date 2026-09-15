@@ -1897,17 +1897,34 @@ else:
             st.caption("செலவுத் தொகைக்கு நாம் கொடுத்த நோட்டுகளையும், கடைக்காரர் திருப்பிக் கொடுத்த மீதி சில்லறையையும் (Cash Return) சரியாக உள்ளிடவும்.")
 
             curr_b_drawer = get_current_branch_cash_drawer(st.session_state.branch_id)
-
-            with st.expander("💼 தற்போதைய நேரடி கல்லா கையிருப்பு (Live Approved Stock)", expanded=False):
+            total_drawer_cash = (
+                (int(curr_b_drawer.get('500', 0)) * 500) +
+                (int(curr_b_drawer.get('200', 0)) * 200) +
+                (int(curr_b_drawer.get('100', 0)) * 100) +
+                (int(curr_b_drawer.get('50', 0)) * 50) +
+                (int(curr_b_drawer.get('20', 0)) * 20) +
+                (int(curr_b_drawer.get('10', 0)) * 10) +
+                (int(curr_b_drawer.get('5', 0)) * 5) +
+                float(curr_b_drawer.get('coins', 0.0))
+            )
+            with st.expander(f"💼 தற்போதைய நேரடி கல்லா கையிருப்பு: ₹{total_drawer_cash:,.2f}", expanded=False):
+            # எக்ஸ்பாண்டரின் உள்ளே தலைப்பில் பெரிய மெட்ரிக் ஆகவும் காட்டலாம்
+                st.markdown(f"### 💵 கல்லா மொத்த இருப்பு: `₹{total_drawer_cash:,.2f}`")
+                st.markdown("---")
+            
                 bd1, bd2, bd3, bd4 = st.columns(4)
-                bd1.metric("₹500 தாள்கள்", f"{curr_b_drawer['500']}")
-                bd1.metric("₹20 தாள்கள்", f"{curr_b_drawer['20']}")
-                bd2.metric("₹200 தாள்கள்", f"{curr_b_drawer['200']}")
-                bd2.metric("₹10 தாள்கள்", f"{curr_b_drawer['10']}")
-                bd3.metric("₹100 தாள்கள்", f"{curr_b_drawer['100']}")
-                bd3.metric("₹5 தாள்கள்", f"{curr_b_drawer['5']}")
-                bd4.metric("₹50 தாள்கள்", f"{curr_b_drawer['50']}")
-                bd4.metric("நாணயங்கள் (₹)", f"{curr_b_drawer['coins']:,.2f}")
+                with bd1:
+                    bd1.metric("₹500 தாள்கள்", f"{curr_b_drawer['500']}")
+                    bd1.metric("₹20 தாள்கள்", f"{curr_b_drawer['20']}")
+                with bd2:
+                    bd2.metric("₹200 தாள்கள்", f"{curr_b_drawer['200']}")
+                    bd2.metric("₹10 தாள்கள்", f"{curr_b_drawer['10']}")
+                with bd3:
+                    bd3.metric("₹100 தாள்கள்", f"{curr_b_drawer['100']}")
+                    bd3.metric("₹5 தாள்கள்", f"{curr_b_drawer['5']}")
+                with bd4:
+                    bd4.metric("₹50 தாள்கள்", f"{curr_b_drawer['50']}")
+                    bd4.metric("நாணயங்கள் (₹)", f"₹{float(curr_b_drawer['coins']):,.2f}")
 
             with st.form("branch_expense_flow_form", clear_on_submit=True):
                 st.markdown("##### 🔄 புதிய செலவுப் பதிவு (Submit for Operations Approval)")
