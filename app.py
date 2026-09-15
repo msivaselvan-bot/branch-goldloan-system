@@ -2187,8 +2187,8 @@ with branch_tab1:
                         st.success(f"✅ வாடிக்கையாளர் {new_name} பதிவு செய்யப்பட்டு ஒப்புதலுக்கு அனுப்பப்பட்டது!")
                         st.rerun()
 
-            elif st.session_state.current_visit.get("step") == "TRANSACTIONS":
-        visit = st.session_state.current_visit
+                elif st.session_state.current_visit.get("step") == "TRANSACTIONS":
+                    visit = st.session_state.current_visit
         st.success(f"வாடிக்கையாளர்: **{visit['customer_name']}** (வருகை எண்: **{visit['visit_no']}**)")
         st.subheader("படி 2: வணிக நடவடிக்கைகள் சேர்த்தல்")
 
