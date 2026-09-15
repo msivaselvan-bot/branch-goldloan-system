@@ -813,7 +813,7 @@ if not st.session_state.logged_in:
     with col_center:
         st.markdown("""
         <div class="login-box">
-            <h3>🏦 கிளை சிஸ்டம்</h3>
+            <h3>🏦 Muthusise Gold Product Data Center </h3>
             <p>பணியாளர் பாதுகாப்பான உள்நுழைவு</p>
         </div>
         """, unsafe_allow_html=True)
