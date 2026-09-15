@@ -1968,21 +1968,28 @@ else:
                     "பதிவு செய்தவர்": e.get("created_by", "-")
                 } for e in b_exp_logs]), use_container_width=True)
 
-        with branch_tab3:
-            st.subheader("⚠️ தலைமை அலுவலக விளக்கங்கள் & மறுப்புகள்")
-            clarification_visits = supabase.table("customer_visits").select("*, customers(name, mobile), transactions(*)").eq("branch_id", st.session_state.branch_id).eq("status", "Needs_Clarification").execute().data or []
-            if not clarification_visits:
-                st.info("✅ எந்த விளக்கங்களும் நிலுவையில் இல்லை.")
-            else:
-                for c_item in clarification_visits:
-                    c_cust = c_item.get("customers", {})
-                    with st.expander(f"🚨 {c_item['visit_no']} | {c_cust.get('name')} | ₹{c_item['net_cash_amount']:,.2f}"):
-                        st.error(f"குறிப்பு: {c_item.get('verification_remarks', '-')}")
-                        b_rep = st.text_area("கிளையின் பதில் விளக்கம்:", key=f"rep_{c_item['id']}")
-                        if st.button("பதிலை அனுப்பு", key=f"send_rep_{c_item['id']}", type="primary"):
-                            supabase.table("customer_visits").update({"status": "Submitted_to_Auditor", "verification_remarks": b_rep}).eq("id", c_item["id"]).execute()
-                            st.success("அனுப்பப்பட்டது!")
-                            st.rerun()
+        # =========================================================================
+        # 3-வது டேப்: தலைமை அலுவலக விளக்கங்கள் & மறுப்புகள்
+        # =========================================================================
+    with branch_tab3:
+        st.subheader("⚠️ தலைமை அலுவலக விளக்கங்கள் & மறுப்புகள்")
+        clarification_visits = supabase.table("customer_visits").select("*, customers(name, mobile), transactions(*)").eq("branch_id", st.session_state.branch_id).eq("status", "Needs_Clarification").execute().data or []
+        
+        if not clarification_visits:
+            st.info("✅ எந்த விளக்கங்களும் நிலுவையில் இல்லை.")
+        else:
+            for c_item in clarification_visits:
+                c_cust = c_item.get("customers", {})
+                with st.expander(f"🚨 {c_item['visit_no']} | {c_cust.get('name', 'வாடிக்கையாளர்')} | ₹{c_item.get('net_cash_amount', 0):,.2f}"):
+                    st.error(f"குறிப்பு: {c_item.get('verification_remarks', '-')}")
+                    b_rep = st.text_area("கிளையின் பதில் விளக்கம்:", key=f"rep_{c_item['id']}")
+                    if st.button("பதிலை அனுப்பு", key=f"send_rep_{c_item['id']}", type="primary"):
+                        supabase.table("customer_visits").update({
+                            "status": "Submitted_to_Auditor", 
+                            "verification_remarks": b_rep
+                        }).eq("id", c_item["id"]).execute()
+                        st.success("அனுப்பப்பட்டது!")
+                        st.rerun()
 
         with branch_tab2:
             st.subheader("📁 கிளை ஆவணங்கள் பதிவேற்றம் (Upload Docs Desk)")
