@@ -2782,8 +2782,12 @@ else:
                                     "otp_verified": True,
                                     "status": "Pending_Calling_Verification",
                                 }
-                                visit_res = supabase.table("customer_visits").insert(visit_data).execute()
-                                created_visit_id = visit_res.data[0]["id"]
+                                try:
+                                    visit_res = supabase.table("customer_visits").insert(visit_data).execute()
+                                except Exception as visit_err:
+                                    st.error(f"❌ Customer Visits பதிவு செய்வதில் பிழை: {visit_err}")
+                                    st.write("அனுப்பப்பட்ட Visit Data:", visit_data)
+                                    st.stop()
 
                                 for txn in st.session_state.transactions_cart:
                                     txn["visit_id"] = created_visit_id
