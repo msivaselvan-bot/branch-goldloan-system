@@ -452,14 +452,12 @@ def get_current_branch_cash_drawer(branch_id):
     try:
         clean_b_id = int(branch_id)
         stock = empty_stock.copy()
-        today_str = str(date.today())
 
-        # 🌟 1. இன்றைய தேதிக்கான அட்மின் துவக்க இருப்பைத் தேடுதல், இல்லை என்றால் கடைசிப் பதிவை எடுத்தல்
+        # டேட்டாபேஸில் உள்ள கடைசி பதிவை எடுத்தல்
         box_res = (
             supabase.table("branch_cash_box")
-            .select("opening_denomination, entry_date")
+            .select("opening_denomination")
             .eq("branch_id", clean_b_id)
-            .order("entry_date", desc=True)
             .order("id", desc=True)
             .limit(1)
             .execute()
@@ -473,9 +471,12 @@ def get_current_branch_cash_drawer(branch_id):
                 except Exception:
                     op_data = {}
             for k in stock:
-                # ஸ்ட்ரிங் அல்லது ஃப்ளோட் ஆக இருந்தாலும் பாதுகாப்பாக மாற்றுதல்
-                raw_val = op_data.get(k, 0) or 0
-                stock[k] = float(raw_val) if k == "coins" else int(float(raw_val))
+                val = op_data.get(k, 0)
+                stock[k] = float(val or 0) if k == "coins" else int(float(val or 0))
+
+        return stock
+    except Exception:
+        return empty_stock
 
         # 🌟 2. இன்றைய தேதியில் நடந்த வாடிக்கையாளர் வருகைகளின் பணப் பரிவர்த்தனைகள் மட்டும்
         visits_res = (
