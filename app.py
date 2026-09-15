@@ -2256,21 +2256,23 @@ else:
                 cur_rpg = float(sel_scheme_obj.get("rate_per_gram", 0) or 0)
                 if cur_rpg > 0:
                     st.info(f"💎 **இந்த ஸ்கீமின் RPG:** `₹{cur_rpg:,.2f} / gram`")
-                    with p_col2:
-                        total_weight = st.number_input("மொத்த எடை (Gross Weight - gms) *", min_value=0.0, step=0.001, format="%.3f")
-                        net_weight = st.number_input("நிகர எடை (Net Weight - gms) *", min_value=0.0, step=0.001, format="%.3f")
-                        item_count = st.number_input("நகை எண்ணிக்கை", min_value=1, step=1)
-                    with p_col3:
-                        max_eligible_calc = net_weight * cur_rpg if cur_rpg > 0 else 0.0
-                        if cur_rpg > 0 and net_weight > 0:
-                            st.success(f"⚖️ அதிகபட்ச கடன்: **₹{max_eligible_calc:,.2f}**")
-                        paid_amt = st.number_input("கடன் தொகை (Paid ₹) *", min_value=0.0, step=500.0)
-                        other_charges = st.number_input("இதர கட்டணங்கள் (Other Charges ₹)", min_value=0.0, step=10.0)
+            
+            with p_col2:
+                total_weight = st.number_input("மொத்த எடை (Gross Weight - gms) *", min_value=0.0, step=0.001, format="%.3f")
+                net_weight = st.number_input("நிகர எடை (Net Weight - gms) *", min_value=0.0, step=0.001, format="%.3f")
+                item_count = st.number_input("நகை எண்ணிக்கை", min_value=1, step=1)
+            
+            with p_col3:
+                max_eligible_calc = net_weight * cur_rpg if cur_rpg > 0 else 0.0
+                if cur_rpg > 0 and net_weight > 0:
+                    st.success(f"⚖️ அதிகபட்ச கடன்: **₹{max_eligible_calc:,.2f}**")
+                paid_amt = st.number_input("கடன் தொகை (Paid ₹) *", min_value=0.0, step=500.0)
+                other_charges = st.number_input("இதர கட்டணங்கள் (Other Charges ₹)", min_value=0.0, step=10.0)
 
-                    ornament_details = st.text_area("நகை விபரம் (Ornament Details)")
-                    ornament_file = st.file_uploader("நகை படம் (Ornament Photo)", type=["jpg", "jpeg", "png"], key="pledge_img")
-                    detail_summary = [f"GL: {new_gl_no}", f"ஸ்கீம்: {scheme_name}", f"RPG: ₹{cur_rpg}", f"எடை: {net_weight}g"]
-
+            ornament_details = st.text_area("நகை விபரம் (Ornament Details)")
+            ornament_file = st.file_uploader("நகை படம் (Ornament Photo)", type=["jpg", "jpeg", "png"], key="pledge_img")
+            detail_summary = [f"GL: {new_gl_no}", f"ஸ்கீம்: {scheme_name}", f"RPG: ₹{cur_rpg}", f"எடை: {net_weight}g"]
+            
         # 2. அடமானம் மீட்டல் (GL Release)
         elif txn_category == "GL Release (அடமானம் மீட்டல்)":
             r_col1, r_col2 = st.columns(2)
