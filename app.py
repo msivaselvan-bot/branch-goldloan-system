@@ -893,7 +893,7 @@ branch_options = {b["branch_name"]: b["id"] for b in branches_data} if branches_
 branch_id_to_name = {b["id"]: b["branch_name"] for b in branches_data} if branches_data else {}
 
 # ==========================================
-# 5. உள்நுழைவு திரை (Login Screen)
+# 5. உள்நுழைவு திரை (Login Screen )
 # ==========================================
 if not st.session_state.logged_in:
     col_left, col_center, col_right = st.columns([1.2, 1.4, 1.2])
