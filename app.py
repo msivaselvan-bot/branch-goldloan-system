@@ -867,10 +867,22 @@ def load_branches_data():
 @st.cache_data(ttl=60)
 def get_active_loan_schemes():
     try:
-        res = supabase.table("loan_schemes").select("*").execute()
+        res = supabase.table("gold_loan_schemes").select("*").execute()
         if res.data:
-            schemes = [s.get("scheme_name") or s.get("name") for s in res.data if (s.get("scheme_name") or s.get("name"))]
-            return schemes if schemes else ["VVH149", "Standard Gold Loan"]
+            schemes = []
+            for row in res.data:
+                # திட்டத்தின் பெயர் அல்லது ஸ்கீம் கோடு
+                s_name = (
+                    row.get("scheme_name") or 
+                    row.get("name") or 
+                    row.get("scheme_code") or 
+                    row.get("scheme")
+                )
+                if s_name:
+                    schemes.append(str(s_name).strip())
+            
+            if schemes:
+                return list(dict.fromkeys(schemes))
     except Exception:
         pass
     return ["VVH149", "Standard Gold Loan"]
