@@ -856,9 +856,29 @@ if "gp_ornament_rows" not in st.session_state:
         {"item": "", "count": 1, "gross_wt": 0.0, "net_wt": 0.0, "purity": "916 KDM"}
     ]
 
-branches_res = supabase.table("branches").select("*").order("id").execute()
-branch_options = {b["branch_name"]: b["id"] for b in branches_res.data} if branches_res.data else {}
-branch_id_to_name = {b["id"]: b["branch_name"] for b in branches_res.data} if branches_res.data else {}
+@st.cache_data(ttl=300)
+def load_branches_data():
+    try:
+        res = supabase.table("branches").select("*").order("id").execute()
+        return res.data or []
+    except Exception as e:
+        return []
+
+@st.cache_data(ttl=60)
+def get_active_loan_schemes():
+    try:
+        res = supabase.table("loan_schemes").select("*").execute()
+        if res.data:
+            schemes = [s.get("scheme_name") or s.get("name") for s in res.data if (s.get("scheme_name") or s.get("name"))]
+            return schemes if schemes else ["VVH149", "Standard Gold Loan"]
+    except Exception:
+        pass
+    return ["VVH149", "Standard Gold Loan"]
+
+# கிளைகளின் பட்டியலை உருவாக்குதல்
+branches_data = load_branches_data()
+branch_options = {b["branch_name"]: b["id"] for b in branches_data} if branches_data else {}
+branch_id_to_name = {b["id"]: b["branch_name"] for b in branches_data} if branches_data else {}
 
 # ==========================================
 # 5. உள்நுழைவு திரை (Login Screen)
@@ -2383,9 +2403,14 @@ else:
                     with pl_col1:
                         new_gl_no = st.text_input("புதிய கடன் எண் (GL No) *", key=f"gl_no_in_{fc}")
                         
-                        # 🌟 இந்த இடத்தில் தான் அந்த 2 வரிகளை ஒட்ட வேண்டும்:
-                        available_schemes = admin_schemes_list if ('admin_schemes_list' in locals() and admin_schemes_list) else ["VVH149", "Standard Gold Loan"]
-                        selected_scheme = st.selectbox("அட்மின் நகைக் கடன் திட்டம் (Scheme) *", available_schemes, key=f"sch_sel_{fc}")
+                        # 🌟 டேட்டாபேஸில் அட்மின் பதிவு செய்துள்ள நேரடி திட்டங்களை எடுத்தல்
+                        db_schemes = get_active_loan_schemes()
+                        
+                        scheme_name = st.selectbox(
+                            "அட்மின் நகைக் கடன் திட்டம் (Scheme) *", 
+                            db_schemes, 
+                            key=f"sch_sel_{fc}"
+                    )
 
                     with pl_col2:
                         total_weight = st.number_input("மொத்த எடை (Gross Weight - gms) *", min_value=0.0, step=0.001, format="%.3f", key=f"gwt_in_{fc}")
@@ -2398,7 +2423,7 @@ else:
                     ornament_details = st.text_area("நகை விபரம்", key=f"orn_det_{fc}")
                     ornament_file = st.file_uploader("நகை படம்", type=["jpg", "jpeg", "png"], key=f"orn_file_{fc}")
                     detail_summary = [f"GL: {new_gl_no}", f"ஸ்கீம்: {selected_scheme}", f"RPG: ₹{cur_rpg if 'cur_rpg' in locals() else '-'}", f"எடை: {net_weight}g"]
-                    
+
                 # 2. அடமானம் மீட்டல் (GL Release)
                 elif txn_category == "GL Release (அடமானம் மீட்டல்)":
                     r_col1, r_col2 = st.columns(2)
