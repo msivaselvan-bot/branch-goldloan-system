@@ -453,17 +453,21 @@ def get_current_branch_cash_drawer(branch_id):
         clean_b_id = int(branch_id)
         stock = empty_stock.copy()
 
-        # டேட்டாபேஸில் உள்ள கடைசி பதிவை எடுத்தல்
+        # =========================================================================
+        # 1. அட்மின் பதிவு செய்த மிகச் சமீபத்திய துவக்க இருப்பை எடுத்தல் (Opening Stock)
+        # =========================================================================
         box_res = (
             supabase.table("branch_cash_box")
-            .select("opening_denomination")
+            .select("opening_denomination, entry_date")
             .eq("branch_id", clean_b_id)
             .order("id", desc=True)
             .limit(1)
             .execute()
         )
         
+        last_op_date = None
         if box_res.data and box_res.data[0].get("opening_denomination"):
+            last_op_date = box_res.data[0].get("entry_date")
             op_data = box_res.data[0]["opening_denomination"]
             if isinstance(op_data, str):
                 try:
@@ -474,21 +478,27 @@ def get_current_branch_cash_drawer(branch_id):
                 val = op_data.get(k, 0)
                 stock[k] = float(val or 0) if k == "coins" else int(float(val or 0))
 
-        return stock
-    except Exception:
-        return empty_stock
-
-        # 🌟 2. இன்றைய தேதியில் நடந்த வாடிக்கையாளர் வருகைகளின் பணப் பரிவர்த்தனைகள் மட்டும்
-        visits_res = (
+        # =========================================================================
+        # 2. வாடிக்கையாளர் வருகைகளின் வரவு / செலவு நோட்டுகள் (Customer Visits)
+        # =========================================================================
+        visits_query = (
             supabase.table("customer_visits")
             .select("denomination_details, created_at")
             .eq("branch_id", clean_b_id)
-            .gte("created_at", f"{today_str}T00:00:00")
-            .execute()
+            .neq("status", "Rejected")
         )
+        if last_op_date:
+            visits_query = visits_query.gte("created_at", f"{last_op_date}T00:00:00")
+            
+        visits_res = visits_query.execute()
         if visits_res.data:
             for row in visits_res.data:
                 d_info = row.get("denomination_details")
+                if isinstance(d_info, str):
+                    try:
+                        d_info = json.loads(d_info)
+                    except Exception:
+                        d_info = {}
                 if isinstance(d_info, dict):
                     in_notes = d_info.get("in", {})
                     out_notes = d_info.get("out", {})
@@ -498,56 +508,76 @@ def get_current_branch_cash_drawer(branch_id):
                         stock[k] += val_in
                         stock[k] -= val_out
 
-        # 🌟 3. இன்றைய HO மற்றும் கிளை இடையேயான ரொக்கப் பரிமாற்றம்
-        fund_res = (
+        # =========================================================================
+        # 3. தலைமையகம் மற்றும் கிளை இடையேயான பணப் பரிமாற்றம் (Fund Transfers)
+        # =========================================================================
+        fund_query = (
             supabase.table("branch_fund_transfers")
-            .select("transfer_type, denomination_details")
+            .select("transfer_type, denomination_details, payment_mode, status")
             .eq("branch_id", clean_b_id)
             .eq("payment_mode", "Cash")
-            .eq("status", "Approved")
-            .eq("transfer_date", today_str)
-            .execute()
+            .neq("status", "Rejected")
         )
+        if last_op_date:
+            fund_query = fund_query.gte("created_at", f"{last_op_date}T00:00:00")
+            
+        fund_res = fund_query.execute()
         if fund_res.data:
             for f_row in fund_res.data:
                 t_type = f_row.get("transfer_type")
                 t_den = f_row.get("denomination_details") or {}
-                for k in stock:
-                    notes_qty = float(t_den.get(k, 0) or 0) if k == "coins" else int(float(t_den.get(k, 0) or 0))
-                    if t_type == "HO_TO_BRANCH":
-                        stock[k] += notes_qty
-                    elif t_type == "BRANCH_TO_HO":
-                        stock[k] -= notes_qty
+                if isinstance(t_den, str):
+                    try:
+                        t_den = json.loads(t_den)
+                    except Exception:
+                        t_den = {}
 
-        # 🌟 4. இன்றைய கிளைச் செலவுகள்
-        exp_res = (
+                notes_dict = t_den.get("out", {}) if "out" in t_den else t_den
+
+                for k in stock:
+                    qty = float(notes_dict.get(k, 0) or 0) if k == "coins" else int(float(notes_dict.get(k, 0) or 0))
+                    if t_type in ["HO_TO_BRANCH", "HO_DEPOSIT"]:
+                        stock[k] += qty
+                    elif t_type in ["BRANCH_TO_HO", "HO_TRANSFER"]:
+                        stock[k] -= qty
+
+        # =========================================================================
+        # 4. கிளைச் செலவுகள் (Branch Expenses)
+        # =========================================================================
+        exp_query = (
             supabase.table("branch_expenses")
-            .select("denomination_details")
+            .select("denomination_details, status")
             .eq("branch_id", clean_b_id)
-            .eq("status", "Approved")
-            .eq("expense_date", today_str)
-            .execute()
+            .neq("status", "Rejected")
         )
+        if last_op_date:
+            exp_query = exp_query.gte("created_at", f"{last_op_date}T00:00:00")
+            
+        exp_res = exp_query.execute()
         if exp_res.data:
             for e_row in exp_res.data:
                 e_den = e_row.get("denomination_details") or {}
-                out_notes = e_den.get("out", {})
+                if isinstance(e_den, str):
+                    try:
+                        e_den = json.loads(e_den)
+                    except Exception:
+                        e_den = {}
+
+                out_notes = e_den.get("out", {}) if "out" in e_den else e_den
                 in_notes = e_den.get("in", {})
-                
-                if not out_notes and not in_notes:
-                    out_notes = e_den
-                
+
                 for k in stock:
                     out_val = float(out_notes.get(k, 0) or 0) if k == "coins" else int(float(out_notes.get(k, 0) or 0))
                     in_val = float(in_notes.get(k, 0) or 0) if k == "coins" else int(float(in_notes.get(k, 0) or 0))
                     stock[k] -= out_val
                     stock[k] += in_val
 
+        # எதிர்மறை மதிப்புகள் வராமல் பாதுகாத்தல்
         for k in stock:
             stock[k] = max(0.0 if k == "coins" else 0, stock[k])
 
         return stock
-    except Exception:
+    except Exception as e:
         return empty_stock
 # ==============================================================================
 # காரணப் பணியாளர் அறிக்கை (Incentive & Attribution Report)
