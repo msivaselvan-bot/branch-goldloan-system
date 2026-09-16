@@ -887,6 +887,132 @@ def get_active_loan_schemes():
         pass
     return ["VVH149", "Standard Gold Loan"]
 
+def generate_next_gl_number(branch_id):
+    try:
+        clean_b_id = int(branch_id)
+        res = supabase.table("branch_loan_sequences").select("*").eq("branch_id", clean_b_id).execute()
+        
+        if res.data:
+            rec = res.data[0]
+            prefix = rec.get("prefix", "GL")
+            next_no = int(rec.get("last_number", 0)) + 1
+        else:
+            prefix = "GL"
+            next_no = 1
+            try:
+                supabase.table("branch_loan_sequences").insert({
+                    "branch_id": clean_b_id,
+                    "prefix": prefix,
+                    "last_number": 0
+                }).execute()
+            except Exception:
+                pass
+
+        # 🌟 முன்னொட்டின் முடிவில் உள்ள தேவையில்லாத '-' அல்லது '/' குறியீடுகளை நீக்கிவிட்டு சரியாக '/' சேர்த்தல்
+        clean_pfx = str(prefix).strip().rstrip("/-")
+        formatted_gl = f"{clean_pfx}/{str(next_no).zfill(4)}"
+
+        return formatted_gl, next_no
+    except Exception as e:
+        return "GL/1001", 1
+
+def get_current_display_gl_number(branch_id):
+    """கார்ட்டில் உள்ள எண்ணிக்கைக்கு ஏற்ப கடன் எண்ணை முன்னும் பின்னும் நகர்த்துதல்"""
+    try:
+        clean_b_id = int(branch_id)
+        res = supabase.table("branch_loan_sequences").select("*").eq("branch_id", clean_b_id).execute()
+        
+        prefix = "KMK"
+        db_last_no = 0
+        if res.data:
+            rec = res.data[0]
+            prefix = str(rec.get("prefix", "KMK")).strip().rstrip("/-")
+            db_last_no = int(rec.get("last_number", 0))
+
+        cart = st.session_state.get("transactions_cart", [])
+        pledge_count = sum(1 for item in cart if "Pledge" in str(item.get("transaction_type", "")))
+
+        current_seq_no = db_last_no + pledge_count + 1
+        formatted_gl = f"{prefix}/{str(current_seq_no).zfill(4)}"
+        
+        return formatted_gl, current_seq_no
+    except Exception:
+        return "KMK/1001", 1
+
+def commit_next_gl_number(branch_id, used_number):
+    try:
+        supabase.table("branch_loan_sequences").upsert({
+            "branch_id": int(branch_id),
+            "last_number": int(used_number)
+        }).execute()
+    except Exception:
+        pass
+
+def get_customer_active_loans(customer_mobile="", customer_name="", branch_id=None):
+    """வாடிக்கையாளரின் சரியான கடன்களை மட்டும் துல்லியமாக எடுத்தல்"""
+    try:
+        # 1. வெறும் Pledge கடன்களை மட்டுமே எடுக்க வேண்டும் (Release பரிவர்த்தனைகளைத் தவிர்க்க)
+        res = supabase.table("transactions").select("*").ilike("transaction_type", "%Pledge%").execute()
+        
+        if not res.data:
+            return []
+            
+        all_rows = res.data
+        active_loans = []
+
+        clean_nm = str(customer_name).strip().lower() if customer_name else ""
+        clean_mob = "".join(filter(str.isdigit, str(customer_mobile)))[-10:] if customer_mobile else ""
+
+        for row in all_rows:
+            # Closed கடன்களைத் தவிர்த்தல்
+            status_val = str(row.get("status") or "").strip().lower()
+            if status_val == "closed":
+                continue
+
+            # Release பதிவுகள் தவறுதலாக வந்துவிடாமல் தடுத்தல்
+            tx_type = str(row.get("transaction_type") or "").lower()
+            if "release" in tx_type or "மீட்டல்" in tx_type:
+                continue
+
+            row_name = str(row.get("customer_name") or "").strip().lower()
+            row_mob = "".join(filter(str.isdigit, str(row.get("mobile") or "")))[-10:]
+
+            match_found = False
+            
+            # 🌟 மொபைல் அல்லது பெயர் துல்லியமாகப் பொருந்தினால் மட்டுமே அனுமதிக்க வேண்டும்
+            if clean_mob and row_mob and clean_mob == row_mob:
+                match_found = True
+            elif clean_nm and row_name and (clean_nm in row_name or row_name in clean_nm):
+                match_found = True
+
+            if match_found:
+                gl_no = row.get("loan_number") or row.get("gp_number") or row.get("gl_no") or ""
+                remarks = str(row.get("remarks") or "")
+                
+                if not gl_no:
+                    if "Old GL:" in remarks:
+                        gl_no = remarks.split("Old GL:")[-1].split("|")[0].strip()
+                    elif "GL:" in remarks:
+                        gl_no = remarks.split("GL:")[-1].split("|")[0].strip()
+                
+                if gl_no:
+                    active_loans.append({
+                        "id": row.get("id"),
+                        "gl_no": gl_no,
+                        "principal": float(row.get("principal_amount") or row.get("amount") or 0.0),
+                        "net_wt": float(row.get("net_weight") or 0.0)
+                    })
+
+        # கார்ட்டில் ஏற்கனவே சேர்க்கப்பட்ட கடன்களை நீக்குதல்
+        cart_closed_gls = [
+            c.get("closed_gl_no") for c in st.session_state.get("transactions_cart", []) 
+            if c.get("closed_gl_no")
+        ]
+        
+        return [ln for ln in active_loans if ln["gl_no"] not in cart_closed_gls]
+    except Exception:
+        return []
+
 # கிளைகளின் பட்டியலை உருவாக்குதல்
 branches_data = load_branches_data()
 branch_options = {b["branch_name"]: b["id"] for b in branches_data} if branches_data else {}
@@ -1618,6 +1744,77 @@ else:
                     st.rerun()
                 except Exception as e:
                     st.error(f"பிழை: {e}")
+            
+            st.divider()  # ஒரு பிரிப்பான் கோடு
+        
+            # 🌟 இங்கே ஒட்டுங்கள்:
+            st.subheader("📥 பழைய கடன்கள் பல்க் அப்லோட் & ஆரம்ப எண் நிர்ணயம்")
+
+            sel_branch_name = st.selectbox("கிளையைத் தேர்ந்தெடுக்கவும்", list(branch_options.keys()), key="bulk_sel_branch")
+            target_b_id = branch_options[sel_branch_name]
+
+            col_u1, col_u2 = st.columns(2)
+            with col_u1:
+                branch_prefix = st.text_input("கிளை Prefix (எ.கா: KZM-GL, TGL-GL)", value=f"GL-{target_b_id}", key="bulk_prefix_in")
+            with col_u2:
+                starting_gl_num = st.number_input("தற்போதைய கடைசி கடன் எண் (Last Used GL No)", min_value=0, step=1, key="bulk_last_no_in")
+
+            if st.button("கிளையின் தொடக்க கடன் எண்ணைச் சேமி 💾", key="btn_save_gl_seq"):
+                supabase.table("branch_loan_sequences").upsert({
+                    "branch_id": target_b_id,
+                    "prefix": branch_prefix.strip(),
+                    "last_number": int(starting_gl_num)
+                }).execute()
+                st.success(f"✅ {sel_branch_name} கிளைக்கு அடுத்த கடன் எண்: {branch_prefix.strip()}-{str(starting_gl_num + 1).zfill(4)} என அமைக்கப்பட்டது!")
+
+            st.markdown("---")
+            uploaded_file = st.file_uploader("பழைய கடன் விபரங்கள் (CSV அல்லது Excel கோப்பு)", type=["csv", "xlsx"], key="bulk_file_uploader")
+
+            if uploaded_file and st.button("பழைய கடன்களைப் பதிவேற்று (Upload Records) 🚀", key="btn_run_bulk_upload"):
+                try:
+                    df = pd.read_csv(uploaded_file) if uploaded_file.name.endswith(".csv") else pd.read_excel(uploaded_file)
+
+                    # 🌟 இந்த ஒரு வரியை மட்டும் df வாசித்த உடனே சேர்த்துக் கொள்ளுங்கள்
+                    df.columns = df.columns.str.strip().str.lower()
+
+                    records = []
+                    max_gl_num = starting_gl_num
+
+                    for _, row in df.iterrows():
+                        # மொபைல் எண்ணை ஸ்ட்ரிங்காக மற்றும் எண்களாக மட்டும் எடுத்தல்
+                        raw_mob = str(row.get("mobile", "")).split(".")[0].strip()
+                        clean_mob = "".join(filter(str.isdigit, raw_mob))[-10:]
+
+                        records.append({
+                            "branch_id": target_b_id,
+                            "transaction_type": "Pledge (Old)",
+                            "staff_name": "Admin Migration",
+                            "customer_name": str(row.get("customer_name", "")).strip(),
+                            "mobile": clean_mob,
+                            "amount": float(row.get("principal_amount", 0) or 0.0),
+                            "principal_amount": float(row.get("principal_amount", 0) or 0.0),
+                            "net_weight": float(row.get("net_weight", 0) or 0.0),
+                            "remarks": f"Old GL: {str(row.get('gl_no', '')).strip()}",
+                            "status": "Approved"
+                        })
+                        
+                        raw_gl = str(row.get("gl_no", ""))
+                        digits = "".join(filter(str.isdigit, raw_gl))
+                        if digits and int(digits) > max_gl_num:
+                            max_gl_num = int(digits)
+                    
+                    if records:
+                        supabase.table("transactions").insert(records).execute()
+                        
+                        supabase.table("branch_loan_sequences").upsert({
+                            "branch_id": target_b_id,
+                            "prefix": branch_prefix.strip(),
+                            "last_number": int(max_gl_num)
+                        }).execute()
+                        
+                        st.success(f"✅ {len(records)} பழைய கடன்கள் வெற்றிகரமாக ஏற்றப்பட்டன! அடுத்த ஆட்டோ கடன் எண்: {branch_prefix.strip()}-{str(max_gl_num + 1).zfill(4)}")
+                except Exception as e:
+                    st.error(f"❌ கோப்பைப் பதிவேற்றுவதில் பிழை: {e}")
 
         with tab9:
             st.subheader("🏦 தலைமையக பணப் பரிமாற்றம் (HO ⇄ Branch)")
@@ -2413,16 +2610,18 @@ else:
                     pl_col1, pl_col2, pl_col3 = st.columns(3)
             
                     with pl_col1:
-                        new_gl_no = st.text_input("புதிய கடன் எண் (GL No) *", key=f"gl_no_in_{fc}")
+                        # 🌟 கார்ட்டின் நிலைக்கு ஏற்ப மாறும் ஆட்டோ எண்
+                        suggested_gl, next_seq_num = get_current_display_gl_number(st.session_state.branch_id)
                         
-                        # 🌟 டேட்டாபேஸில் அட்மின் பதிவு செய்துள்ள நேரடி திட்டங்களை எடுத்தல்
+                        new_gl_no = st.text_input(
+                            "கடன் எண் (Auto Generated GL No) *", 
+                            value=suggested_gl, 
+                            disabled=True, 
+                            key=f"gl_no_in_{fc}"
+                        )
+                        
                         db_schemes = get_active_loan_schemes()
-                        
-                        scheme_name = st.selectbox(
-                            "அட்மின் நகைக் கடன் திட்டம் (Scheme) *", 
-                            db_schemes, 
-                            key=f"sch_sel_{fc}"
-                    )
+                        scheme_name = st.selectbox("அட்மின் நகைக் கடன் திட்டம் (Scheme) *", db_schemes, key=f"sch_sel_{fc}")
 
                     with pl_col2:
                         total_weight = st.number_input("மொத்த எடை (Gross Weight - gms) *", min_value=0.0, step=0.001, format="%.3f", key=f"gwt_in_{fc}")
@@ -2443,25 +2642,92 @@ else:
 
                 # 2. அடமானம் மீட்டல் (GL Release)
                 elif txn_category == "GL Release (அடமானம் மீட்டல்)":
+                    # 🌟 வாடிக்கையாளரின் மொபைல் மற்றும் பெயரைப் பாதுகாப்பாக எடுத்தல்
+                    v_info = st.session_state.get("current_visit", {}) or (visit if 'visit' in locals() else {})
+                    
+                    cust_mobile = (
+                        v_info.get("mobile") or 
+                        v_info.get("customer_mobile") or 
+                        v_info.get("phone") or 
+                        ""
+                    )
+                    cust_name = (
+                        v_info.get("customer_name") or 
+                        v_info.get("name") or 
+                        ""
+                    )
+                    
+                    active_loans = get_customer_active_loans(cust_mobile, cust_name)
+                    
+                    loan_display_map = {
+                        f"{l['gl_no']} (அசல்: ₹{l['principal']:,.2f}, எடை: {l['net_wt']}g)": l 
+                        for l in active_loans
+                    }
+
+                    if not loan_display_map:
+                        st.warning("⚠️ இந்த வாடிக்கையாளரின் பெயரில் நிலுவையில் உள்ள அடமானக் கடன்கள் எதுவும் இல்லை!")
+                        selected_gl_no = ""
+                        rel_gl_no = ""
+                        selected_loan_db_id = None
+                        auto_principal = 0.0
+                    else:
+                        selected_loan_label = st.selectbox(
+                            "அடமானக் கடன் எண்ணைத் தேர்ந்தெடுக்கவும் *",
+                            options=list(loan_display_map.keys()),
+                            key=f"loan_sel_{fc}"
+                        )
+                        chosen_loan = loan_display_map[selected_loan_label]
+                        selected_gl_no = chosen_loan["gl_no"]
+                        rel_gl_no = chosen_loan["gl_no"]
+                        selected_loan_db_id = chosen_loan["id"]
+                        auto_principal = float(chosen_loan["principal"])
+
                     r_col1, r_col2 = st.columns(2)
                     with r_col1:
-                        rel_gl_no = st.text_input("மீட்கப்படும் கடன் எண் *")
-                        principal_amount = st.number_input("அசல் தொகை (₹) *", min_value=0.0, step=500.0)
+                        principal_amount = st.number_input("அசல் தொகை (₹) *", value=auto_principal, min_value=0.0, step=500.0, key=f"rel_pr_in_{fc}")
+                        interest_amount = st.number_input("வட்டித் தொகை (₹) *", min_value=0.0, step=50.0, key=f"rel_int_in_{fc}")
                     with r_col2:
-                        interest_amount = st.number_input("வட்டித் தொகை (₹) *", min_value=0.0, step=50.0)
-                        other_charges = st.number_input("இதர கட்டணம் (₹)", min_value=0.0, step=10.0)
-                    received_amt = principal_amount + interest_amount + other_charges
+                        other_charges = st.number_input("இதர கட்டணம் (₹)", min_value=0.0, step=10.0, key=f"rel_oth_in_{fc}")
+                        received_amt = principal_amount + interest_amount + other_charges
+                        st.info(f"💰 பெற வேண்டிய மொத்தத் தொகை: ₹{received_amt:,.2f}")
+
                     detail_summary = [f"GL: {rel_gl_no}", f"அசல்: ₹{principal_amount}", f"வட்டி: ₹{interest_amount}"]
 
                 # 3. அசல் வரவு & வட்டி வரவு
                 elif txn_category in ["Interest Payment (வட்டி வரவு)", "Part Payment (அசல் வரவு)"]:
+                    # 🌟 வாடிக்கையாளரின் நடப்பில் உள்ள அடமானக் கடன்களை எடுத்தல்
+                    v_info = st.session_state.get("current_visit", {}) or (visit if 'visit' in locals() else {})
+                    cust_mobile = v_info.get("mobile") or v_info.get("customer_mobile") or v_info.get("phone") or ""
+                    cust_name = v_info.get("customer_name") or v_info.get("name") or ""
+                    
+                    active_loans = get_customer_active_loans(cust_mobile, cust_name)
+                    loan_display_map = {
+                        f"{l['gl_no']} (அசல்: ₹{l['principal']:,.2f}, எடை: {l['net_wt']}g)": l 
+                        for l in active_loans
+                    }
+
+                    if not loan_display_map:
+                        st.warning("⚠️ இந்த வாடிக்கையாளரின் பெயரில் நிலுவையில் உள்ள அடமானக் கடன்கள் எதுவும் இல்லை!")
+                        part_gl_no = ""
+                        selected_gl_no = ""
+                    else:
+                        selected_loan_label = st.selectbox(
+                            "கடன் எண்ணைத் தேர்ந்தெடுக்கவும் *",
+                            options=list(loan_display_map.keys()),
+                            key=f"part_int_loan_sel_{fc}"
+                        )
+                        chosen_loan = loan_display_map[selected_loan_label]
+                        part_gl_no = chosen_loan["gl_no"]
+                        selected_gl_no = chosen_loan["gl_no"]
+
                     i_col1, i_col2 = st.columns(2)
                     with i_col1:
-                        part_gl_no = st.text_input("கடன் எண் *")
-                        principal_amount = st.number_input("அசல் தொகை (₹)", min_value=0.0, step=100.0) if "Part" in txn_category else 0.0
+                        principal_amount = st.number_input("அசல் தொகை (₹)", min_value=0.0, step=100.0, key=f"pi_pr_{fc}") if "Part" in txn_category else 0.0
                     with i_col2:
-                        interest_amount = st.number_input("வட்டித் தொகை (₹)", min_value=0.0, step=50.0)
+                        interest_amount = st.number_input("வட்டித் தொகை (₹)", min_value=0.0, step=50.0, key=f"pi_int_{fc}")
+                    
                     received_amt = principal_amount + interest_amount
+                    st.info(f"💰 பெற வேண்டிய மொத்தத் தொகை: ₹{received_amt:,.2f}")
                     detail_summary = [f"GL: {part_gl_no}", f"அசல்: ₹{principal_amount}", f"வட்டி: ₹{interest_amount}"]
 
                 # 4. Take Over
@@ -2673,12 +2939,12 @@ else:
                     ornament_details = st.text_area("நகை விபரம் (Ornament Details)", key="gs_details")
                     ornament_file = st.file_uploader("நகை படம் (Ornament Photo)", type=["jpg", "jpeg", "png"], key="gs_img")
                     detail_summary = [f"பில்: {gs_bill_no}", f"பொருள்: {gs_item_name}", f"எடை: {net_weight}g"]
-
-                # கார்ட்டில் சேர்க்கும் பட்டன் (GP அல்லாத பிற நடவடிக்கைகளுக்கு மட்டும்)
+                    
+                    # கார்ட்டில் சேர்க்கும் பட்டன் (GP அல்லாத பிற நடவடிக்கைகளுக்கு மட்டும்)
                 if txn_category != "GP (Gold Purchase)":
                     if st.button("➕ பட்டியலில் சேர் (Add to Cart)", type="primary", key="btn_add_to_cart_main"):
                         if "Pledge" in txn_category:
-                            actual_paid_amt = max(0.0, float(paid_amt) - float(other_charges))
+                            actual_paid_amt = max(0.0, float(paid_amt) - float(other_charges)) if 'paid_amt' in locals() else 0.0
                         else:
                             actual_paid_amt = float(paid_amt) if 'paid_amt' in locals() else 0.0
 
@@ -2693,7 +2959,7 @@ else:
 
                             img_url = upload_ornament_image(ornament_file) if ('ornament_file' in locals() and ornament_file) else None
 
-                            st.session_state.transactions_cart.append({
+                            cart_entry = {
                                 "transaction_type": txn_category,
                                 "staff_name": staff,
                                 "paid_amount": float(actual_paid_amt),
@@ -2705,17 +2971,47 @@ else:
                                 "ornament_image_url": img_url,
                                 "total_weight": float(total_weight) if 'total_weight' in locals() else 0.0,
                                 "net_weight": float(net_weight) if 'net_weight' in locals() else 0.0,
-                                "gp_number": gp_number if ('gp_number' in locals() and gp_number) else "",
+                                "gp_number": selected_gl_no if 'selected_gl_no' in locals() else (new_gl_no if 'new_gl_no' in locals() else (gp_number if 'gp_number' in locals() else "")),
                                 "ref1_name": ref1_name if ('ref1_name' in locals() and ref1_name) else "",
                                 "ref1_phone": ref1_phone if ('ref1_phone' in locals() and ref1_phone) else "",
                                 "ref2_name": ref2_name if ('ref2_name' in locals() and ref2_name) else "",
                                 "ref2_phone": ref2_phone if ('ref2_phone' in locals() and ref2_phone) else "",
-                                "principal_amount": float(paid_amt) if 'paid_amt' in locals() else 0.0,
+                                "principal_amount": float(principal_amount) if 'principal_amount' in locals() else (float(paid_amt) if 'paid_amt' in locals() else 0.0),
                                 "interest_amount": float(interest_amount) if 'interest_amount' in locals() else 0.0,
                                 "nominee_name": nominee_name if ('nominee_name' in locals() and nominee_name) else "",
                                 "nominee_relation": nominee_relation if ('nominee_relation' in locals() and nominee_relation) else "",
                                 "nominee_address": nominee_address if ('nominee_address' in locals() and nominee_address) else "",
-                            })
+                            }
+
+                            # 🌟 அடமானம் மீட்டல் (Release) என்றால் Closed செய்யக் குறித்தல்:
+                            if "மீட்டல்" in txn_category or "Release" in txn_category:
+                                cart_entry["closed_gl_no"] = selected_gl_no if 'selected_gl_no' in locals() else ""
+                                cart_entry["closed_loan_id"] = selected_loan_db_id if 'selected_loan_db_id' in locals() else None
+
+                            # கார்ட்டில் சேர்த்தல்
+                            st.session_state.transactions_cart.append(cart_entry)
+
+                            # புதிய அடமானம் என்றால் உறுதி ஆவணத்தை தயார் செய்தல்
+                            if "Pledge" in txn_category:
+                                st.session_state.current_declaration = cart_entry
+                                st.session_state.declaration_gl_no = cart_entry.get("gp_number", "")
+
+                            st.session_state.form_reset_counter += 1
+                            st.rerun()  # 🌟 Rerun ஆகும் போது ஆட்டோ எண் தானாக +1 முன்னோக்கி கூடும்
+
+                    
+                            # 🌟 அடமானம் மீட்டல் (Release) என்றால் 'Closed' செய்ய வேண்டிய கடன் எண் மற்றும் ஐடி குறித்தல்
+                            if "மீட்டல்" in txn_category or "Release" in txn_category:
+                                cart_entry["closed_gl_no"] = selected_gl_no if 'selected_gl_no' in locals() else ""
+                                cart_entry["closed_loan_id"] = selected_loan_db_id if 'selected_loan_db_id' in locals() else None
+
+                            # 🌟 புதிய அடமானம் (Pledge) கார்ட்டில் சேர்ந்தால் அடுத்த ஆட்டோ கடன் எண்ணை உறுதி செய்தல்
+                            if "Pledge" in txn_category and 'next_seq_num' in locals():
+                                commit_next_gl_number(st.session_state.branch_id, next_seq_num)
+
+                            st.session_state.transactions_cart.append(cart_entry)
+                            st.session_state.form_reset_counter += 1
+                            st.rerun()
 
                             # Pledge உறுதி ஆவணம் உருவாக்கம்
                             if "Pledge" in txn_category:
@@ -2742,20 +3038,179 @@ else:
 
                 # உறுதி ஆவணப் பதிவிறக்கப் பகுதி
                 if st.session_state.get("current_declaration"):
-                    gl_no_val = st.session_state.get("declaration_gl_no", "GL")
-                    html_data = st.session_state.current_declaration
-                    html_bytes = html_data.encode("utf-8") if isinstance(html_data, str) else html_data
+                    decl_info = st.session_state.current_declaration
+                    gl_no_val = st.session_state.get("declaration_gl_no") or decl_info.get("gp_number", "GL")
+                    clean_gl_key = str(gl_no_val).replace("/", "_")
+
+                    # வாடிக்கையாளர் மற்றும் கடன் தகவல்கள்
+                    v_info = st.session_state.get("current_visit", {}) or (visit if 'visit' in locals() else {})
+                    cust_name = v_info.get("customer_name") or v_info.get("name") or "Cyril Jenson"
+                    cust_mob = v_info.get("mobile") or v_info.get("customer_mobile") or v_info.get("phone") or "-"
+                    branch_name = st.session_state.get("branch_name", "முத்துசிஸ் கோல்டு புரொடக்ட் பிரைவேட் லிமிடெட்")
+                    
+                    from datetime import datetime
+                    from dateutil.relativedelta import relativedelta
+
+                    today_dt = datetime.now()
+                    today_str = today_dt.strftime("%d-%m-%Y")
+                    due_date_str = (today_dt + relativedelta(months=3)).strftime("%d-%m-%Y")
+
+                    amt_val = float(decl_info.get("principal_amount", 0.0) or decl_info.get("paid_amount", 0.0) or decl_info.get("amount", 0.0))
+                    tot_wt = float(decl_info.get("total_weight", 0.0))
+                    net_wt = float(decl_info.get("net_weight", 0.0))
+
+                    # 🌟 A4 அளவுக்கு கச்சிதமாகப் பொருந்தும் HTML & CSS கட்டமைப்பு
+                    html_template = f"""<!DOCTYPE html>
+                <html>
+                <head>
+                    <meta charset="utf-8">
+                    <title>கூடுதல் கடன் உறுதிமொழிப் பத்திரம் - {gl_no_val}</title>
+                    <style>
+                        @page {{
+                            size: A4 portrait;
+                            margin: 10mm 15mm;
+                        }}
+                        * {{
+                            box-sizing: border-box;
+                        }}
+                        body {{
+                            font-family: Arial, sans-serif;
+                            margin: 0;
+                            padding: 0;
+                            line-height: 1.4;
+                            color: #111;
+                            font-size: 12px;
+                        }}
+                        .title {{
+                            text-align: center;
+                            font-size: 14px;
+                            font-weight: bold;
+                            border-bottom: 1.5px solid #222;
+                            padding-bottom: 4px;
+                            margin-bottom: 10px;
+                        }}
+                        .parties-table {{
+                            width: 100%;
+                            margin-bottom: 8px;
+                            font-size: 12px;
+                            border-collapse: collapse;
+                        }}
+                        .parties-table td {{
+                            vertical-align: top;
+                            padding: 0;
+                        }}
+                        .subject {{
+                            background-color: #f2f2f2;
+                            padding: 5px 8px;
+                            font-weight: bold;
+                            font-size: 12px;
+                            border-left: 3px solid #b8860b;
+                            margin-bottom: 8px;
+                        }}
+                        .content {{
+                            text-align: justify;
+                            font-size: 11.5px;
+                        }}
+                        .content p {{
+                            margin: 0 0 6px 0;
+                        }}
+                        .summary-box {{
+                            border: 1px dashed #444;
+                            padding: 6px 10px;
+                            margin: 8px 0;
+                            background: #fafafa;
+                            font-size: 11.5px;
+                        }}
+                        .signature-table {{
+                            width: 100%;
+                            margin-top: 15px;
+                            border-collapse: collapse;
+                        }}
+                        .signature-table td {{
+                            vertical-align: top;
+                            font-size: 11.5px;
+                            padding: 0;
+                        }}
+                        @media print {{
+                            body {{
+                                width: 100%;
+                            }}
+                        }}
+                    </style>
+                </head>
+                <body>
+                    <div class="title">
+                        அடகு நகைக்கடன் கூடுதல் தொகை பெறுதல் தொடர்பான உறுதிமொழிப் பத்திரம்
+                    </div>
+
+                    <table class="parties-table">
+                        <tr>
+                            <td style="width: 50%;">
+                                <strong>அனுப்புநர்:</strong><br>
+                                திரு/திருமதி. {cust_name}<br>
+                                தொடர்பு எண்: {cust_mob}
+                            </td>
+                            <td style="width: 50%;">
+                                <strong>பெறுநர்:</strong><br>
+                                மேலாளர் அவர்கள்,<br>
+                                முத்துசிஸ் கோல்டு புரொடக்ட் பிரைவேட் லிமிடெட்,<br>
+                                கிளை: {branch_name}
+                            </td>
+                        </tr>
+                    </table>
+
+                    <div class="subject">
+                        பொருள்: கடன் எண்: {gl_no_val} – கூடுதல் கடன் தொகை பெற்றமைக்கான உறுதிமொழி ஆவணம்.
+                    </div>
+
+                    <div class="content">
+                        <p>ஐயா,</p>
+                        <p>நான் தங்களது நிறுவனத்தில் <strong>{today_str}</strong> அன்று கடன் எண் <strong>{gl_no_val}</strong>-ன் கீழ் எனது தங்க நகைகளை அடமானம் வைத்து <strong>₹{amt_val:,.2f}</strong> கடனாகப் பெற்றுள்ளேன்.</p>
+                        
+                        <p>எனது அவசர பணத்தேவையின் காரணமாக, நிறுவனத்தின் வழக்கமான கடன் மதிப்பீட்டு வரம்பை (LTV) விட எனது தனிப்பட்ட வேண்டுகோளின் பேரில் கூடுதல் தொகையினை கடனாகப் பெற்றுள்ளேன் என்பதை மனப்பூர்வமாக ஒப்புக்கொள்கிறேன்.</p>
+                        
+                        <p>இக்கடனுக்கான கால அளவு 3 (மூன்று) மாதங்கள் மட்டுமே. இக்காலக்கட்டத்தில் மாதாந்திர வட்டியை தவறாமல் செலுத்தி, 3 மாத கால முடிவிற்குள் (அதாவது <strong>{due_date_str}</strong>-க்குள்) அசல் மற்றும் முழு வட்டியையும் செலுத்தி நகைகளைத் திருப்பிக் கொள்கிறேன் என உறுதியளிக்கிறேன். தவணை தவறினால், நிறுவனத்தின் விதிகளின்படி கூடுதல் அபராத வட்டி செலுத்த நான் கட்டுப்பட்டவன் ஆவேன்.</p>
+                        
+                        <p>3 மாத காலத்திற்குள் அசல் மற்றும் வட்டி முழுவதையும் செலுத்தி கடனை நேர் செய்யத் தவறினால், இந்திய ஒப்பந்தச் சட்ட விதிகளின்படி (Indian Contract Act, 1872) நிறுவனம் எனக்கு உரிய முன்னறிவிப்பு வழங்கி, அடமானம் வைக்கப்பட்ட நகைகளை வெளிப்படை ஏலத்திலோ அல்லது நேரடி விற்பனை மூலமாகவோ விற்று கடன் பாக்கியை வசூலித்துக் கொள்ள முழு உரிமை உண்டு.</p>
+                        
+                        <p>அவ்வாறு நகைகளை விற்பனை செய்து கடன் தொகையை ஈடுசெய்வதில் எனக்கு எவ்வித ஆட்சேபனையோ, உரிமைகோரலோ இருக்காது. விற்பனைத் தொகையானது நிலுவைக் கடனை விடக் குறைவாக இருக்கும் பட்சத்தில், எஞ்சிய கடன் தொகையை நான் செலுத்த முழுப் பொறுப்பேற்கிறேன்.</p>
+                        
+                        <p>மேற்கண்ட அனைத்து விதிகளையும் முழுமையாகப் படித்துப் புரிந்து கொண்டு, எந்தவித வற்புறுத்தலும் இன்றி எனது சொந்த விருப்பத்தின் பேரில் இந்த உறுதிமொழிப் பத்திரத்தில் கையொப்பமிடுகிறேன்.</p>
+                    </div>
+
+                    <div class="summary-box">
+                        <strong>அடகு வைக்கப்பட்ட நகைகளின் சுருக்கம்:</strong><br>
+                        ரசீது எண்: <strong>{gl_no_val}</strong> | மொத்த எடை: <strong>{tot_wt}g</strong> | நிகர எடை: <strong>{net_wt}g</strong> | தேதி: <strong>{today_str}</strong> | இடம்: <strong>{branch_name}</strong>
+                    </div>
+
+                    <table class="signature-table">
+                        <tr>
+                            <td style="width: 50%;">
+                                <strong>சாட்சிகள்:</strong><br><br>
+                                1. பெயர்: ______________________ கையொப்பம்: ____________<br><br>
+                                2. பெயர்: ______________________ கையொப்பம்: ____________
+                            </td>
+                            <td style="width: 50%; text-align: right; vertical-align: bottom;">
+                                வாடிக்கையாளர் கையொப்பம்: ___________________<br><br>
+                                (<strong>{cust_name}</strong>)
+                            </td>
+                        </tr>
+                    </table>
+                </body>
+                </html>"""
+
+                    download_bytes = html_template.encode("utf-8")
 
                     st.markdown("---")
                     with st.container(border=True):
-                        st.warning("⚠️ **கவனிக்க:** இந்த நகைக் கடனின் கால அளவு 6 மாதங்கள் அல்லது அதற்கும் குறைவாக உள்ளதால் உறுதி ஆவணம் அவசியமாகிறது.")
+                        st.warning("⚠️ **கவனிக்க:** கூடுதல் நகைக் கடன் உறுதிமொழிப் பத்திரம் அவசியமாகிறது.")
                         st.download_button(
                             label=f"📄 உறுதி ஆவணத்தைப் பதிவிறக்குக (Print Declaration - GL: {gl_no_val})",
-                            data=html_bytes,
-                            file_name=f"Declaration_{gl_no_val}.html",
+                            data=download_bytes,
+                            file_name=f"Declaration_{clean_gl_key}.html",
                             mime="text/html; charset=utf-8",
                             type="primary",
-                            key=f"dl_btn_{gl_no_val}"
+                            key=f"dl_btn_{clean_gl_key}"
                         )
 
                 # 🛒 கார்ட் பட்டியல்
@@ -2784,9 +3239,12 @@ else:
                             st.session_state.current_visit["step"] = "CASH_OTP"
                             st.rerun()
                     with cart_b2:
-                        if st.button("பட்டியலை அழி", key="btn_clear_cart"):
+                        if st.button("🗑️ பட்டியலை அழி (Clear Cart)", use_container_width=True):
                             st.session_state.transactions_cart = []
-                            st.rerun()
+                            st.session_state.current_declaration = None
+                            st.session_state.declaration_gl_no = None
+                            st.session_state.form_reset_counter += 1
+                            st.rerun()  # 🌟 Rerun ஆகும் போது ஆட்டோ எண் தானாகப் பின்னோக்கி இறங்கிவிடும்
 
             # ---------------------------------------------------------------------
             # படி 3: பணம் மற்றும் OTP சரிபார்ப்பு (CASH_OTP)
@@ -3004,24 +3462,46 @@ else:
                                                 st.write("அனுப்பப்பட்ட Transaction Data:", txn)
                                                 st.stop()
 
-                                        st.success(f"🎉 வருகை {visit['visit_no']} வெற்றிகரமாக நிறைவுபெற்றது!")
-                                        st.session_state.current_visit = None
-                                        st.session_state.transactions_cart = []
-                                        st.session_state.generated_otp = None
-                                        st.session_state.current_declaration = None
-                                        st.session_state.declaration_gl_no = None
-                                        st.rerun()
-                                else:
-                                    st.error("தவறான OTP! சரியாக உள்ளிடவும்.")
+                                            # 🌟 1. மீட்கப்பட்ட கடன்களை முதலில் 'Closed' நிலைக்கு மாற்றுதல்
+                                            for item in st.session_state.transactions_cart:
+                                                if item.get("closed_loan_id"):
+                                                    try:
+                                                        supabase.table("transactions").update({
+                                                            "status": "Closed"
+                                                        }).eq("id", item["closed_loan_id"]).execute()
+                                                    except Exception:
+                                                        pass
 
-                        st.write("")
-                        if not otp_already_sent:
-                            if st.button("⬅️ நடவடிக்கைகளை மாற்ற பின்செல்க", use_container_width=True):
-                                st.session_state.current_visit["step"] = "TRANSACTIONS"
-                                st.rerun()
+                                            # 🌟 கார்ட்டில் உள்ள புதிய அடமானங்களின் எண்ணிக்கைக்கு ஏற்ப டேட்டாபேஸ் சீக்வென்ஸை அதிகரித்தல்
+                                            cart = st.session_state.transactions_cart
+                                            pledge_items = [i for i in cart if "Pledge" in str(i.get("transaction_type", ""))]
+                                            
+                                            if pledge_items:
+                                                try:
+                                                    final_b_id = int(st.session_state.branch_id)
+                                                    res = supabase.table("branch_loan_sequences").select("last_number").eq("branch_id", final_b_id).execute()
+                                                    current_db_last = int(res.data[0]["last_number"]) if res.data else 0
+                                                    
+                                                    new_db_last = current_db_last + len(pledge_items)
+                                                    supabase.table("branch_loan_sequences").update({
+                                                        "last_number": new_db_last
+                                                    }).eq("branch_id", final_b_id).execute()
+                                                except Exception:
+                                                    pass
+
+                                            # 🌟 2. வெற்றிச் செய்தி மற்றும் கார்ட் / செஷன் கிளியர் செய்தல்
+                                            st.success(f"🎉 வருகை {visit['visit_no']} வெற்றிகரமாக நிறைவுபெற்றது!")
+                                            st.session_state.current_visit = None
+                                            st.session_state.transactions_cart = []
+                                            st.session_state.generated_otp = None
+                                            st.session_state.current_declaration = None
+                                            st.session_state.declaration_gl_no = None
+                                            st.rerun()
+                                        else:
+                                            st.error("தவறான OTP! சரியாக உள்ளிடவும்.")
 
         # =========================================================================
-        # 2-வது டேப்: கிளை ஆவணங்கள் பதிவேற்றம் (Upload Docs Desk )
+        # 2-வது டேப்: கிளை ஆவணங்கள் பதிவேற்றம் (Upload Docs Desk)
         # =========================================================================
         with branch_tab2:
             st.subheader("📁 கிளை ஆவணங்கள் பதிவேற்றம் (Upload Docs Desk)")
