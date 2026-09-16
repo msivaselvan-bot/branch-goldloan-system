@@ -3016,20 +3016,72 @@ else:
 
                 # உறுதி ஆவணப் பதிவிறக்கப் பகுதி
                 if st.session_state.get("current_declaration"):
-                    gl_no_val = st.session_state.get("declaration_gl_no", "GL")
-                    html_data = st.session_state.current_declaration
-                    html_bytes = html_data.encode("utf-8") if isinstance(html_data, str) else html_data
+                    decl_info = st.session_state.current_declaration
+                    gl_no_val = st.session_state.get("declaration_gl_no") or decl_info.get("gp_number", "GL")
+                    clean_gl_key = str(gl_no_val).replace("/", "_")
+
+                    # 1. கார்ட் விவரங்களிலிருந்து சுத்தமான HTML உறுதி ஆவணத்தை உருவாக்குதல்
+                    cust_name = visit.get("customer_name", "") if 'visit' in locals() else ""
+                    cust_mob = visit.get("mobile", "") if 'visit' in locals() else ""
+                    amt_val = decl_info.get("paid_amount", 0.0) + decl_info.get("other_charges", 0.0)
+                    wt_val = decl_info.get("net_weight", 0.0)
+
+                    html_template = f"""
+                    <!DOCTYPE html>
+                    <html>
+                    <head>
+                        <meta charset="utf-8">
+                        <title>கடன் உறுதி ஆவணம் - {gl_no_val}</title>
+                        <style>
+                            body {{ font-family: Arial, sans-serif; padding: 25px; line-height: 1.6; }}
+                            .header {{ text-align: center; border-bottom: 2px solid #333; padding-bottom: 10px; }}
+                            .details {{ margin: 20px 0; }}
+                            .details table {{ width: 100%; border-collapse: collapse; }}
+                            .details td {{ padding: 8px; border: 1px solid #ccc; }}
+                            .declaration {{ margin-top: 20px; background: #f9f9f9; padding: 15px; border-left: 4px solid #b8860b; }}
+                            .signatures {{ margin-top: 50px; display: flex; justify-content: space-between; }}
+                        </style>
+                    </head>
+                    <body>
+                        <div class="header">
+                            <h2>நகைக் கடன் உறுதிமொழி ஆவணம் (Pledge Declaration)</h2>
+                            <p><strong>கடன் எண்:</strong> {gl_no_val}</p>
+                        </div>
+                        <div class="details">
+                            <table>
+                                <tr><td><strong>வாடிக்கையாளர் பெயர்:</strong></td><td>{cust_name}</td></tr>
+                                <tr><td><strong>கைபேசி எண்:</strong></td><td>{cust_mob}</td></tr>
+                                <tr><td><strong>வழங்கப்பட்ட அசல் தொகை:</strong></td><td>₹{amt_val:,.2f}</td></tr>
+                                <tr><td><strong>நிகர எடை:</strong></td><td>{wt_val} கிராம்</td></tr>
+                            </table>
+                        </div>
+                        <div class="declaration">
+                            <p><strong>உறுதிமொழி:</strong> மேலே விவரங்கள் கூறப்பட்டுள்ள தங்க நகைகள் எனக்கு முழு உரிமையுடையவை என்றும், இதில் எவ்வித வில்லங்கமோ சட்டச் சிக்கல்களோ இல்லை என்றும் உறுதியளிக்கிறேன். நிறுவனத்தின் அனைத்து விதிமுறைகளுக்கும் உட்பட்டு இந்நகைகளை அடமானம் வைக்க ஒப்புக்கொள்கிறேன்.</p>
+                        </div>
+                        <br><br>
+                        <table style="width: 100%; border: none; margin-top: 40px;">
+                            <tr>
+                                <td style="border: none; text-align: left;"><strong>வாடிக்கையாளர் கையொப்பம்</strong></td>
+                                <td style="border: none; text-align: right;"><strong>அங்கீகரிக்கப்பட்ட கையொப்பம்</strong></td>
+                            </tr>
+                        </table>
+                    </body>
+                    </html>
+                    """
+
+                    # 2. bytes வடிவில் மாற்றுதல் (இப்போது எந்தப் பிழையும் வராது)
+                    download_bytes = html_template.encode("utf-8")
 
                     st.markdown("---")
                     with st.container(border=True):
-                        st.warning("⚠️ **கவனிக்க:** இந்த நகைக் கடனின் கால அளவு 6 மாதங்கள் அல்லது அதற்கும் குறைவாக உள்ளதால் உறுதி ஆவணம் அவசியமாகிறது.")
+                        st.warning("⚠️ **கவனிக்க:** நகைக் கடன் உறுதி ஆவணம் அவசியமாகிறது.")
                         st.download_button(
                             label=f"📄 உறுதி ஆவணத்தைப் பதிவிறக்குக (Print Declaration - GL: {gl_no_val})",
-                            data=html_bytes,
-                            file_name=f"Declaration_{gl_no_val}.html",
+                            data=download_bytes,
+                            file_name=f"Declaration_{clean_gl_key}.html",
                             mime="text/html; charset=utf-8",
                             type="primary",
-                            key=f"dl_btn_{gl_no_val}"
+                            key=f"dl_btn_{clean_gl_key}"
                         )
 
                 # 🛒 கார்ட் பட்டியல்
