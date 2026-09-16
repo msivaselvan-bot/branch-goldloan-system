@@ -1766,19 +1766,28 @@ else:
             if uploaded_file and st.button("பழைய கடன்களைப் பதிவேற்று (Upload Records) 🚀", key="btn_run_bulk_upload"):
                 try:
                     df = pd.read_csv(uploaded_file) if uploaded_file.name.endswith(".csv") else pd.read_excel(uploaded_file)
-                    
+
+                    # 🌟 இந்த ஒரு வரியை மட்டும் df வாசித்த உடனே சேர்த்துக் கொள்ளுங்கள்
+                    df.columns = df.columns.str.strip().str.lower()
+
                     records = []
                     max_gl_num = starting_gl_num
-                    
+
                     for _, row in df.iterrows():
+                        # மொபைல் எண்ணை ஸ்ட்ரிங்காக மற்றும் எண்களாக மட்டும் எடுத்தல்
+                        raw_mob = str(row.get("mobile", "")).split(".")[0].strip()
+                        clean_mob = "".join(filter(str.isdigit, raw_mob))[-10:]
+
                         records.append({
                             "branch_id": target_b_id,
                             "transaction_type": "Pledge (Old)",
                             "staff_name": "Admin Migration",
-                            "amount": float(row.get("principal_amount", 0)),
-                            "principal_amount": float(row.get("principal_amount", 0)),
-                            "net_weight": float(row.get("net_weight", 0)),
-                            "remarks": f"Old GL: {row.get('gl_no', '')}",
+                            "customer_name": str(row.get("customer_name", "")).strip(),
+                            "mobile": clean_mob,
+                            "amount": float(row.get("principal_amount", 0) or 0.0),
+                            "principal_amount": float(row.get("principal_amount", 0) or 0.0),
+                            "net_weight": float(row.get("net_weight", 0) or 0.0),
+                            "remarks": f"Old GL: {str(row.get('gl_no', '')).strip()}",
                             "status": "Approved"
                         })
                         
