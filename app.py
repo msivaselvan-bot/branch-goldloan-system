@@ -916,6 +916,29 @@ def generate_next_gl_number(branch_id):
     except Exception as e:
         return "GL/1001", 1
 
+def get_current_display_gl_number(branch_id):
+    """கார்ட்டில் உள்ள எண்ணிக்கைக்கு ஏற்ப கடன் எண்ணை முன்னும் பின்னும் நகர்த்துதல்"""
+    try:
+        clean_b_id = int(branch_id)
+        res = supabase.table("branch_loan_sequences").select("*").eq("branch_id", clean_b_id).execute()
+        
+        prefix = "KMK"
+        db_last_no = 0
+        if res.data:
+            rec = res.data[0]
+            prefix = str(rec.get("prefix", "KMK")).strip().rstrip("/-")
+            db_last_no = int(rec.get("last_number", 0))
+
+        cart = st.session_state.get("transactions_cart", [])
+        pledge_count = sum(1 for item in cart if "Pledge" in str(item.get("transaction_type", "")))
+
+        current_seq_no = db_last_no + pledge_count + 1
+        formatted_gl = f"{prefix}/{str(current_seq_no).zfill(4)}"
+        
+        return formatted_gl, current_seq_no
+    except Exception:
+        return "KMK/1001", 1
+
 def commit_next_gl_number(branch_id, used_number):
     try:
         supabase.table("branch_loan_sequences").upsert({
@@ -2587,10 +2610,9 @@ else:
                     pl_col1, pl_col2, pl_col3 = st.columns(3)
             
                     with pl_col1:
-                        # கிளைக்கான அடுத்த கடன் எண் தானாக உருவாக்கப்படுகிறது
-                        suggested_gl, next_seq_num = generate_next_gl_number(st.session_state.branch_id)
+                        # 🌟 கார்ட்டின் நிலைக்கு ஏற்ப மாறும் ஆட்டோ எண்
+                        suggested_gl, next_seq_num = get_current_display_gl_number(st.session_state.branch_id)
                         
-                        # 🌟 disabled=True அமைத்தால் யாரும் இதை எடிட் செய்ய முடியாது:
                         new_gl_no = st.text_input(
                             "கடன் எண் (Auto Generated GL No) *", 
                             value=suggested_gl, 
@@ -2968,14 +2990,14 @@ else:
 
                             # கார்ட்டில் சேர்த்தல்
                             st.session_state.transactions_cart.append(cart_entry)
-                            
-                            # 🌟 புதிய அடமானம் என்றால் கடன் உறுதி ஆவணத்தை (Declaration) தயார் செய்தல்:
+
+                            # புதிய அடமானம் என்றால் உறுதி ஆவணத்தை தயார் செய்தல்
                             if "Pledge" in txn_category:
                                 st.session_state.current_declaration = cart_entry
                                 st.session_state.declaration_gl_no = cart_entry.get("gp_number", "")
 
                             st.session_state.form_reset_counter += 1
-                            st.rerun()
+                            st.rerun()  # 🌟 Rerun ஆகும் போது ஆட்டோ எண் தானாக +1 முன்னோக்கி கூடும்
 
                     
                             # 🌟 அடமானம் மீட்டல் (Release) என்றால் 'Closed' செய்ய வேண்டிய கடன் எண் மற்றும் ஐடி குறித்தல்
@@ -3217,9 +3239,12 @@ else:
                             st.session_state.current_visit["step"] = "CASH_OTP"
                             st.rerun()
                     with cart_b2:
-                        if st.button("பட்டியலை அழி", key="btn_clear_cart"):
+                        if st.button("🗑️ பட்டியலை அழி (Clear Cart)", use_container_width=True):
                             st.session_state.transactions_cart = []
-                            st.rerun()
+                            st.session_state.current_declaration = None
+                            st.session_state.declaration_gl_no = None
+                            st.session_state.form_reset_counter += 1
+                            st.rerun()  # 🌟 Rerun ஆகும் போது ஆட்டோ எண் தானாகப் பின்னோக்கி இறங்கிவிடும்
 
             # ---------------------------------------------------------------------
             # படி 3: பணம் மற்றும் OTP சரிபார்ப்பு (CASH_OTP)
@@ -3447,6 +3472,23 @@ else:
                                                     except Exception:
                                                         pass
 
+                                            # 🌟 கார்ட்டில் உள்ள புதிய அடமானங்களின் எண்ணிக்கைக்கு ஏற்ப டேட்டாபேஸ் சீக்வென்ஸை அதிகரித்தல்
+                                            cart = st.session_state.transactions_cart
+                                            pledge_items = [i for i in cart if "Pledge" in str(i.get("transaction_type", ""))]
+                                            
+                                            if pledge_items:
+                                                try:
+                                                    final_b_id = int(st.session_state.branch_id)
+                                                    res = supabase.table("branch_loan_sequences").select("last_number").eq("branch_id", final_b_id).execute()
+                                                    current_db_last = int(res.data[0]["last_number"]) if res.data else 0
+                                                    
+                                                    new_db_last = current_db_last + len(pledge_items)
+                                                    supabase.table("branch_loan_sequences").update({
+                                                        "last_number": new_db_last
+                                                    }).eq("branch_id", final_b_id).execute()
+                                                except Exception:
+                                                    pass
+
                                             # 🌟 2. வெற்றிச் செய்தி மற்றும் கார்ட் / செஷன் கிளியர் செய்தல்
                                             st.success(f"🎉 வருகை {visit['visit_no']} வெற்றிகரமாக நிறைவுபெற்றது!")
                                             st.session_state.current_visit = None
@@ -3457,12 +3499,7 @@ else:
                                             st.rerun()
                                         else:
                                             st.error("தவறான OTP! சரியாக உள்ளிடவும்.")
-
-                                st.write("")
-                                if not otp_already_sent:
-                                    if st.button("⬅️ நடவடிக்கைகளை மாற்ற பின்செல்க", use_container_width=True):
-                                        st.session_state.current_visit["step"] = "TRANSACTIONS"
-                                        st.rerun()
+                                            
         # =========================================================================
         # 2-வது டேப்: கிளை ஆவணங்கள் பதிவேற்றம் (Upload Docs Desk )
         # =========================================================================
