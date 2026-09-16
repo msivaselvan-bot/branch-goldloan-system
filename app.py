@@ -3020,88 +3020,99 @@ else:
                     gl_no_val = st.session_state.get("declaration_gl_no") or decl_info.get("gp_number", "GL")
                     clean_gl_key = str(gl_no_val).replace("/", "_")
 
-                    # 1. வாடிக்கையாளர் மற்றும் கடன் தகவல்கள்
+                    # வாடிக்கையாளர் மற்றும் கடன் தகவல்கள்
                     v_info = st.session_state.get("current_visit", {}) or (visit if 'visit' in locals() else {})
                     cust_name = v_info.get("customer_name") or v_info.get("name") or "Cyril Jenson"
                     cust_mob = v_info.get("mobile") or v_info.get("customer_mobile") or v_info.get("phone") or "-"
                     branch_name = st.session_state.get("branch_name", "முத்துசிஸ் கோல்டு புரொடக்ட் பிரைவேட் லிமிடெட்")
                     
-                    # தேதிகள் மற்றும் எடைகள்
                     from datetime import datetime
                     from dateutil.relativedelta import relativedelta
 
                     today_dt = datetime.now()
                     today_str = today_dt.strftime("%d-%m-%Y")
-                    # 3 மாத காலக்கெடு முடிவுத் தேதி (Due Date) தானாகக் கணக்கிடுதல்:
                     due_date_str = (today_dt + relativedelta(months=3)).strftime("%d-%m-%Y")
 
                     amt_val = float(decl_info.get("principal_amount", 0.0) or decl_info.get("paid_amount", 0.0) or decl_info.get("amount", 0.0))
                     tot_wt = float(decl_info.get("total_weight", 0.0))
                     net_wt = float(decl_info.get("net_weight", 0.0))
 
-                    # 2. சட்டப்பூர்வ கூடுதல் கடன் உறுதிமொழி ஆவண HTML கட்டமைப்பு
+                    # 🌟 A4 அளவுக்கு கச்சிதமாகப் பொருந்தும் HTML & CSS கட்டமைப்பு
                     html_template = f"""<!DOCTYPE html>
                 <html>
                 <head>
                     <meta charset="utf-8">
                     <title>கூடுதல் கடன் உறுதிமொழிப் பத்திரம் - {gl_no_val}</title>
                     <style>
+                        @page {{
+                            size: A4 portrait;
+                            margin: 10mm 15mm;
+                        }}
+                        * {{
+                            box-sizing: border-box;
+                        }}
                         body {{
                             font-family: Arial, sans-serif;
-                            padding: 35px;
-                            line-height: 1.7;
+                            margin: 0;
+                            padding: 0;
+                            line-height: 1.4;
                             color: #111;
-                            max-width: 800px;
-                            margin: auto;
+                            font-size: 12px;
                         }}
                         .title {{
                             text-align: center;
-                            font-size: 17px;
-                            font-weight: bold;
-                            border-bottom: 2px solid #222;
-                            padding-bottom: 8px;
-                            margin-bottom: 20px;
-                        }}
-                        .parties {{
-                            display: flex;
-                            justify-content: space-between;
-                            margin-bottom: 15px;
                             font-size: 14px;
+                            font-weight: bold;
+                            border-bottom: 1.5px solid #222;
+                            padding-bottom: 4px;
+                            margin-bottom: 10px;
+                        }}
+                        .parties-table {{
+                            width: 100%;
+                            margin-bottom: 8px;
+                            font-size: 12px;
+                            border-collapse: collapse;
+                        }}
+                        .parties-table td {{
+                            vertical-align: top;
+                            padding: 0;
                         }}
                         .subject {{
                             background-color: #f2f2f2;
-                            padding: 8px 12px;
+                            padding: 5px 8px;
                             font-weight: bold;
-                            font-size: 14px;
-                            border-left: 4px solid #b8860b;
-                            margin-bottom: 15px;
+                            font-size: 12px;
+                            border-left: 3px solid #b8860b;
+                            margin-bottom: 8px;
                         }}
                         .content {{
                             text-align: justify;
-                            font-size: 13.5px;
+                            font-size: 11.5px;
                         }}
                         .content p {{
-                            margin-bottom: 10px;
+                            margin: 0 0 6px 0;
                         }}
                         .summary-box {{
                             border: 1px dashed #444;
-                            padding: 10px;
-                            margin: 15px 0;
+                            padding: 6px 10px;
+                            margin: 8px 0;
                             background: #fafafa;
-                            font-size: 13px;
+                            font-size: 11.5px;
                         }}
                         .signature-table {{
                             width: 100%;
-                            margin-top: 25px;
+                            margin-top: 15px;
                             border-collapse: collapse;
                         }}
                         .signature-table td {{
                             vertical-align: top;
-                            font-size: 13px;
-                            padding: 6px;
+                            font-size: 11.5px;
+                            padding: 0;
                         }}
                         @media print {{
-                            body {{ padding: 15px; }}
+                            body {{
+                                width: 100%;
+                            }}
                         }}
                     </style>
                 </head>
@@ -3110,14 +3121,14 @@ else:
                         அடகு நகைக்கடன் கூடுதல் தொகை பெறுதல் தொடர்பான உறுதிமொழிப் பத்திரம்
                     </div>
 
-                    <table style="width: 100%; margin-bottom: 15px; font-size: 13.5px;">
+                    <table class="parties-table">
                         <tr>
-                            <td style="width: 50%; vertical-align: top;">
+                            <td style="width: 50%;">
                                 <strong>அனுப்புநர்:</strong><br>
                                 திரு/திருமதி. {cust_name}<br>
                                 தொடர்பு எண்: {cust_mob}
                             </td>
-                            <td style="width: 50%; vertical-align: top;">
+                            <td style="width: 50%;">
                                 <strong>பெறுநர்:</strong><br>
                                 மேலாளர் அவர்கள்,<br>
                                 முத்துசிஸ் கோல்டு புரொடக்ட் பிரைவேட் லிமிடெட்,<br>
@@ -3154,10 +3165,8 @@ else:
                         <tr>
                             <td style="width: 50%;">
                                 <strong>சாட்சிகள்:</strong><br><br>
-                                1. பெயர்: _________________________<br>
-                                &nbsp;&nbsp;&nbsp;&nbsp;கையொப்பம்: ____________________<br><br>
-                                2. பெயர்: _________________________<br>
-                                &nbsp;&nbsp;&nbsp;&nbsp;கையொப்பம்: ____________________
+                                1. பெயர்: ______________________ கையொப்பம்: ____________<br><br>
+                                2. பெயர்: ______________________ கையொப்பம்: ____________
                             </td>
                             <td style="width: 50%; text-align: right; vertical-align: bottom;">
                                 வாடிக்கையாளர் கையொப்பம்: ___________________<br><br>
