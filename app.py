@@ -925,42 +925,67 @@ def commit_next_gl_number(branch_id, used_number):
     except Exception:
         pass
 
-def get_customer_active_loans(customer_mobile, customer_name=""):
-    """வாடிக்கையாளரின் க்ளோஸ் ஆகாத (Active) அடமானக் கடன்களை மட்டும் எடுத்தல்"""
+def get_customer_active_loans(customer_mobile="", customer_name="", branch_id=None):
+    """வாடிக்கையாளரின் நடப்பில் உள்ள (Active) அடமானக் கடன்களைத் துல்லியமாக எடுத்தல்"""
     try:
+        # 1. அடிப்படை வினவல்: Pledge தொடர்பான பரிவர்த்தனைகள்
         query = supabase.table("transactions").select("*").ilike("transaction_type", "%Pledge%")
         
-        if customer_mobile:
-            query = query.eq("mobile", str(customer_mobile).strip())
-        elif customer_name:
-            query = query.ilike("customer_name", f"%{customer_name.strip()}%")
+        # மொபைல் எண் இருந்தால் அதை வைத்து தேடுதல் (முன்னுரிமை)
+        clean_mob = str(customer_mobile).strip() if customer_mobile else ""
+        clean_name = str(customer_name).strip() if customer_name else ""
+        
+        if clean_mob:
+            # 10 இலக்க எண்ணாக மட்டும் எடுத்து தேடுதல்
+            mob_digits = "".join(filter(str.isdigit, clean_mob))[-10:]
+            query = query.ilike("mobile", f"%{mob_digits}%")
+        elif clean_name:
+            query = query.ilike("customer_name", f"%{clean_name}%")
             
         res = query.execute()
         active_loans = []
 
         if res.data:
             for row in res.data:
-                loan_status = str(row.get("status", "Active")).strip().capitalize()
-                if loan_status != "Closed":
-                    gl_no = row.get("loan_number") or row.get("gp_number") or ""
-                    if not gl_no and "Old GL:" in str(row.get("remarks", "")):
-                        gl_no = row.get("remarks", "").split("Old GL:")[-1].split("|")[0].strip()
+                # 'Closed' ஆக இல்லாதவை மட்டும்
+                loan_status = str(row.get("status", "")).strip().lower()
+                if loan_status != "closed":
+                    
+                    # கடன் எண்ணை எடுத்தல்
+                    gl_no = (
+                        row.get("loan_number") or 
+                        row.get("gp_number") or 
+                        row.get("gl_no") or 
+                        ""
+                    )
+                    
+                    # ஒருவேளை remarks-ல் "Old GL:" அல்லது "GL:" என இருந்தால் பிரித்தெடுத்தல்
+                    remarks = str(row.get("remarks", ""))
+                    if not gl_no:
+                        if "Old GL:" in remarks:
+                            gl_no = remarks.split("Old GL:")[-1].split("|")[0].strip()
+                        elif "GL:" in remarks:
+                            gl_no = remarks.split("GL:")[-1].split("|")[0].strip()
 
                     if gl_no:
+                        pr_amt = float(row.get("principal_amount") or row.get("amount") or 0.0)
+                        net_wt = float(row.get("net_weight") or 0.0)
+                        
                         active_loans.append({
                             "id": row.get("id"),
                             "gl_no": gl_no,
-                            "principal": float(row.get("principal_amount") or row.get("amount") or 0.0),
-                            "net_wt": float(row.get("net_weight", 0.0))
+                            "principal": pr_amt,
+                            "net_wt": net_wt
                         })
 
+        # கார்ட்டில் ஏற்கனவே 'மீட்டல் (Release)' செய்யப்பட்டிருந்தால் அதையும் தற்காலிகமாக நீக்குதல்
         cart_closed_gls = [
             c.get("closed_gl_no") for c in st.session_state.get("transactions_cart", []) 
             if c.get("closed_gl_no")
         ]
         
         return [ln for ln in active_loans if ln["gl_no"] not in cart_closed_gls]
-    except Exception:
+    except Exception as e:
         return []
 
 # கிளைகளின் பட்டியலை உருவாக்குதல்
@@ -2584,13 +2609,25 @@ else:
 
                 # 2. அடமானம் மீட்டல் (GL Release)
                 elif txn_category == "GL Release (அடமானம் மீட்டல்)":
-                    # 🌟 வாடிக்கையாளரின் நடப்புக் கடன்களை எடுத்தல்
-                    cust_mobile = visit.get("mobile", "") if 'visit' in locals() else ""
-                    cust_name = visit.get("customer_name", "") if 'visit' in locals() else ""
+                    # 🌟 வாடிக்கையாளரின் மொபைல் மற்றும் பெயரைப் பாதுகாப்பாக எடுத்தல்
+                    v_info = st.session_state.get("current_visit", {}) or (visit if 'visit' in locals() else {})
+                    
+                    cust_mobile = (
+                        v_info.get("mobile") or 
+                        v_info.get("customer_mobile") or 
+                        v_info.get("phone") or 
+                        ""
+                    )
+                    cust_name = (
+                        v_info.get("customer_name") or 
+                        v_info.get("name") or 
+                        ""
+                    )
+                    
                     active_loans = get_customer_active_loans(cust_mobile, cust_name)
                     
                     loan_display_map = {
-                        f"{l['gl_no']} (அசல்: ₹{l['principal']:.2f}, எடை: {l['net_wt']}g)": l 
+                        f"{l['gl_no']} (அசல்: ₹{l['principal']:,.2f}, எடை: {l['net_wt']}g)": l 
                         for l in active_loans
                     }
 
@@ -2614,12 +2651,10 @@ else:
 
                     r_col1, r_col2 = st.columns(2)
                     with r_col1:
-                        # தேர்ந்தெடுக்கப்பட்ட கடனின் அசல் தொகை தானாகவே value-ல் அமையும்
                         principal_amount = st.number_input("அசல் தொகை (₹) *", value=auto_principal, min_value=0.0, step=500.0, key=f"rel_pr_in_{fc}")
                         interest_amount = st.number_input("வட்டித் தொகை (₹) *", min_value=0.0, step=50.0, key=f"rel_int_in_{fc}")
                     with r_col2:
                         other_charges = st.number_input("இதர கட்டணம் (₹)", min_value=0.0, step=10.0, key=f"rel_oth_in_{fc}")
-                        # மீட்கும்போது மொத்தமாக வாடிக்கையாளரிடமிருந்து பெறப்படும் தொகை
                         received_amt = principal_amount + interest_amount + other_charges
                         st.info(f"💰 பெற வேண்டிய மொத்தத் தொகை: ₹{received_amt:,.2f}")
 
