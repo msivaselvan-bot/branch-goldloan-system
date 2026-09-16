@@ -926,61 +926,43 @@ def commit_next_gl_number(branch_id, used_number):
         pass
 
 def get_customer_active_loans(customer_mobile="", customer_name="", branch_id=None):
-    """Debug Mode: வாடிக்கையாளர் கடன்களைச் சோதித்தல்"""
+    """வாடிக்கையாளரின் சரியான கடன்களை மட்டும் துல்லியமாக எடுத்தல்"""
     try:
-        # ஃபில்டர் எதுவுமின்றி மொத்தப் பதிவுகளையும் சோதித்தல்
-        res = supabase.table("transactions").select("*").execute()
+        # 1. வெறும் Pledge கடன்களை மட்டுமே எடுக்க வேண்டும் (Release பரிவர்த்தனைகளைத் தவிர்க்க)
+        res = supabase.table("transactions").select("*").ilike("transaction_type", "%Pledge%").execute()
         
         if not res.data:
-            st.error("⚠️ transactions அட்டவணையில் எந்தப் பதிவும் இல்லை!")
             return []
             
         all_rows = res.data
         active_loans = []
-        
-        # திரையிலேயே விவரங்களைக் காட்டுதல் (Debug Expander)
-        with st.expander("🔍 டேட்டாபேஸ் நேரடி ஆய்வு (Debug Info - இதைச் சரிபார்க்கவும்)", expanded=False):
-            st.write(f"தேடப்படும் வாடிக்கையாளர்: Name='{customer_name}', Mobile='{customer_mobile}'")
-            st.write(f"டேட்டாபேஸில் உள்ள மொத்தப் பதிவுகள்: {len(all_rows)}")
-            
-            # முதல் 5 பதிவுகளின் மாதிரியைக் காட்டுதல்
-            sample_data = []
-            for r in all_rows[:5]:
-                sample_data.append({
-                    "ID": r.get("id"),
-                    "Type": r.get("transaction_type"),
-                    "Customer": r.get("customer_name"),
-                    "Mobile": r.get("mobile"),
-                    "Status": r.get("status"),
-                    "Remarks": r.get("remarks"),
-                    "GP/GL": r.get("gp_number") or r.get("loan_number")
-                })
-            st.dataframe(sample_data)
 
-        clean_mob = "".join(filter(str.isdigit, str(customer_mobile)))[-10:] if customer_mobile else ""
         clean_nm = str(customer_name).strip().lower() if customer_name else ""
+        clean_mob = "".join(filter(str.isdigit, str(customer_mobile)))[-10:] if customer_mobile else ""
 
         for row in all_rows:
-            # 1. ஸ்டேட்டஸ் ஆய்வு: status 'closed' என இருந்தால் மட்டுமே தவிர்க்க வேண்டும்
+            # Closed கடன்களைத் தவிர்த்தல்
             status_val = str(row.get("status") or "").strip().lower()
             if status_val == "closed":
                 continue
 
-            # 2. வாடிக்கையாளர் பொருத்தம் (மொபைல் அல்லது பெயர்)
-            row_mob = "".join(filter(str.isdigit, str(row.get("mobile") or "")))
+            # Release பதிவுகள் தவறுதலாக வந்துவிடாமல் தடுத்தல்
+            tx_type = str(row.get("transaction_type") or "").lower()
+            if "release" in tx_type or "மீட்டல்" in tx_type:
+                continue
+
             row_name = str(row.get("customer_name") or "").strip().lower()
-            
+            row_mob = "".join(filter(str.isdigit, str(row.get("mobile") or "")))[-10:]
+
             match_found = False
-            if clean_mob and clean_mob in row_mob:
+            
+            # 🌟 மொபைல் அல்லது பெயர் துல்லியமாகப் பொருந்தினால் மட்டுமே அனுமதிக்க வேண்டும்
+            if clean_mob and row_mob and clean_mob == row_mob:
                 match_found = True
-            elif clean_nm and (clean_nm in row_name or row_name in clean_nm):
-                match_found = True
-            elif not clean_mob and not clean_nm:
-                # ஒருவேளை விசிட்டில் பெயரோ மொபைலோ சரியாக வரவில்லை என்றால் தற்காலிகமாக அனைத்தையும் காட்டும்
+            elif clean_nm and row_name and (clean_nm in row_name or row_name in clean_nm):
                 match_found = True
 
             if match_found:
-                # GL எண் எடுத்தல்
                 gl_no = row.get("loan_number") or row.get("gp_number") or row.get("gl_no") or ""
                 remarks = str(row.get("remarks") or "")
                 
@@ -990,9 +972,6 @@ def get_customer_active_loans(customer_mobile="", customer_name="", branch_id=No
                     elif "GL:" in remarks:
                         gl_no = remarks.split("GL:")[-1].split("|")[0].strip()
                 
-                if not gl_no and "Pledge" in str(row.get("transaction_type")):
-                    gl_no = f"REC-{row.get('id')}"
-
                 if gl_no:
                     active_loans.append({
                         "id": row.get("id"),
@@ -1001,9 +980,14 @@ def get_customer_active_loans(customer_mobile="", customer_name="", branch_id=No
                         "net_wt": float(row.get("net_weight") or 0.0)
                     })
 
-        return active_loans
-    except Exception as e:
-        st.error(f"❌ பிழை: {e}")
+        # கார்ட்டில் ஏற்கனவே சேர்க்கப்பட்ட கடன்களை நீக்குதல்
+        cart_closed_gls = [
+            c.get("closed_gl_no") for c in st.session_state.get("transactions_cart", []) 
+            if c.get("closed_gl_no")
+        ]
+        
+        return [ln for ln in active_loans if ln["gl_no"] not in cart_closed_gls]
+    except Exception:
         return []
 
 # கிளைகளின் பட்டியலை உருவாக்குதல்
