@@ -2673,13 +2673,39 @@ else:
 
                 # 3. அசல் வரவு & வட்டி வரவு
                 elif txn_category in ["Interest Payment (வட்டி வரவு)", "Part Payment (அசல் வரவு)"]:
+                    # 🌟 வாடிக்கையாளரின் நடப்பில் உள்ள அடமானக் கடன்களை எடுத்தல்
+                    v_info = st.session_state.get("current_visit", {}) or (visit if 'visit' in locals() else {})
+                    cust_mobile = v_info.get("mobile") or v_info.get("customer_mobile") or v_info.get("phone") or ""
+                    cust_name = v_info.get("customer_name") or v_info.get("name") or ""
+                    
+                    active_loans = get_customer_active_loans(cust_mobile, cust_name)
+                    loan_display_map = {
+                        f"{l['gl_no']} (அசல்: ₹{l['principal']:,.2f}, எடை: {l['net_wt']}g)": l 
+                        for l in active_loans
+                    }
+
+                    if not loan_display_map:
+                        st.warning("⚠️ இந்த வாடிக்கையாளரின் பெயரில் நிலுவையில் உள்ள அடமானக் கடன்கள் எதுவும் இல்லை!")
+                        part_gl_no = ""
+                        selected_gl_no = ""
+                    else:
+                        selected_loan_label = st.selectbox(
+                            "கடன் எண்ணைத் தேர்ந்தெடுக்கவும் *",
+                            options=list(loan_display_map.keys()),
+                            key=f"part_int_loan_sel_{fc}"
+                        )
+                        chosen_loan = loan_display_map[selected_loan_label]
+                        part_gl_no = chosen_loan["gl_no"]
+                        selected_gl_no = chosen_loan["gl_no"]
+
                     i_col1, i_col2 = st.columns(2)
                     with i_col1:
-                        part_gl_no = st.text_input("கடன் எண் *")
-                        principal_amount = st.number_input("அசல் தொகை (₹)", min_value=0.0, step=100.0) if "Part" in txn_category else 0.0
+                        principal_amount = st.number_input("அசல் தொகை (₹)", min_value=0.0, step=100.0, key=f"pi_pr_{fc}") if "Part" in txn_category else 0.0
                     with i_col2:
-                        interest_amount = st.number_input("வட்டித் தொகை (₹)", min_value=0.0, step=50.0)
+                        interest_amount = st.number_input("வட்டித் தொகை (₹)", min_value=0.0, step=50.0, key=f"pi_int_{fc}")
+                    
                     received_amt = principal_amount + interest_amount
+                    st.info(f"💰 பெற வேண்டிய மொத்தத் தொகை: ₹{received_amt:,.2f}")
                     detail_summary = [f"GL: {part_gl_no}", f"அசல்: ₹{principal_amount}", f"வட்டி: ₹{interest_amount}"]
 
                 # 4. Take Over
