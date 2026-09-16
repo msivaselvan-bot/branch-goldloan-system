@@ -925,6 +925,44 @@ def commit_next_gl_number(branch_id, used_number):
     except Exception:
         pass
 
+def get_customer_active_loans(customer_mobile, customer_name=""):
+    """வாடிக்கையாளரின் க்ளோஸ் ஆகாத (Active) அடமானக் கடன்களை மட்டும் எடுத்தல்"""
+    try:
+        query = supabase.table("transactions").select("*").ilike("transaction_type", "%Pledge%")
+        
+        if customer_mobile:
+            query = query.eq("mobile", str(customer_mobile).strip())
+        elif customer_name:
+            query = query.ilike("customer_name", f"%{customer_name.strip()}%")
+            
+        res = query.execute()
+        active_loans = []
+
+        if res.data:
+            for row in res.data:
+                loan_status = str(row.get("status", "Active")).strip().capitalize()
+                if loan_status != "Closed":
+                    gl_no = row.get("loan_number") or row.get("gp_number") or ""
+                    if not gl_no and "Old GL:" in str(row.get("remarks", "")):
+                        gl_no = row.get("remarks", "").split("Old GL:")[-1].split("|")[0].strip()
+
+                    if gl_no:
+                        active_loans.append({
+                            "id": row.get("id"),
+                            "gl_no": gl_no,
+                            "principal": float(row.get("principal_amount") or row.get("amount") or 0.0),
+                            "net_wt": float(row.get("net_weight", 0.0))
+                        })
+
+        cart_closed_gls = [
+            c.get("closed_gl_no") for c in st.session_state.get("transactions_cart", []) 
+            if c.get("closed_gl_no")
+        ]
+        
+        return [ln for ln in active_loans if ln["gl_no"] not in cart_closed_gls]
+    except Exception:
+        return []
+
 # கிளைகளின் பட்டியலை உருவாக்குதல்
 branches_data = load_branches_data()
 branch_options = {b["branch_name"]: b["id"] for b in branches_data} if branches_data else {}
@@ -2546,14 +2584,45 @@ else:
 
                 # 2. அடமானம் மீட்டல் (GL Release)
                 elif txn_category == "GL Release (அடமானம் மீட்டல்)":
+                    # 🌟 வாடிக்கையாளரின் நடப்புக் கடன்களை எடுத்தல்
+                    cust_mobile = visit.get("mobile", "") if 'visit' in locals() else ""
+                    cust_name = visit.get("customer_name", "") if 'visit' in locals() else ""
+                    active_loans = get_customer_active_loans(cust_mobile, cust_name)
+                    
+                    loan_display_map = {
+                        f"{l['gl_no']} (அசல்: ₹{l['principal']:.2f}, எடை: {l['net_wt']}g)": l 
+                        for l in active_loans
+                    }
+
+                    if not loan_display_map:
+                        st.warning("⚠️ இந்த வாடிக்கையாளரின் பெயரில் நிலுவையில் உள்ள அடமானக் கடன்கள் எதுவும் இல்லை!")
+                        selected_gl_no = ""
+                        rel_gl_no = ""
+                        selected_loan_db_id = None
+                        auto_principal = 0.0
+                    else:
+                        selected_loan_label = st.selectbox(
+                            "அடமானக் கடன் எண்ணைத் தேர்ந்தெடுக்கவும் *",
+                            options=list(loan_display_map.keys()),
+                            key=f"loan_sel_{fc}"
+                        )
+                        chosen_loan = loan_display_map[selected_loan_label]
+                        selected_gl_no = chosen_loan["gl_no"]
+                        rel_gl_no = chosen_loan["gl_no"]
+                        selected_loan_db_id = chosen_loan["id"]
+                        auto_principal = float(chosen_loan["principal"])
+
                     r_col1, r_col2 = st.columns(2)
                     with r_col1:
-                        rel_gl_no = st.text_input("மீட்கப்படும் கடன் எண் *")
-                        principal_amount = st.number_input("அசல் தொகை (₹) *", min_value=0.0, step=500.0)
+                        # தேர்ந்தெடுக்கப்பட்ட கடனின் அசல் தொகை தானாகவே value-ல் அமையும்
+                        principal_amount = st.number_input("அசல் தொகை (₹) *", value=auto_principal, min_value=0.0, step=500.0, key=f"rel_pr_in_{fc}")
+                        interest_amount = st.number_input("வட்டித் தொகை (₹) *", min_value=0.0, step=50.0, key=f"rel_int_in_{fc}")
                     with r_col2:
-                        interest_amount = st.number_input("வட்டித் தொகை (₹) *", min_value=0.0, step=50.0)
-                        other_charges = st.number_input("இதர கட்டணம் (₹)", min_value=0.0, step=10.0)
-                    received_amt = principal_amount + interest_amount + other_charges
+                        other_charges = st.number_input("இதர கட்டணம் (₹)", min_value=0.0, step=10.0, key=f"rel_oth_in_{fc}")
+                        # மீட்கும்போது மொத்தமாக வாடிக்கையாளரிடமிருந்து பெறப்படும் தொகை
+                        received_amt = principal_amount + interest_amount + other_charges
+                        st.info(f"💰 பெற வேண்டிய மொத்தத் தொகை: ₹{received_amt:,.2f}")
+
                     detail_summary = [f"GL: {rel_gl_no}", f"அசல்: ₹{principal_amount}", f"வட்டி: ₹{interest_amount}"]
 
                 # 3. அசல் வரவு & வட்டி வரவு
@@ -2781,7 +2850,7 @@ else:
                 if txn_category != "GP (Gold Purchase)":
                     if st.button("➕ பட்டியலில் சேர் (Add to Cart)", type="primary", key="btn_add_to_cart_main"):
                         if "Pledge" in txn_category:
-                            actual_paid_amt = max(0.0, float(paid_amt) - float(other_charges))
+                            actual_paid_amt = max(0.0, float(paid_amt) - float(other_charges)) if 'paid_amt' in locals() else 0.0
                         else:
                             actual_paid_amt = float(paid_amt) if 'paid_amt' in locals() else 0.0
 
@@ -2796,7 +2865,7 @@ else:
 
                             img_url = upload_ornament_image(ornament_file) if ('ornament_file' in locals() and ornament_file) else None
 
-                            st.session_state.transactions_cart.append({
+                            cart_entry = {
                                 "transaction_type": txn_category,
                                 "staff_name": staff,
                                 "paid_amount": float(actual_paid_amt),
@@ -2808,17 +2877,30 @@ else:
                                 "ornament_image_url": img_url,
                                 "total_weight": float(total_weight) if 'total_weight' in locals() else 0.0,
                                 "net_weight": float(net_weight) if 'net_weight' in locals() else 0.0,
-                                "gp_number": gp_number if ('gp_number' in locals() and gp_number) else "",
+                                "gp_number": selected_gl_no if 'selected_gl_no' in locals() else (new_gl_no if 'new_gl_no' in locals() else (gp_number if 'gp_number' in locals() else "")),
                                 "ref1_name": ref1_name if ('ref1_name' in locals() and ref1_name) else "",
                                 "ref1_phone": ref1_phone if ('ref1_phone' in locals() and ref1_phone) else "",
                                 "ref2_name": ref2_name if ('ref2_name' in locals() and ref2_name) else "",
                                 "ref2_phone": ref2_phone if ('ref2_phone' in locals() and ref2_phone) else "",
-                                "principal_amount": float(paid_amt) if 'paid_amt' in locals() else 0.0,
+                                "principal_amount": float(principal_amount) if 'principal_amount' in locals() else (float(paid_amt) if 'paid_amt' in locals() else 0.0),
                                 "interest_amount": float(interest_amount) if 'interest_amount' in locals() else 0.0,
                                 "nominee_name": nominee_name if ('nominee_name' in locals() and nominee_name) else "",
                                 "nominee_relation": nominee_relation if ('nominee_relation' in locals() and nominee_relation) else "",
                                 "nominee_address": nominee_address if ('nominee_address' in locals() and nominee_address) else "",
-                            })
+                            }
+
+                            # 🌟 அடமானம் மீட்டல் (Release) என்றால் 'Closed' செய்ய வேண்டிய கடன் எண் மற்றும் ஐடி குறித்தல்
+                            if "மீட்டல்" in txn_category or "Release" in txn_category:
+                                cart_entry["closed_gl_no"] = selected_gl_no if 'selected_gl_no' in locals() else ""
+                                cart_entry["closed_loan_id"] = selected_loan_db_id if 'selected_loan_db_id' in locals() else None
+
+                            # 🌟 புதிய அடமானம் (Pledge) கார்ட்டில் சேர்ந்தால் அடுத்த ஆட்டோ கடன் எண்ணை உறுதி செய்தல்
+                            if "Pledge" in txn_category and 'next_seq_num' in locals():
+                                commit_next_gl_number(st.session_state.branch_id, next_seq_num)
+
+                            st.session_state.transactions_cart.append(cart_entry)
+                            st.session_state.form_reset_counter += 1
+                            st.rerun()
 
                             # Pledge உறுதி ஆவணம் உருவாக்கம்
                             if "Pledge" in txn_category:
@@ -3107,22 +3189,32 @@ else:
                                                 st.write("அனுப்பப்பட்ட Transaction Data:", txn)
                                                 st.stop()
 
-                                        st.success(f"🎉 வருகை {visit['visit_no']} வெற்றிகரமாக நிறைவுபெற்றது!")
-                                        st.session_state.current_visit = None
-                                        st.session_state.transactions_cart = []
-                                        st.session_state.generated_otp = None
-                                        st.session_state.current_declaration = None
-                                        st.session_state.declaration_gl_no = None
+                                            # 🌟 1. மீட்கப்பட்ட கடன்களை முதலில் 'Closed' நிலைக்கு மாற்றுதல்
+                                            for item in st.session_state.transactions_cart:
+                                                if item.get("closed_loan_id"):
+                                                    try:
+                                                        supabase.table("transactions").update({
+                                                            "status": "Closed"
+                                                        }).eq("id", item["closed_loan_id"]).execute()
+                                                    except Exception:
+                                                        pass
+
+                                            # 🌟 2. வெற்றிச் செய்தி மற்றும் கார்ட் / செஷன் கிளியர் செய்தல்
+                                            st.success(f"🎉 வருகை {visit['visit_no']} வெற்றிகரமாக நிறைவுபெற்றது!")
+                                            st.session_state.current_visit = None
+                                            st.session_state.transactions_cart = []
+                                            st.session_state.generated_otp = None
+                                            st.session_state.current_declaration = None
+                                            st.session_state.declaration_gl_no = None
+                                            st.rerun()
+                                        else:
+                                            st.error("தவறான OTP! சரியாக உள்ளிடவும்.")
+
+                                st.write("")
+                                if not otp_already_sent:
+                                    if st.button("⬅️ நடவடிக்கைகளை மாற்ற பின்செல்க", use_container_width=True):
+                                        st.session_state.current_visit["step"] = "TRANSACTIONS"
                                         st.rerun()
-                                else:
-                                    st.error("தவறான OTP! சரியாக உள்ளிடவும்.")
-
-                        st.write("")
-                        if not otp_already_sent:
-                            if st.button("⬅️ நடவடிக்கைகளை மாற்ற பின்செல்க", use_container_width=True):
-                                st.session_state.current_visit["step"] = "TRANSACTIONS"
-                                st.rerun()
-
         # =========================================================================
         # 2-வது டேப்: கிளை ஆவணங்கள் பதிவேற்றம் (Upload Docs Desk )
         # =========================================================================
