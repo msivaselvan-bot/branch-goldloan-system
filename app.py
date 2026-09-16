@@ -887,6 +887,37 @@ def get_active_loan_schemes():
         pass
     return ["VVH149", "Standard Gold Loan"]
 
+def generate_next_gl_number(branch_id):
+    try:
+        clean_b_id = int(branch_id)
+        res = supabase.table("branch_loan_sequences").select("*").eq("branch_id", clean_b_id).execute()
+        
+        if res.data:
+            rec = res.data[0]
+            prefix = rec.get("prefix", "GL")
+            next_no = int(rec.get("last_number", 0)) + 1
+        else:
+            prefix = "GL"
+            next_no = 1
+            supabase.table("branch_loan_sequences").insert({
+                "branch_id": clean_b_id,
+                "prefix": prefix,
+                "last_number": 0
+            }).execute()
+
+        return f"{prefix}-{str(next_no).zfill(4)}", next_no
+    except Exception as e:
+        return "GL-1001", 1
+
+def commit_next_gl_number(branch_id, used_number):
+    """கடன் கார்ட்டில் சேர்க்கப்பட்ட பின் வரிசை எண்ணை அப்டேட் செய்ய"""
+    try:
+        supabase.table("branch_loan_sequences").update({
+            "last_number": used_number
+        }).eq("branch_id", int(branch_id)).execute()
+    except Exception:
+        pass
+
 # கிளைகளின் பட்டியலை உருவாக்குதல்
 branches_data = load_branches_data()
 branch_options = {b["branch_name"]: b["id"] for b in branches_data} if branches_data else {}
@@ -1618,6 +1649,68 @@ else:
                     st.rerun()
                 except Exception as e:
                     st.error(f"பிழை: {e}")
+            
+            st.divider()  # ஒரு பிரிப்பான் கோடு
+        
+            # 🌟 இங்கே ஒட்டுங்கள்:
+            st.subheader("📥 பழைய கடன்கள் பல்க் அப்லோட் & ஆரம்ப எண் நிர்ணயம்")
+
+            sel_branch_name = st.selectbox("கிளையைத் தேர்ந்தெடுக்கவும்", list(branch_options.keys()), key="bulk_sel_branch")
+            target_b_id = branch_options[sel_branch_name]
+
+            col_u1, col_u2 = st.columns(2)
+            with col_u1:
+                branch_prefix = st.text_input("கிளை Prefix (எ.கா: KZM-GL, TGL-GL)", value=f"GL-{target_b_id}", key="bulk_prefix_in")
+            with col_u2:
+                starting_gl_num = st.number_input("தற்போதைய கடைசி கடன் எண் (Last Used GL No)", min_value=0, step=1, key="bulk_last_no_in")
+
+            if st.button("கிளையின் தொடக்க கடன் எண்ணைச் சேமி 💾", key="btn_save_gl_seq"):
+                supabase.table("branch_loan_sequences").upsert({
+                    "branch_id": target_b_id,
+                    "prefix": branch_prefix.strip(),
+                    "last_number": int(starting_gl_num)
+                }).execute()
+                st.success(f"✅ {sel_branch_name} கிளைக்கு அடுத்த கடன் எண்: {branch_prefix.strip()}-{str(starting_gl_num + 1).zfill(4)} என அமைக்கப்பட்டது!")
+
+            st.markdown("---")
+            uploaded_file = st.file_uploader("பழைய கடன் விபரங்கள் (CSV அல்லது Excel கோப்பு)", type=["csv", "xlsx"], key="bulk_file_uploader")
+
+            if uploaded_file and st.button("பழைய கடன்களைப் பதிவேற்று (Upload Records) 🚀", key="btn_run_bulk_upload"):
+                try:
+                    df = pd.read_csv(uploaded_file) if uploaded_file.name.endswith(".csv") else pd.read_excel(uploaded_file)
+                    
+                    records = []
+                    max_gl_num = starting_gl_num
+                    
+                    for _, row in df.iterrows():
+                        records.append({
+                            "branch_id": target_b_id,
+                            "transaction_type": "Pledge (Old)",
+                            "staff_name": "Admin Migration",
+                            "amount": float(row.get("principal_amount", 0)),
+                            "principal_amount": float(row.get("principal_amount", 0)),
+                            "net_weight": float(row.get("net_weight", 0)),
+                            "remarks": f"Old GL: {row.get('gl_no', '')}",
+                            "status": "Approved"
+                        })
+                        
+                        raw_gl = str(row.get("gl_no", ""))
+                        digits = "".join(filter(str.isdigit, raw_gl))
+                        if digits and int(digits) > max_gl_num:
+                            max_gl_num = int(digits)
+                    
+                    if records:
+                        supabase.table("transactions").insert(records).execute()
+                        
+                        supabase.table("branch_loan_sequences").upsert({
+                            "branch_id": target_b_id,
+                            "prefix": branch_prefix.strip(),
+                            "last_number": int(max_gl_num)
+                        }).execute()
+                        
+                        st.success(f"✅ {len(records)} பழைய கடன்கள் வெற்றிகரமாக ஏற்றப்பட்டன! அடுத்த ஆட்டோ கடன் எண்: {branch_prefix.strip()}-{str(max_gl_num + 1).zfill(4)}")
+                except Exception as e:
+                    st.error(f"❌ கோப்பைப் பதிவேற்றுவதில் பிழை: {e}")
 
         with tab9:
             st.subheader("🏦 தலைமையக பணப் பரிமாற்றம் (HO ⇄ Branch)")
@@ -2413,16 +2506,12 @@ else:
                     pl_col1, pl_col2, pl_col3 = st.columns(3)
             
                     with pl_col1:
-                        new_gl_no = st.text_input("புதிய கடன் எண் (GL No) *", key=f"gl_no_in_{fc}")
+                        # 🌟 கிளைக்கான அடுத்த கடன் எண் தானாக உருவாக்கப்படுகிறது
+                        suggested_gl, next_seq_num = generate_next_gl_number(st.session_state.branch_id)
+                        new_gl_no = st.text_input("கடன் எண் (Auto Generated GL No) *", value=suggested_gl, key=f"gl_no_in_{fc}")
                         
-                        # 🌟 டேட்டாபேஸில் அட்மின் பதிவு செய்துள்ள நேரடி திட்டங்களை எடுத்தல்
                         db_schemes = get_active_loan_schemes()
-                        
-                        scheme_name = st.selectbox(
-                            "அட்மின் நகைக் கடன் திட்டம் (Scheme) *", 
-                            db_schemes, 
-                            key=f"sch_sel_{fc}"
-                    )
+                        scheme_name = st.selectbox("அட்மின் நகைக் கடன் திட்டம் (Scheme) *", db_schemes, key=f"sch_sel_{fc}")
 
                     with pl_col2:
                         total_weight = st.number_input("மொத்த எடை (Gross Weight - gms) *", min_value=0.0, step=0.001, format="%.3f", key=f"gwt_in_{fc}")
