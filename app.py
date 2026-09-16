@@ -899,7 +899,6 @@ def generate_next_gl_number(branch_id):
         else:
             prefix = "GL"
             next_no = 1
-            # டேபிளில் இன்சர்ட் செய்தல் (பிழை வந்தால் அமைதியாக விட்டுவிடும்)
             try:
                 supabase.table("branch_loan_sequences").insert({
                     "branch_id": clean_b_id,
@@ -909,10 +908,13 @@ def generate_next_gl_number(branch_id):
             except Exception:
                 pass
 
-        return f"{prefix}-{str(next_no).zfill(4)}", next_no
-    except Exception:
-        # டேட்டாபேஸ் அட்டவணை இல்லாவிட்டாலும் ஆப் நிற்காமல் இயங்கும் டீஃபால்ட் மதிப்பு
-        return "GL-1001", 1
+        # 🌟 முன்னொட்டின் முடிவில் உள்ள தேவையில்லாத '-' அல்லது '/' குறியீடுகளை நீக்கிவிட்டு சரியாக '/' சேர்த்தல்
+        clean_pfx = str(prefix).strip().rstrip("/-")
+        formatted_gl = f"{clean_pfx}/{str(next_no).zfill(4)}"
+
+        return formatted_gl, next_no
+    except Exception as e:
+        return "GL/1001", 1
 
 def commit_next_gl_number(branch_id, used_number):
     try:
@@ -2511,9 +2513,16 @@ else:
                     pl_col1, pl_col2, pl_col3 = st.columns(3)
             
                     with pl_col1:
-                        # 🌟 கிளைக்கான அடுத்த கடன் எண் தானாக உருவாக்கப்படுகிறது
+                        # கிளைக்கான அடுத்த கடன் எண் தானாக உருவாக்கப்படுகிறது
                         suggested_gl, next_seq_num = generate_next_gl_number(st.session_state.branch_id)
-                        new_gl_no = st.text_input("கடன் எண் (Auto Generated GL No) *", value=suggested_gl, key=f"gl_no_in_{fc}")
+                        
+                        # 🌟 disabled=True அமைத்தால் யாரும் இதை எடிட் செய்ய முடியாது:
+                        new_gl_no = st.text_input(
+                            "கடன் எண் (Auto Generated GL No) *", 
+                            value=suggested_gl, 
+                            disabled=True, 
+                            key=f"gl_no_in_{fc}"
+                        )
                         
                         db_schemes = get_active_loan_schemes()
                         scheme_name = st.selectbox("அட்மின் நகைக் கடன் திட்டம் (Scheme) *", db_schemes, key=f"sch_sel_{fc}")
