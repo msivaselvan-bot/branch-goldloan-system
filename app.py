@@ -3020,56 +3020,98 @@ else:
                     gl_no_val = st.session_state.get("declaration_gl_no") or decl_info.get("gp_number", "GL")
                     clean_gl_key = str(gl_no_val).replace("/", "_")
 
-                    # 1. கார்ட் விவரங்களிலிருந்து சுத்தமான HTML உறுதி ஆவணத்தை உருவாக்குதல்
-                    cust_name = visit.get("customer_name", "") if 'visit' in locals() else ""
-                    cust_mob = visit.get("mobile", "") if 'visit' in locals() else ""
-                    amt_val = decl_info.get("paid_amount", 0.0) + decl_info.get("other_charges", 0.0)
-                    wt_val = decl_info.get("net_weight", 0.0)
+                    # 1. வாடிக்கையாளர் மற்றும் கடன் தகவல்களை எடுத்தல்
+                    v_info = st.session_state.get("current_visit", {}) or (visit if 'visit' in locals() else {})
+                    cust_name = v_info.get("customer_name") or v_info.get("name") or "வாடிக்கையாளர் பெயர்"
+                    cust_mob = v_info.get("mobile") or v_info.get("customer_mobile") or v_info.get("phone") or "-"
+                    branch_name = st.session_state.get("branch_name", "முத்துசிஸ் கோல்டு கம்பெனி")
+                    
+                    # அசல் தொகை மற்றும் இன்றைய தேதி (DD-MM-YYYY வடிவம்)
+                    from datetime import datetime
+                    today_str = datetime.now().strftime("%d-%m-%Y")
+                    amt_val = float(decl_info.get("principal_amount", 0.0) or decl_info.get("paid_amount", 0.0) or decl_info.get("amount", 0.0))
 
-                    html_template = f"""
-                    <!DOCTYPE html>
-                    <html>
-                    <head>
-                        <meta charset="utf-8">
-                        <title>கடன் உறுதி ஆவணம் - {gl_no_val}</title>
-                        <style>
-                            body {{ font-family: Arial, sans-serif; padding: 25px; line-height: 1.6; }}
-                            .header {{ text-align: center; border-bottom: 2px solid #333; padding-bottom: 10px; }}
-                            .details {{ margin: 20px 0; }}
-                            .details table {{ width: 100%; border-collapse: collapse; }}
-                            .details td {{ padding: 8px; border: 1px solid #ccc; }}
-                            .declaration {{ margin-top: 20px; background: #f9f9f9; padding: 15px; border-left: 4px solid #b8860b; }}
-                            .signatures {{ margin-top: 50px; display: flex; justify-content: space-between; }}
-                        </style>
-                    </head>
-                    <body>
-                        <div class="header">
-                            <h2>நகைக் கடன் உறுதிமொழி ஆவணம் (Pledge Declaration)</h2>
-                            <p><strong>கடன் எண்:</strong> {gl_no_val}</p>
-                        </div>
-                        <div class="details">
-                            <table>
-                                <tr><td><strong>வாடிக்கையாளர் பெயர்:</strong></td><td>{cust_name}</td></tr>
-                                <tr><td><strong>கைபேசி எண்:</strong></td><td>{cust_mob}</td></tr>
-                                <tr><td><strong>வழங்கப்பட்ட அசல் தொகை:</strong></td><td>₹{amt_val:,.2f}</td></tr>
-                                <tr><td><strong>நிகர எடை:</strong></td><td>{wt_val} கிராம்</td></tr>
-                            </table>
-                        </div>
-                        <div class="declaration">
-                            <p><strong>உறுதிமொழி:</strong> மேலே விவரங்கள் கூறப்பட்டுள்ள தங்க நகைகள் எனக்கு முழு உரிமையுடையவை என்றும், இதில் எவ்வித வில்லங்கமோ சட்டச் சிக்கல்களோ இல்லை என்றும் உறுதியளிக்கிறேன். நிறுவனத்தின் அனைத்து விதிமுறைகளுக்கும் உட்பட்டு இந்நகைகளை அடமானம் வைக்க ஒப்புக்கொள்கிறேன்.</p>
-                        </div>
-                        <br><br>
-                        <table style="width: 100%; border: none; margin-top: 40px;">
-                            <tr>
-                                <td style="border: none; text-align: left;"><strong>வாடிக்கையாளர் கையொப்பம்</strong></td>
-                                <td style="border: none; text-align: right;"><strong>அங்கீகரிக்கப்பட்ட கையொப்பம்</strong></td>
-                            </tr>
-                        </table>
-                    </body>
-                    </html>
-                    """
+                    # 2. நீங்கள் கோரிய தமிழ் உறுதிமொழி ஆவண HTML கட்டமைப்பு
+                    html_template = f"""<!DOCTYPE html>
+                <html>
+                <head>
+                    <meta charset="utf-8">
+                    <title>கடன் உறுதி ஆவணம் - {gl_no_val}</title>
+                    <style>
+                        body {{
+                            font-family: Arial, sans-serif;
+                            padding: 40px;
+                            line-height: 1.8;
+                            color: #111;
+                            max-width: 800px;
+                            margin: auto;
+                        }}
+                        .header {{
+                            margin-bottom: 25px;
+                        }}
+                        .title {{
+                            text-align: center;
+                            font-size: 20px;
+                            font-weight: bold;
+                            text-decoration: underline;
+                            margin: 25px 0;
+                        }}
+                        .content {{
+                            text-align: justify;
+                            font-size: 16px;
+                            margin-bottom: 30px;
+                        }}
+                        .footer-table {{
+                            width: 100%;
+                            margin-top: 50px;
+                            border-collapse: collapse;
+                        }}
+                        .footer-table td {{
+                            vertical-align: top;
+                            font-size: 15px;
+                        }}
+                        @media print {{
+                            body {{ padding: 20px; }}
+                        }}
+                    </style>
+                </head>
+                <body>
+                    <div class="header">
+                        <strong>FROM</strong><br>
+                        {cust_name}<br>
+                        தொடர்பு எண்: {cust_mob}
+                    </div>
 
-                    # 2. bytes வடிவில் மாற்றுதல் (இப்போது எந்தப் பிழையும் வராது)
+                    <div class="header">
+                        <strong>To</strong><br>
+                        ஐயா,<br>
+                        முத்துசிஸ் கோல்டு புரொடக்ட் பிரைவேட் லிமிடெட்<br>
+                        {branch_name}
+                    </div>
+
+                    <div class="title">
+                        கடன் தொடர்பான உறுதி ஆவணம்
+                    </div>
+
+                    <div class="content">
+                        நான் மேற்கூறிய முகவரியில் வசித்து வருகிறேன். நான் தங்களிடம் {today_str} அன்று கடன் எண் <strong>{gl_no_val}</strong> மீது கடனாக <strong>₹{amt_val:,.2f}</strong> ரூபாய் பெற்றுள்ளேன். எனக்கு பணத்தேவை அதிகமாக உள்ளபடியால் தாங்கள் சாதாரணமாக கொடுக்கும் நகைக்கான கடனைவிட எனது வேண்டுகோளால் அதிகமான பணத்தினை மேலே உள்ள நகைக் கடனுக்கு பெற்றுள்ளேன். மேலும் மேற்கூறிய கடனுக்கு மாதம் தோறும் வட்டிக் கட்டுவேன் எனவும் மூன்று மாதத்தில் திருப்பிக் கொள்வேன் எனவும் உறுதியளிக்கிறேன். மீறினால் நிறுவனமே எனது நகைகளை விற்று எனது கடனை நேர் செய்து கொள்ளலாம் எனவும் இதன் மூலம் உறுதியளிக்கிறேன். எனது கடனுக்கு காலம் மூன்று மாதமே என்பதனை நன்கு அறிவேன். மூன்று மாதங்களில் கடன் நேர் செய்யப்படவில்லை எனில் அடகு வைத்த நகை மீது எனக்கு எந்த உரிமையும் இல்லை என்பதனை நன்கு அறிவேன்.
+                    </div>
+
+                    <table class="footer-table">
+                        <tr>
+                            <td style="text-align: left; width: 50%;">
+                                கிளை: {branch_name}<br>
+                                தேதி: {today_str}
+                            </td>
+                            <td style="text-align: right; width: 50%;">
+                                தங்கள் உண்மையுள்ள,<br><br><br>
+                                (<strong>{cust_name}</strong>)
+                            </td>
+                        </tr>
+                    </table>
+                </body>
+                </html>"""
+
                     download_bytes = html_template.encode("utf-8")
 
                     st.markdown("---")
