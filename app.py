@@ -2329,7 +2329,7 @@ else:
                 st.success(f"வாடிக்கையாளர்: **{visit['customer_name']}** (வருகை எண்: **{visit['visit_no']}**)")
                 st.subheader("படி 2: வணிக நடவடிக்கைகள் சேர்த்தல்")
 
-                # 🌟 ஃபார்ம் ரீசெட் கவுண்டர் (இங்கேதான் வைக்க வேண்டும்)
+                # 🌟 கவுண்டரை ஆரம்பத்தில் மட்டும் உருவாக்குங்கள் (இங்கு கூட்டக் கூடாது!)
                 if "form_reset_counter" not in st.session_state:
                     st.session_state.form_reset_counter = 0
                 fc = st.session_state.form_reset_counter
@@ -2377,25 +2377,21 @@ else:
                 ornament_file = None
 
                 # 1. நகைக்கடன் (Pledge)
-                if txn_category == "Pledge (புதிய நகைக் கடன்)":
-                    p_col1, p_col2, p_col3 = st.columns(3)
-                    with p_col1:
-                        new_gl_no = st.text_input("புதிய கடன் எண் (GL No) *")
-                        scheme_name = st.selectbox("அட்மின் நகைக் கடன் திட்டம் (Scheme) *", gold_scheme_options)
-                        sel_scheme_obj = g_scheme_map.get(scheme_name, {})
-                        cur_rpg = float(sel_scheme_obj.get("rate_per_gram", 0) or 0)
-                        if cur_rpg > 0:
-                            st.info(f"💎 **இந்த ஸ்கீமின் RPG:** `₹{cur_rpg:,.2f} / gram`")
-                    
-                    with p_col2:
+                if "Pledge" in txn_category:
+                    pl_col1, pl_col2, pl_col3 = st.columns(3)
+            
+                    with pl_col1:
+                        new_gl_no = st.text_input("புதிய கடன் எண் (GL No) *", key=f"gl_no_in_{fc}")
+                        
+                        # 🌟 இந்த இடத்தில் தான் அந்த 2 வரிகளை ஒட்ட வேண்டும்:
+                        available_schemes = admin_schemes_list if ('admin_schemes_list' in locals() and admin_schemes_list) else ["VVH149", "Standard Gold Loan"]
+                        selected_scheme = st.selectbox("அட்மின் நகைக் கடன் திட்டம் (Scheme) *", available_schemes, key=f"sch_sel_{fc}")
+
+                    with pl_col2:
                         total_weight = st.number_input("மொத்த எடை (Gross Weight - gms) *", min_value=0.0, step=0.001, format="%.3f", key=f"gwt_in_{fc}")
                         net_weight = st.number_input("நிகர எடை (Net Weight - gms) *", min_value=0.0, step=0.001, format="%.3f", key=f"nwt_in_{fc}")
-                        item_count = st.number_input("நகை எண்ணிக்கை", min_value=1, step=1)
-                    
-                    with p_col3:
-                        max_eligible_calc = net_weight * cur_rpg if cur_rpg > 0 else 0.0
-                        if cur_rpg > 0 and net_weight > 0:
-                            st.success(f"⚖️ அதிகபட்ச கடன்: **₹{max_eligible_calc:,.2f}**")
+
+                    with pl_col3:
                         paid_amt = st.number_input("கடன் தொகை (Paid ₹) *", min_value=0.0, step=500.0, key=f"amt_in_{fc}")
                         other_charges = st.number_input("இதர கட்டணங்கள் (Other Charges ₹)", min_value=0.0, step=10.0, key=f"chg_in_{fc}")
 
@@ -2637,8 +2633,7 @@ else:
                     detail_summary = [f"பில்: {gs_bill_no}", f"பொருள்: {gs_item_name}", f"எடை: {net_weight}g"]
 
                 # கார்ட்டில் சேர்க்கும் பட்டன் (GP அல்லாத பிற நடவடிக்கைகளுக்கு மட்டும்)
-                cur_txn_cat = txn_category if 'txn_category' in locals() else st.session_state.get("dyn_txn_sel", "")
-                if cur_txn_cat != "GP (Gold Purchase)":
+                if txn_category != "GP (Gold Purchase)":
                     if st.button("➕ பட்டியலில் சேர் (Add to Cart)", type="primary", key="btn_add_to_cart_main"):
                         if "Pledge" in txn_category:
                             actual_paid_amt = max(0.0, float(paid_amt) - float(other_charges))
@@ -2647,9 +2642,11 @@ else:
 
                         chk_received = float(received_amt) if 'received_amt' in locals() else 0.0
 
-                        if actual_paid_amt > 0 or chk_received > 0:
-                            all_remarks = " | ".join(detail_summary)
-                            if custom_remarks.strip():
+                        if actual_paid_amt <= 0 and chk_received <= 0:
+                            st.warning("⚠️ தயவுசெய்து பட்டுவாடா தொகை அல்லது பெற்ற தொகையை உள்ளிடவும்!")
+                        else:
+                            all_remarks = " | ".join(detail_summary) if 'detail_summary' in locals() else ""
+                            if 'custom_remarks' in locals() and custom_remarks.strip():
                                 all_remarks += f" ({custom_remarks.strip()})"
 
                             img_url = upload_ornament_image(ornament_file) if ('ornament_file' in locals() and ornament_file) else None
@@ -2678,30 +2675,28 @@ else:
                                 "nominee_address": nominee_address if ('nominee_address' in locals() and nominee_address) else "",
                             })
 
-                    if "Pledge" in txn_category:
-                        decl_payload = {
-                            "customer_name": visit.get("customer_name", ""),
-                            "address": visit.get("address", ""),
-                            "contact_number": visit.get("mobile", ""),
-                            "branch_name": st.session_state.get("branch", ""),
-                            "pledge_date": datetime.now().strftime("%d-%m-%Y"),
-                            "loan_number": new_gl_no if 'new_gl_no' in locals() else "",
-                            "loan_amount": paid_amt if 'paid_amt' in locals() else 0.0,
-                            "current_date": datetime.now().strftime("%d-%m-%Y")
-                        }
-                        st.session_state.declaration_gl_no = new_gl_no if 'new_gl_no' in locals() else "GL"
-                        st.session_state.current_declaration = generate_declaration_html(decl_payload)
+                            # Pledge உறுதி ஆவணம் உருவாக்கம்
+                            if "Pledge" in txn_category:
+                                decl_payload = {
+                                    "customer_name": visit.get("customer_name", ""),
+                                    "address": visit.get("address", ""),
+                                    "contact_number": visit.get("mobile", ""),
+                                    "branch_name": st.session_state.get("branch", ""),
+                                    "pledge_date": datetime.now().strftime("%d-%m-%Y"),
+                                    "loan_number": new_gl_no if 'new_gl_no' in locals() else "",
+                                    "loan_amount": paid_amt if 'paid_amt' in locals() else 0.0,
+                                    "current_date": datetime.now().strftime("%d-%m-%Y")
+                                }
+                                st.session_state.declaration_gl_no = new_gl_no if 'new_gl_no' in locals() else "GL"
+                                st.session_state.current_declaration = generate_declaration_html(decl_payload)
 
-                    # 🌟 2. கார்ட்டில் சேர்க்கப்பட்ட பிறகு பீல்டுகளை ரீசெட் செய்தல்
-                    if "form_reset_counter" not in st.session_state:
-                        st.session_state.form_reset_counter = 0
-                    st.session_state.form_reset_counter += 1
+                            # கார்ட்டில் சேர்த்த பின் படிவத்தை ரீசெட் செய்தல்
+                            if "form_reset_counter" not in st.session_state:
+                                st.session_state.form_reset_counter = 0
+                            st.session_state.form_reset_counter += 1
 
-                    # 🌟 3. GP வகைக்கான நகை வரிசையை ஆரம்ப நிலைக்கு மாற்றுதல்
-                    st.session_state.gp_ornament_rows = [{"item": "", "count": 1, "gross_wt": 0.0, "net_wt": 0.0, "purity": "916 KDM"}]
-
-                    st.success(f"'{txn_category}' வெற்றிகரமாகப் பட்டியலில் சேர்க்கப்பட்டது!")
-                    st.rerun()
+                            st.success(f"'{txn_category}' வெற்றிகரமாகப் பட்டியலில் சேர்க்கப்பட்டது!")
+                            st.rerun()
 
                 # உறுதி ஆவணப் பதிவிறக்கப் பகுதி
                 if st.session_state.get("current_declaration"):
