@@ -2422,7 +2422,12 @@ else:
 
                     ornament_details = st.text_area("நகை விபரம்", key=f"orn_det_{fc}")
                     ornament_file = st.file_uploader("நகை படம்", type=["jpg", "jpeg", "png"], key=f"orn_file_{fc}")
-                    detail_summary = [f"GL: {new_gl_no}", f"ஸ்கீம்: {selected_scheme}", f"RPG: ₹{cur_rpg if 'cur_rpg' in locals() else '-'}", f"எடை: {net_weight}g"]
+                    detail_summary = [
+                        f"GL: {new_gl_no if 'new_gl_no' in locals() else '-'}", 
+                        f"ஸ்கீம்: {selected_scheme if 'selected_scheme' in locals() else (scheme_name if 'scheme_name' in locals() else '-')}", 
+                        f"RPG: ₹{cur_rpg if 'cur_rpg' in locals() else '-'}", 
+                        f"எடை: {net_weight if 'net_weight' in locals() else 0.0}g"
+                    ]
 
                 # 2. அடமானம் மீட்டல் (GL Release)
                 elif txn_category == "GL Release (அடமானம் மீட்டல்)":
