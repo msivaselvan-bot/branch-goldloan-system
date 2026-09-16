@@ -2917,8 +2917,8 @@ else:
                     ornament_details = st.text_area("நகை விபரம் (Ornament Details)", key="gs_details")
                     ornament_file = st.file_uploader("நகை படம் (Ornament Photo)", type=["jpg", "jpeg", "png"], key="gs_img")
                     detail_summary = [f"பில்: {gs_bill_no}", f"பொருள்: {gs_item_name}", f"எடை: {net_weight}g"]
-
-                # கார்ட்டில் சேர்க்கும் பட்டன் (GP அல்லாத பிற நடவடிக்கைகளுக்கு மட்டும்)
+                    
+                    # கார்ட்டில் சேர்க்கும் பட்டன் (GP அல்லாத பிற நடவடிக்கைகளுக்கு மட்டும்)
                 if txn_category != "GP (Gold Purchase)":
                     if st.button("➕ பட்டியலில் சேர் (Add to Cart)", type="primary", key="btn_add_to_cart_main"):
                         if "Pledge" in txn_category:
@@ -2961,6 +2961,23 @@ else:
                                 "nominee_address": nominee_address if ('nominee_address' in locals() and nominee_address) else "",
                             }
 
+                            # 🌟 அடமானம் மீட்டல் (Release) என்றால் Closed செய்யக் குறித்தல்:
+                            if "மீட்டல்" in txn_category or "Release" in txn_category:
+                                cart_entry["closed_gl_no"] = selected_gl_no if 'selected_gl_no' in locals() else ""
+                                cart_entry["closed_loan_id"] = selected_loan_db_id if 'selected_loan_db_id' in locals() else None
+
+                            # கார்ட்டில் சேர்த்தல்
+                            st.session_state.transactions_cart.append(cart_entry)
+                            
+                            # 🌟 புதிய அடமானம் என்றால் கடன் உறுதி ஆவணத்தை (Declaration) தயார் செய்தல்:
+                            if "Pledge" in txn_category:
+                                st.session_state.current_declaration = cart_entry
+                                st.session_state.declaration_gl_no = cart_entry.get("gp_number", "")
+
+                            st.session_state.form_reset_counter += 1
+                            st.rerun()
+
+                    
                             # 🌟 அடமானம் மீட்டல் (Release) என்றால் 'Closed' செய்ய வேண்டிய கடன் எண் மற்றும் ஐடி குறித்தல்
                             if "மீட்டல்" in txn_category or "Release" in txn_category:
                                 cart_entry["closed_gl_no"] = selected_gl_no if 'selected_gl_no' in locals() else ""
