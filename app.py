@@ -899,22 +899,27 @@ def generate_next_gl_number(branch_id):
         else:
             prefix = "GL"
             next_no = 1
-            supabase.table("branch_loan_sequences").insert({
-                "branch_id": clean_b_id,
-                "prefix": prefix,
-                "last_number": 0
-            }).execute()
+            # டேபிளில் இன்சர்ட் செய்தல் (பிழை வந்தால் அமைதியாக விட்டுவிடும்)
+            try:
+                supabase.table("branch_loan_sequences").insert({
+                    "branch_id": clean_b_id,
+                    "prefix": prefix,
+                    "last_number": 0
+                }).execute()
+            except Exception:
+                pass
 
         return f"{prefix}-{str(next_no).zfill(4)}", next_no
-    except Exception as e:
+    except Exception:
+        # டேட்டாபேஸ் அட்டவணை இல்லாவிட்டாலும் ஆப் நிற்காமல் இயங்கும் டீஃபால்ட் மதிப்பு
         return "GL-1001", 1
 
 def commit_next_gl_number(branch_id, used_number):
-    """கடன் கார்ட்டில் சேர்க்கப்பட்ட பின் வரிசை எண்ணை அப்டேட் செய்ய"""
     try:
-        supabase.table("branch_loan_sequences").update({
-            "last_number": used_number
-        }).eq("branch_id", int(branch_id)).execute()
+        supabase.table("branch_loan_sequences").upsert({
+            "branch_id": int(branch_id),
+            "last_number": int(used_number)
+        }).execute()
     except Exception:
         pass
 
