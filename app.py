@@ -1667,7 +1667,7 @@ else:
         with tab7:
             st.subheader("📋 OTP விலக்குக் கோரிக்கைகள் (Admin Approval Desk)")
             
-            # 🌟 1. எவ்வித Join-ம் இன்றி நேரடியாக எடுத்தல் (Foreign key பிழையைத் தவிர்க்க)
+            # 🌟 எவ்வித Join-ம் இன்றி நேரடியாக எடுத்தல் (பிழையின்றி வர)
             try:
                 res = supabase.table("otp_bypass_requests").select("*").eq("status", "Pending Admin").order("id", desc=True).execute()
                 pending_admin = res.data or []
@@ -1679,7 +1679,6 @@ else:
                 st.info("✅ தற்போது அட்மின் ஒப்புதலுக்கான OTP விலக்குக் கோரிக்கைகள் எதுவும் நிலுவையில் இல்லை.")
             else:
                 for req in pending_admin:
-                    # கிளைப் பெயரை அகராதியிலிருந்து எளிதாக எடுத்தல்
                     req_b_id = req.get("branch_id")
                     b_lbl = f"Branch ID: {req_b_id}"
                     if 'branch_options' in locals() and branch_options:
@@ -1716,7 +1715,6 @@ else:
                 with st.expander(f"{vr['visit_no']} | {c_name} | ₹{vr['net_cash_amount']:,.2f} | {vr['status']}"):
                     if vr.get("transactions"):
                         st.dataframe(pd.DataFrame(vr["transactions"]))
-
         # -----------------------------------------------------------------
         # tab8: கிளை துவக்க இருப்பு நிர்ணயம் (Opening Stock with 8 Denominations)
         # -----------------------------------------------------------------
@@ -2072,6 +2070,9 @@ else:
         # -----------------------------------------------------------------
         # ops_tab5: OTP விலக்கு இறுதி சரிபார்ப்பு மற்றும் அனுமதி (Operations Clearance)
         # -----------------------------------------------------------------
+        # -----------------------------------------------------------------
+        # ops_tab5: OTP விலக்கு இறுதி சரிபார்ப்பு மற்றும் அனுமதி (Operations Clearance)
+        # -----------------------------------------------------------------
         with ops_tab5:
             st.subheader("🛡️ OTP விலக்கு இறுதி சரிபார்ப்பு (Operations Clearance)")
             st.caption("அட்மின் ஒப்புதல் வழங்கி, ஆப்பரேஷன்ஸ் குழுவின் இறுதி அனுமதிக்காக நிலுவையில் உள்ள கோரிக்கைகள்.")
@@ -2087,7 +2088,14 @@ else:
                 st.info("✅ சரிபார்ப்பிற்கு நிலுவையில் உள்ள OTP விலக்குக் கோரிக்கைகள் எதுவும் இல்லை.")
             else:
                 for op_req in pending_ops:
-                    b_lbl = op_req.get("branches", {}).get("branch_name", f"Branch {op_req.get('branch_id')}")
+                    op_b_id = op_req.get("branch_id")
+                    b_lbl = f"Branch ID: {op_b_id}"
+                    if 'branch_options' in locals() and branch_options:
+                        for name, b_id in branch_options.items():
+                            if str(b_id) == str(op_b_id):
+                                b_lbl = name
+                                break
+
                     with st.container(border=True):
                         st.markdown(f"📍 **கிளை:** `{b_lbl}` | 👤 **வாடிக்கையாளர்:** `{op_req.get('customer_name')}` (`{op_req.get('mobile')}`)")
                         st.write(f"📝 **கோரிய மேலாளர்:** {op_req.get('requested_by')} | **காரணம்:** {op_req.get('reason')}")
