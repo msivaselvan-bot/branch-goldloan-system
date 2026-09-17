@@ -1661,20 +1661,33 @@ else:
         # -----------------------------------------------------------------
         # tab7, tab8, tab9, tab10: அட்மின் பிற டேப்கள்
         # -----------------------------------------------------------------
+        # -----------------------------------------------------------------
+        # tab7: வருகை, பரிவர்த்தனை & OTP விலக்கு அட்மின் ஒப்புதல் மேசை
+        # -----------------------------------------------------------------
         with tab7:
             st.subheader("📋 OTP விலக்குக் கோரிக்கைகள் (Admin Approval Desk)")
             
-            # அட்மின் ஒப்புதலுக்காகக் காத்திருக்கும் கோரிக்கைகள்
+            # 🌟 1. எவ்வித Join-ம் இன்றி நேரடியாக எடுத்தல் (Foreign key பிழையைத் தவிர்க்க)
             try:
-                pending_admin = supabase.table("otp_bypass_requests").select("*, branches(branch_name)").eq("status", "Pending Admin").order("id", desc=True).execute().data or []
-            except Exception:
+                res = supabase.table("otp_bypass_requests").select("*").eq("status", "Pending Admin").order("id", desc=True).execute()
+                pending_admin = res.data or []
+            except Exception as e:
+                st.error(f"டேட்டாபேஸ் வினவலில் பிழை: {e}")
                 pending_admin = []
 
             if not pending_admin:
                 st.info("✅ தற்போது அட்மின் ஒப்புதலுக்கான OTP விலக்குக் கோரிக்கைகள் எதுவும் நிலுவையில் இல்லை.")
             else:
                 for req in pending_admin:
-                    b_lbl = req.get("branches", {}).get("branch_name", f"Branch {req.get('branch_id')}")
+                    # கிளைப் பெயரை அகராதியிலிருந்து எளிதாக எடுத்தல்
+                    req_b_id = req.get("branch_id")
+                    b_lbl = f"Branch ID: {req_b_id}"
+                    if 'branch_options' in locals() and branch_options:
+                        for name, b_id in branch_options.items():
+                            if str(b_id) == str(req_b_id):
+                                b_lbl = name
+                                break
+
                     with st.container(border=True):
                         st.markdown(f"📍 **கிளை:** `{b_lbl}` | 👤 **வாடிக்கையாளர்:** `{req.get('customer_name')}` (`{req.get('mobile')}`)")
                         st.write(f"📝 **கோரியவர்:** {req.get('requested_by')} | **காரணம்:** {req.get('reason')}")
@@ -2064,8 +2077,10 @@ else:
             st.caption("அட்மின் ஒப்புதல் வழங்கி, ஆப்பரேஷன்ஸ் குழுவின் இறுதி அனுமதிக்காக நிலுவையில் உள்ள கோரிக்கைகள்.")
 
             try:
-                pending_ops = supabase.table("otp_bypass_requests").select("*, branches(branch_name)").eq("status", "Pending Operations").order("id", desc=True).execute().data or []
-            except Exception:
+                res = supabase.table("otp_bypass_requests").select("*").eq("status", "Pending Operations").order("id", desc=True).execute()
+                pending_ops = res.data or []
+            except Exception as e:
+                st.error(f"டேட்டாபேஸ் வினவலில் பிழை: {e}")
                 pending_ops = []
 
             if not pending_ops:
