@@ -1,6 +1,6 @@
 FROM python:3.11-slim
 
-# 1. இந்திய நேர மண்டல அமைப்பு (IST Timezone)
+# இந்திய நேர மண்டல அமைப்பு (IST)
 ENV TZ="Asia/Kolkata"
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
@@ -21,4 +21,4 @@ EXPOSE 7860
 
 HEALTHCHECK CMD curl --fail http://localhost:7860/_stcore/health
 
-ENTRYPOINT ["streamlit", "run", "app.py", "--server.port=7860", "--server.address=0.0.0.0"]
+ENTRYPOINT ["streamlit", "run", "app.py", "--server.port=7860", "--server.address=0.0.0.0", "--server.enableCORS=false", "--server.enableXsrfProtection=false"]
