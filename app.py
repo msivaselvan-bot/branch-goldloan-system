@@ -1081,26 +1081,28 @@ if not st.session_state.logged_in:
                                 user_info = res.data[0]
                                 db_pass = str(user_info.get("password_hash") or "").strip()
                                 
-                                if db_pass == p_clean:
+                                if db_pass == password.strip():
                                     role = user_info.get("role", "Staff")
                                     b_id = user_info.get("branch_id")
                                     
-                                    # கிளைப் பெயரை Cache மூலம் தாமதமின்றி எடுத்தல்
-                                    if role in ["Admin", "Auditor", "Operations"]:
-                                        b_name = f"Head Office / {role}"
-                                    else:
-                                        b_name = get_branch_name_cached(b_id)
+                                    # உடனே திரையில் ஸ்பின்னர் காட்டி தாமத உணர்வை நீக்குதல்
+                                    with st.spinner("உள்நுழைகிறது... தயவுசெய்து காத்திருக்கவும்..."):
+                                        if role in ["Admin", "Auditor", "Operations"]:
+                                            b_name = f"Head Office / {role}"
+                                        else:
+                                            b_name = "ஒதுக்கப்படாத கிளை"
+                                            if b_id:
+                                                b_res = supabase.table("branches").select("branch_name").eq("id", b_id).execute()
+                                                if b_res.data:
+                                                    b_name = b_res.data[0].get("branch_name", "கிளை")
 
-                                    # Session-ல் தகவல்களைப் பதிவு செய்தல்
-                                    st.session_state.logged_in = True
-                                    st.session_state.user_role = role
-                                    st.session_state.branch = b_name
-                                    st.session_state.branch_id = b_id
-                                    st.session_state.username = user_info.get("name", u_clean)
-                                    st.session_state.profile_image = user_info.get("profile_image_url")
-                                    
-                                    # மின்னல் வேக மறுஏற்றம்
-                                    st.rerun()
+                                        st.session_state.logged_in = True
+                                        st.session_state.user_role = role
+                                        st.session_state.branch = b_name
+                                        st.session_state.branch_id = b_id
+                                        st.session_state.username = user_info.get("name", username.strip())
+                                        st.session_state.profile_image = user_info.get("profile_image_url")
+                                        st.rerun()
                                 else:
                                     st.error("தவறான கடவுச்சொல்!")
                             else:
