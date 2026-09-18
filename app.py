@@ -6,9 +6,18 @@ import pandas as pd
 import streamlit as st
 from supabase import Client, create_client
 import uuid
+import os
 
 # 1. பக்க வடிவமைப்பு
 st.set_page_config(page_title="Branch Operations System", layout="wide")
+
+# ==============================================================================
+# 2. டேட்டாபேஸ் இணைப்பு (Docker Environment & Streamlit Secrets)
+# ==============================================================================
+SUPABASE_URL = os.getenv("SUPABASE_URL") or st.secrets.get("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY") or st.secrets.get("SUPABASE_KEY")
+
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # ==============================================================================
 # நகை படம் பதிவேற்றும் செயல்பாடு (Supabase Storage Bucket: ornaments)
