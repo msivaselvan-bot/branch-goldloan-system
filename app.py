@@ -3535,34 +3535,33 @@ else:
                                 otp_cleared = True
 
                             # 🌟 4. மேலாளர் விலக்குக் கோரிக்கை அனுப்பும் பகுதி (Expander)
-                            # 🌟 மேலாளர் விலக்குக் கோரிக்கை அனுப்பும் பகுதி
-                                with st.expander("🚨 வாடிக்கையாளர் OTP பெற முடியவில்லையா? (விலக்குக் கோரிக்கை)", expanded=True):
-                                    bypass_reason = st.text_area("விலக்குக் கோருவதற்கான காரணம் *", value="OLD Mobile", key=f"bp_rea_{visit_id}")
-                                    
-                                    if st.button("அட்மினுக்கு கோரிக்கை அனுப்பு (Request Bypass)", key=f"btn_send_bp_{visit_id}", type="primary"):
-                                        if not bypass_reason.strip():
-                                            st.warning("⚠️ தயவுசெய்து காரணத்தைக் குறிப்பிடவும்!")
-                                        else:
-                                            try:
-                                                # branch_id காலியாக இருந்தால் மாற்று ஏற்பாடு
-                                                b_id = st.session_state.get("branch_id") or visit.get("branch_id") or 1
-                                                u_name = st.session_state.get("username") or "Branch Manager"
-                                                
-                                                req_payload = {
-                                                    "visit_id": int(visit_id),
-                                                    "branch_id": int(b_id),
-                                                    "requested_by": str(u_name),
-                                                    "customer_name": str(visit.get("customer_name", "")),
-                                                    "mobile": str(visit.get("mobile", "")),
-                                                    "reason": str(bypass_reason.strip()),
-                                                    "status": "Pending Admin"
-                                                }
-                                                
-                                                ins_res = supabase.table("otp_bypass_requests").insert(req_payload).execute()
-                                                st.success("✅ கோரிக்கை அட்மினுக்கு வெற்றிகரமாக அனுப்பப்பட்டது!")
-                                                st.rerun()
-                                            except Exception as e:
-                                                st.error(f"❌ கோரிக்கை அனுப்புவதில் பிழை: {e}")
+                            with st.expander("🚨 வாடிக்கையாளர் OTP பெற முடியவில்லையா? (விலக்குக் கோரிக்கை)", expanded=True):
+                                bypass_reason = st.text_area("விலக்குக் கோருவதற்கான காரணம் *", value="OLD Mobile", key=f"bp_rea_{visit_id}")
+                                
+                                if st.button("அட்மினுக்கு கோரிக்கை அனுப்பு (Request Bypass)", key=f"btn_send_bp_{visit_id}", type="primary"):
+                                    if not bypass_reason.strip():
+                                        st.warning("⚠️ தயவுசெய்து காரணத்தைக் குறிப்பிடவும்!")
+                                    else:
+                                        try:
+                                            # branch_id காலியாக இருந்தால் மாற்று ஏற்பாடு
+                                            b_id = st.session_state.get("branch_id") or visit.get("branch_id") or 1
+                                            u_name = st.session_state.get("username") or "Branch Manager"
+                                            
+                                            req_payload = {
+                                                "visit_id": int(visit_id),
+                                                "branch_id": int(b_id),
+                                                "requested_by": str(u_name),
+                                                "customer_name": str(visit.get("customer_name", "")),
+                                                "mobile": str(visit.get("mobile", "")),
+                                                "reason": str(bypass_reason.strip()),
+                                                "status": "Pending Admin"
+                                            }
+                                            
+                                            ins_res = supabase.table("otp_bypass_requests").insert(req_payload).execute()
+                                            st.success("✅ கோரிக்கை அட்மினுக்கு வெற்றிகரமாக அனுப்பப்பட்டது!")
+                                            st.rerun()
+                                        except Exception as e:
+                                            st.error(f"❌ கோரிக்கை அனுப்புவதில் பிழை: {e}")
                                 
             # 🚀 இங்கு உங்களின் வழக்கம் போல பரிவர்த்தனைகள் சேமிக்கப்படும் குறியீடுகள் (Cart loop, DB update) இயங்கும்!
                             else:
