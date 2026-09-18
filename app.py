@@ -24,6 +24,21 @@ if not SUPABASE_URL or not SUPABASE_KEY:
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # ==============================================================================
+# கிளைப் பெயர்களை அதிவேகமாக எடுக்க Cache Helper
+# ==============================================================================
+@st.cache_data(ttl=300)
+def get_branch_name_cached(b_id):
+    if not b_id:
+        return "ஒதுக்கப்படாத கிளை"
+    try:
+        b_res = supabase.table("branches").select("branch_name").eq("id", b_id).execute()
+        if b_res.data:
+            return b_res.data[0].get("branch_name", "கிளை")
+    except Exception:
+        pass
+    return "கிளை"
+
+# ==============================================================================
 # நகை படம் பதிவேற்றும் செயல்பாடு (Supabase Storage Bucket: ornaments)
 # ==============================================================================
 def upload_ornament_image(file_obj):
@@ -1034,11 +1049,9 @@ branch_id_to_name = {b["id"]: b["branch_name"] for b in branches_data} if branch
 # ==========================================
 # 5. உள்நுழைவு திரை (Login Screen )
 # ==========================================
-# 1. session_state-ல் logged_in இல்லை என்றால் ஆரம்பத்திலேயே உருவாக்குதல்
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
 
-# 2. பயனர் உள்நுழையவில்லை என்றால் மட்டுமே இந்தப் பகுதி இயங்கும்
 if not st.session_state.logged_in:
     col_left, col_center, col_right = st.columns([1.2, 1.4, 1.2])
     with col_center:
@@ -1049,7 +1062,7 @@ if not st.session_state.logged_in:
         </div>
         """, unsafe_allow_html=True)
 
-        with st.form("login_form", clear_on_submit=True):
+        with st.form("login_form", clear_on_submit=False):
             username = st.text_input("பயனர் பெயர் (Username)", placeholder="Username")
             password = st.text_input("கடவுச்சொல் (Password)", type="password", placeholder="Password")
             submitted = st.form_submit_button("உள்நுழைக (Login)", use_container_width=True, type="primary")
@@ -1059,45 +1072,45 @@ if not st.session_state.logged_in:
                 p_clean = password.strip()
 
                 if u_clean and p_clean:
-                    try:
-                        res = supabase.table("users").select("*").eq("username", u_clean).execute()
-                        if res.data:
-                            user_info = res.data[0]
-                            db_pass = str(user_info.get("password_hash") or "").strip()
-                            
-                            if db_pass == p_clean:
-                                role = user_info.get("role", "Staff")
-                                b_id = user_info.get("branch_id")
+                    # உடனடி அனிமேஷன் மூலம் தாமத உணர்வை நீக்குதல்
+                    with st.spinner("உள்நுழைகிறது... தயவுசெய்து காத்திருக்கவும்..."):
+                        try:
+                            # பயனரின் விவரங்களை மட்டும் துல்லியமாக எடுத்தல்
+                            res = supabase.table("users").select("*").eq("username", u_clean).execute()
+                            if res.data:
+                                user_info = res.data[0]
+                                db_pass = str(user_info.get("password_hash") or "").strip()
                                 
-                                if role in ["Admin", "Auditor", "Operations"]:
-                                    b_name = f"Head Office / {role}"
-                                else:
-                                    b_name = "ஒதுக்கப்படாத கிளை"
-                                    if b_id:
-                                        b_res = supabase.table("branches").select("branch_name").eq("id", b_id).execute()
-                                        if b_res.data:
-                                            b_name = b_res.data[0].get("branch_name", "கிளை")
+                                if db_pass == p_clean:
+                                    role = user_info.get("role", "Staff")
+                                    b_id = user_info.get("branch_id")
+                                    
+                                    # கிளைப் பெயரை Cache மூலம் தாமதமின்றி எடுத்தல்
+                                    if role in ["Admin", "Auditor", "Operations"]:
+                                        b_name = f"Head Office / {role}"
+                                    else:
+                                        b_name = get_branch_name_cached(b_id)
 
-                                # Session State-ல் தகவல்களைச் சேமித்தல்
-                                st.session_state.logged_in = True
-                                st.session_state.user_role = role
-                                st.session_state.branch = b_name
-                                st.session_state.branch_id = b_id
-                                st.session_state.username = user_info.get("name", u_clean)
-                                st.session_state.profile_image = user_info.get("profile_image_url")
-                                
-                                # உடனடியாகப் பக்கத்தை மறுஏற்றம் செய்து கிளைத் திரைக்குச் செல்லுதல்
-                                st.rerun()
+                                    # Session-ல் தகவல்களைப் பதிவு செய்தல்
+                                    st.session_state.logged_in = True
+                                    st.session_state.user_role = role
+                                    st.session_state.branch = b_name
+                                    st.session_state.branch_id = b_id
+                                    st.session_state.username = user_info.get("name", u_clean)
+                                    st.session_state.profile_image = user_info.get("profile_image_url")
+                                    
+                                    # மின்னல் வேக மறுஏற்றம்
+                                    st.rerun()
+                                else:
+                                    st.error("தவறான கடவுச்சொல்!")
                             else:
-                                st.error("தவறான கடவுச்சொல்!")
-                        else:
-                            st.error("தவறான பயனர் பெயர்!")
-                    except Exception as e:
-                        st.error(f"பிழை: {e}")
+                                st.error("தவறான பயனர் பெயர்!")
+                        except Exception as e:
+                            st.error(f"பிழை: {e}")
                 else:
                     st.warning("தயவுசெய்து பயனர் பெயர் மற்றும் கடவுச்சொல்லை உள்ளிடவும்.")
 
-    # மிக முக்கியம்: பயனர் லாகின் செய்யாத வரை கீழேயுள்ள கிளைப் பக்கங்கள் லோட் ஆகாமல் தடுத்தல்
+    # பயனர் உள்நுழையாத வரை கீழ் உள்ள கிளைத் தரவுகள் லோட் ஆவதைத் தடுத்தல்
     st.stop()
 
 # ==========================================
