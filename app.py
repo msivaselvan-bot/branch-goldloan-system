@@ -17,17 +17,8 @@ st.set_page_config(page_title="Branch Operations System", layout="wide")
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 
-# Environment variables-ல் இல்லையெனில் மட்டும் st.secrets-ஐ பாதுகாப்பாகச் சரிபார்க்கும்
 if not SUPABASE_URL or not SUPABASE_KEY:
-    try:
-        if hasattr(st, "secrets") and len(st.secrets) > 0:
-            SUPABASE_URL = SUPABASE_URL or st.secrets.get("SUPABASE_URL")
-            SUPABASE_KEY = SUPABASE_KEY or st.secrets.get("SUPABASE_KEY")
-    except Exception:
-        pass
-
-if not SUPABASE_URL or not SUPABASE_KEY:
-    st.error("டேட்டாபேஸ் ரகசியங்கள் (SUPABASE_URL / SUPABASE_KEY) சரியாக அமைக்கப்படவில்லை. Hugging Face Settings -> Variables and secrets பக்கத்தில் சரிபார்க்கவும்.")
+    st.error("டேட்டாபேஸ் இணைப்புக் குறியீடுகள் (SUPABASE_URL / SUPABASE_KEY) கிடைக்கவில்லை!")
     st.stop()
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
