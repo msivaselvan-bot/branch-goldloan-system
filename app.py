@@ -1034,6 +1034,11 @@ branch_id_to_name = {b["id"]: b["branch_name"] for b in branches_data} if branch
 # ==========================================
 # 5. உள்நுழைவு திரை (Login Screen )
 # ==========================================
+# 1. session_state-ல் logged_in இல்லை என்றால் ஆரம்பத்திலேயே உருவாக்குதல்
+if "logged_in" not in st.session_state:
+    st.session_state.logged_in = False
+
+# 2. பயனர் உள்நுழையவில்லை என்றால் மட்டுமே இந்தப் பகுதி இயங்கும்
 if not st.session_state.logged_in:
     col_left, col_center, col_right = st.columns([1.2, 1.4, 1.2])
     with col_center:
@@ -1044,21 +1049,24 @@ if not st.session_state.logged_in:
         </div>
         """, unsafe_allow_html=True)
 
-        with st.form("login_form"):
+        with st.form("login_form", clear_on_submit=True):
             username = st.text_input("பயனர் பெயர் (Username)", placeholder="Username")
             password = st.text_input("கடவுச்சொல் (Password)", type="password", placeholder="Password")
             submitted = st.form_submit_button("உள்நுழைக (Login)", use_container_width=True, type="primary")
 
             if submitted:
-                if username.strip() and password.strip():
+                u_clean = username.strip()
+                p_clean = password.strip()
+
+                if u_clean and p_clean:
                     try:
-                        res = supabase.table("users").select("*").eq("username", username.strip()).execute()
+                        res = supabase.table("users").select("*").eq("username", u_clean).execute()
                         if res.data:
                             user_info = res.data[0]
                             db_pass = str(user_info.get("password_hash") or "").strip()
                             
-                            if db_pass == password.strip():
-                                role = user_info["role"]
+                            if db_pass == p_clean:
+                                role = user_info.get("role", "Staff")
                                 b_id = user_info.get("branch_id")
                                 
                                 if role in ["Admin", "Auditor", "Operations"]:
@@ -1070,12 +1078,15 @@ if not st.session_state.logged_in:
                                         if b_res.data:
                                             b_name = b_res.data[0].get("branch_name", "கிளை")
 
+                                # Session State-ல் தகவல்களைச் சேமித்தல்
                                 st.session_state.logged_in = True
                                 st.session_state.user_role = role
                                 st.session_state.branch = b_name
                                 st.session_state.branch_id = b_id
-                                st.session_state.username = user_info["name"]
+                                st.session_state.username = user_info.get("name", u_clean)
                                 st.session_state.profile_image = user_info.get("profile_image_url")
+                                
+                                # உடனடியாகப் பக்கத்தை மறுஏற்றம் செய்து கிளைத் திரைக்குச் செல்லுதல்
                                 st.rerun()
                             else:
                                 st.error("தவறான கடவுச்சொல்!")
@@ -1085,6 +1096,9 @@ if not st.session_state.logged_in:
                         st.error(f"பிழை: {e}")
                 else:
                     st.warning("தயவுசெய்து பயனர் பெயர் மற்றும் கடவுச்சொல்லை உள்ளிடவும்.")
+
+    # மிக முக்கியம்: பயனர் லாகின் செய்யாத வரை கீழேயுள்ள கிளைப் பக்கங்கள் லோட் ஆகாமல் தடுத்தல்
+    st.stop()
 
 # ==========================================
 # 6. முதன்மை திரை
