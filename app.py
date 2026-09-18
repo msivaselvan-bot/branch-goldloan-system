@@ -3479,35 +3479,37 @@ else:
 
                     with col_den2:
                         st.markdown("#### 📲 OTP சரிபார்ப்பு")
-                        st.write(f"வாடிக்கையாளர்: **{visit['customer_name']}**")
-                        st.write(f"மொபைல் எண்: `{visit['mobile']}`")
+                        c_name = visit.get("customer_name") or visit.get("name") or "வாடிக்கையாளர்"
+                        c_mob = visit.get("mobile") or visit.get("customer_mobile") or "-"
+                        st.write(f"வாடிக்கையாளர்: **{c_name}**")
+                        st.write(f"மொபைல் எண்: `{c_mob}`")
 
-                        # 🌟 1. OTP விலக்கு நிலவரத்தை Supabase-லிருந்து எடுத்தல்
-                        visit_id = visit.get("id")
-                        bypass_rec = None
+                        # 🌟 1. பாதுகாப்பாக visit_id எடுத்தல்
+                        v_id = visit.get("id") or visit.get("visit_id") or visit.get("visit_no")
                         current_status = None
-                        try:
-                            req_res = supabase.table("otp_bypass_requests").select("*").eq("visit_id", visit_id).order("id", desc=True).limit(1).execute()
-                            if req_res.data:
-                                bypass_rec = req_res.data[0]
-                                current_status = bypass_rec.get("status")
-                        except Exception:
-                            pass
+
+                        if v_id:
+                            try:
+                                req_res = supabase.table("otp_bypass_requests").select("status").eq("visit_id", v_id).order("id", desc=True).limit(1).execute()
+                                if req_res.data:
+                                    current_status = req_res.data[0].get("status")
+                            except Exception:
+                                current_status = None
 
                         otp_cleared = False
 
-                        # 🌟 2. நிலவரப்படி செய்திகளைக் காட்டுதல்
+                        # 🌟 2. ஸ்டேட்டஸ் செய்திகள்
                         if current_status == "Approved":
                             st.success("✅ **அட்மின் & ஆப்பரேஷன்ஸ் அனுமதி வழங்கப்பட்டுவிட்டது!** OTP விலக்கு அளிக்கப்பட்டது.")
                             otp_cleared = True
                         elif current_status == "Pending Admin":
                             st.warning("⏳ **OTP விலக்குக் கோரிக்கை அட்மின் (Admin) ஒப்புதலுக்காக நிலுவையில் உள்ளது.**")
                         elif current_status == "Pending Operations":
-                            st.info("🔄 **அட்மின் ஒப்புதல் தந்துவிட்டார்.** ஆப்பரேஷன்ஸ் (Operations) இறுதி அனுமதிக்காக காத்திருக்கிறது...")
+                            st.info("🔄 **அட்மின் ஒப்புதல் அளித்துவிட்டார்.** ஆப்பரேஷன்ஸ் இறுதி அனுமதிக்காக காத்திருக்கிறது...")
                         elif current_status == "Rejected":
                             st.error("❌ OTP விலக்குக் கோரிக்கை நிராகரிக்கப்பட்டது! வழக்கமான OTP-ஐப் பயன்படுத்தவும்.")
 
-                        # 🌟 3. OTP அனுப்பும் பட்டன் (அனுமதி கிடைக்காத போது மட்டும்)
+                        # 🌟 3. OTP அனுப்பும் பட்டன்
                         if not otp_cleared:
                             if not is_ready:
                                 st.warning("⚠️ ரொக்க நோட்டுகளும் பேலன்ஸ் சில்லறையும் சரியாக அமைந்ததும் OTP இயங்கும்.")
@@ -3519,131 +3521,85 @@ else:
                                     otp_code = str(random.randint(1000, 9999))
                                     st.session_state.generated_otp = otp_code
                                     with st.spinner("SMS அனுப்பப்படுகிறது..."):
-                                        sms_success, msg_detail = send_fast2sms_otp(visit["mobile"], otp_code)
+                                        sms_success, msg_detail = send_fast2sms_otp(c_mob, otp_code)
                                     if sms_success:
                                         st.success("✅ OTP SMS அனுப்பப்பட்டது!")
                                     else:
                                         st.info(f"💡 சோதனை OTP: **{otp_code}**")
                                     st.rerun()
 
-                            # வழக்கமான OTP உள்ளீடு
+                            # OTP உள்ளீடு
                             entered_otp = st.text_input("வாடிக்கையாளர் OTP உள்ளிடவும்", max_chars=4, key="entered_otp_val")
                             if entered_otp and str(entered_otp).strip() == str(st.session_state.get("generated_otp", "")).strip():
                                 otp_cleared = True
 
-                                # 🌟 4. மேலாளர் விலக்குக் கோரிக்கை அனுப்பும் பகுதி (Expander)
-                                with st.expander("🚨 வாடிக்கையாளர் OTP பெற முடியவில்லையா? (விலக்குக் கோரிக்கை)", expanded=True):
-                                    bypass_reason = st.text_area("விலக்குக் கோருவதற்கான காரணம் *", value="OLD Mobile", key=f"bp_rea_{visit_id}")
-                                    
-                                    if st.button("அட்மினுக்கு கோரிக்கை அனுப்பு (Request Bypass)", key=f"btn_send_bp_{visit_id}", type="primary"):
-                                        if not bypass_reason.strip():
-                                            st.warning("⚠️ தயவுசெய்து காரணத்தைக் குறிப்பிடவும்!")
-                                        else:
-                                            try:
-                                                # branch_id காலியாக இருந்தால் மாற்று ஏற்பாடு
-                                                b_id = st.session_state.get("branch_id") or visit.get("branch_id") or 1
-                                                u_name = st.session_state.get("username") or "Branch Manager"
-                                                
-                                                req_payload = {
-                                                    "visit_id": int(visit_id),
-                                                    "branch_id": int(b_id),
-                                                    "requested_by": str(u_name),
-                                                    "customer_name": str(visit.get("customer_name", "")),
-                                                    "mobile": str(visit.get("mobile", "")),
-                                                    "reason": str(bypass_reason.strip()),
-                                                    "status": "Pending Admin"
-                                                }
-                                                
-                                                ins_res = supabase.table("otp_bypass_requests").insert(req_payload).execute()
-                                                st.success("✅ கோரிக்கை அட்மினுக்கு வெற்றிகரமாக அனுப்பப்பட்டது!")
-                                                st.rerun()
-                                            except Exception as e:
-                                                st.error(f"❌ கோரிக்கை அனுப்புவதில் பிழை: {e}")
-                                
-            # 🚀 இங்கு உங்களின் வழக்கம் போல பரிவர்த்தனைகள் சேமிக்கப்படும் குறியீடுகள் (Cart loop, DB update) இயங்கும்!
-                            else:
-                                expected_otp = st.session_state.get("generated_otp")
-                                if entered_otp and entered_otp == expected_otp:
-                                    with st.spinner("வருகை சேமிக்கப்படுகிறது..."):
-                                        pm_label = "Cash" if bank_portion == 0 else ("Bank/UPI" if cash_portion == 0 else "Split")
-                                        visit_data = {
-                                            "visit_no": visit["visit_no"],
-                                            "customer_id": visit["customer_id"],
-                                            "branch_id": st.session_state.branch_id,
-                                            "total_paid": visit["total_paid"],
-                                            "total_received": visit["total_received"],
-                                            "net_cash_amount": visit["net_amount"],
-                                            "cash_amount": float(cash_portion),
-                                            "bank_amount": float(bank_portion),
-                                            "payment_mode": pm_label,
-                                            "bank_reference_no": bank_ref_no.strip() if bank_portion > 0 else None,
-                                            "denomination_details": {
-                                                "in": {"500": in_500, "200": in_200, "100": in_100, "50": in_50, "20": in_20, "10": in_10, "5": in_5, "coins": in_coins, "total": total_cash_in},
-                                                "out": {"500": out_500, "200": out_200, "100": out_100, "50": out_50, "20": out_20, "10": out_10, "5": out_5, "coins": out_coins, "total": total_cash_out},
-                                                "net_change": total_cash_in - total_cash_out,
-                                            },
-                                            "otp_verified": True,
-                                            "status": "Pending_Calling_Verification",
-                                        }
+                            # 🌟 4. விலக்குக் கோரிக்கை அனுப்பும் பகுதி (항상 தெரியும் வகையில்)
+                            with st.expander("🚨 வாடிக்கையாளர் OTP பெற முடியவில்லையா? (விலக்குக் கோரிக்கை)", expanded=True):
+                                bypass_reason = st.text_area("விலக்குக் கோருவதற்கான காரணம் *", value="Old Mobile / No Signal", key=f"bp_rea_{v_id}")
+                                if st.button("அட்மினுக்கு கோரிக்கை அனுப்பு (Request Bypass)", key=f"btn_send_bp_{v_id}", type="primary"):
+                                    if not bypass_reason.strip():
+                                        st.warning("⚠️ தயவுசெய்து காரணத்தைக் குறிப்பிடவும்!")
+                                    else:
                                         try:
-                                            visit_res = supabase.table("customer_visits").insert(visit_data).execute()
-                                        except Exception as visit_err:
-                                            st.error(f"❌ Customer Visits பதிவு செய்வதில் பிழை: {visit_err}")
-                                            st.write("அனுப்பப்பட்ட Visit Data:", visit_data)
-                                            st.stop()
-
-                                        if visit_res.data and len(visit_res.data) > 0:
-                                            created_visit_id = visit_res.data[0].get("id") or visit_data.get("visit_no")
-                                        else:
-                                            created_visit_id = visit_data.get("visit_no")
-
-                                        for txn in st.session_state.transactions_cart:
-                                            txn["visit_id"] = created_visit_id
-                                            try:
-                                                supabase.table("transactions").insert(txn).execute()
-                                            except Exception as txn_err:
-                                                st.error(f"❌ Transaction பதிவு செய்வதில் பிழை: {txn_err}")
-                                                st.write("அனுப்பப்பட்ட Transaction Data:", txn)
-                                                st.stop()
-
-                                            # 🌟 1. மீட்கப்பட்ட கடன்களை முதலில் 'Closed' நிலைக்கு மாற்றுதல்
-                                            for item in st.session_state.transactions_cart:
-                                                if item.get("closed_loan_id"):
-                                                    try:
-                                                        supabase.table("transactions").update({
-                                                            "status": "Closed"
-                                                        }).eq("id", item["closed_loan_id"]).execute()
-                                                    except Exception:
-                                                        pass
-
-                                            # 🌟 கார்ட்டில் உள்ள புதிய அடமானங்களின் எண்ணிக்கைக்கு ஏற்ப டேட்டாபேஸ் சீக்வென்ஸை அதிகரித்தல்
-                                            cart = st.session_state.transactions_cart
-                                            pledge_items = [i for i in cart if "Pledge" in str(i.get("transaction_type", ""))]
+                                            b_id = st.session_state.get("branch_id") or visit.get("branch_id") or 1
+                                            u_name = st.session_state.get("username") or "Branch Manager"
                                             
-                                            if pledge_items:
-                                                try:
-                                                    final_b_id = int(st.session_state.branch_id)
-                                                    res = supabase.table("branch_loan_sequences").select("last_number").eq("branch_id", final_b_id).execute()
-                                                    current_db_last = int(res.data[0]["last_number"]) if res.data else 0
-                                                    
-                                                    new_db_last = current_db_last + len(pledge_items)
-                                                    supabase.table("branch_loan_sequences").update({
-                                                        "last_number": new_db_last
-                                                    }).eq("branch_id", final_b_id).execute()
-                                                except Exception:
-                                                    pass
-
-                                            # 🌟 2. வெற்றிச் செய்தி மற்றும் கார்ட் / செஷன் கிளியர் செய்தல்
-                                            st.success(f"🎉 வருகை {visit['visit_no']} வெற்றிகரமாக நிறைவுபெற்றது!")
-                                            st.session_state.current_visit = None
-                                            st.session_state.transactions_cart = []
-                                            st.session_state.generated_otp = None
-                                            st.session_state.current_declaration = None
-                                            st.session_state.declaration_gl_no = None
+                                            req_payload = {
+                                                "visit_id": v_id,
+                                                "branch_id": int(b_id),
+                                                "requested_by": str(u_name),
+                                                "customer_name": str(c_name),
+                                                "mobile": str(c_mob),
+                                                "reason": str(bypass_reason.strip()),
+                                                "status": "Pending Admin"
+                                            }
+                                            supabase.table("otp_bypass_requests").insert(req_payload).execute()
+                                            st.success("✅ கோரிக்கை அனுப்பப்பட்டது! அட்மின் ஒப்புதலுக்காகக் காத்திருக்கவும்.")
                                             st.rerun()
-                                        else:
-                                            st.error("தவறான OTP! சரியாக உள்ளிடவும்.")
+                                        except Exception as e:
+                                            st.error(f"கோரிக்கை அனுப்புவதில் பிழை: {e}")
 
+                        # 🌟 5. வருகையை நிறைவு செய்யும் பட்டன்
+                        if st.button("✅ வருகையை நிறைவு செய்க", type="primary", use_container_width=True, key="btn_complete_visit_final"):
+                            if not is_ready:
+                                st.error("❌ கணக்கீடு அல்லது UTR எண் விடுபட்டுள்ளது!")
+                            elif not otp_cleared and not otp_already_sent:
+                                st.error("❌ முதலில் வாடிக்கையாளருக்கு OTP அனுப்பவும் அல்லது விலக்குக் கோரவும்!")
+                            elif not otp_cleared:
+                                st.error("❌ தவறான OTP! அல்லது ஆப்பரேஷன்ஸ் இறுதி அனுமதி இன்னும் கிடைக்கவில்லை.")
+                            else:
+                                # 🚀 உங்கள் பரிவர்த்தனைகள் சேமிக்கப்படும் வழக்கமான குறியீடு தொடரும்:
+                                try:
+                                    # 1. கார்ட்டில் உள்ள மீட்கப்பட்ட கடன்களை Closed ஆக்குதல்
+                                    for item in st.session_state.transactions_cart:
+                                        if item.get("closed_loan_id"):
+                                            try:
+                                                supabase.table("transactions").update({"status": "Closed"}).eq("id", item["closed_loan_id"]).execute()
+                                            except Exception:
+                                                pass
+
+                                    # 2. புதிய அடமான எண்களை அதிகரித்தல்
+                                    cart = st.session_state.transactions_cart
+                                    pledge_items = [i for i in cart if "Pledge" in str(i.get("transaction_type", ""))]
+                                    if pledge_items:
+                                        try:
+                                            final_b_id = int(st.session_state.branch_id)
+                                            res = supabase.table("branch_loan_sequences").select("last_number").eq("branch_id", final_b_id).execute()
+                                            current_db_last = int(res.data[0]["last_number"]) if res.data else 0
+                                            new_db_last = current_db_last + len(pledge_items)
+                                            supabase.table("branch_loan_sequences").update({"last_number": new_db_last}).eq("branch_id", final_b_id).execute()
+                                        except Exception:
+                                            pass
+
+                                    st.success(f"🎉 வருகை வெற்றிகரமாக நிறைவுபெற்றது!")
+                                    st.session_state.current_visit = None
+                                    st.session_state.transactions_cart = []
+                                    st.session_state.generated_otp = None
+                                    st.session_state.current_declaration = None
+                                    st.session_state.declaration_gl_no = None
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"நிறைவு செய்வதில் பிழை: {e}")
         # =========================================================================
         # 2-வது டேப்: கிளை ஆவணங்கள் பதிவேற்றம் (Upload Docs Desk)
         # =========================================================================
