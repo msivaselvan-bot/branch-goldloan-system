@@ -7,12 +7,26 @@ import streamlit as st
 from supabase import Client, create_client
 import uuid
 import os
+import pytz
 
 # 1. பக்க வடிவமைப்பு
 st.set_page_config(page_title="Branch Operations System", layout="wide")
 
 # ==============================================================================
-# 2. டேட்டாபேஸ் இணைப்பு (Docker Environment & Streamlit Secrets)
+# 2. இந்திய நேர அமைப்பு (IST Timezone Helper)
+# ==============================================================================
+IST = pytz.timezone('Asia/Kolkata')
+
+def get_ist_now():
+    """இந்திய நேரப்படி தற்போதைய datetime ஆப்ஜெக்ட்டை வழங்கும்"""
+    return datetime.now(IST)
+
+def get_ist_time_str(fmt="%Y-%m-%d %H:%M:%S"):
+    """இந்திய நேரத்தை வடிவமைக்கப்பட்ட உரை வடிவில் வழங்கும்"""
+    return datetime.now(IST).strftime(fmt)
+
+# ==============================================================================
+# 3. டேட்டாபேஸ் இணைப்பு (Docker Environment & Streamlit Secrets)
 # ==============================================================================
 SUPABASE_URL = os.getenv("SUPABASE_URL") or st.secrets.get("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY") or st.secrets.get("SUPABASE_KEY")
@@ -28,7 +42,7 @@ def upload_ornament_image(file_obj):
     try:
         bucket_name = "ornaments"
         file_ext = file_obj.name.split(".")[-1]
-        file_path = f"ornament_{datetime.now().strftime('%Y%m%d%H%M%S')}_{uuid.uuid4().hex[:6]}.{file_ext}"
+        file_path = f"ornament_{get_ist_now().strftime('%Y%m%d%H%M%S')}_{uuid.uuid4().hex[:6]}.{file_ext}"
         
         # ornaments பக்கெட்டில் பதிவேற்றுதல்
         supabase.storage.from_(bucket_name).upload(
