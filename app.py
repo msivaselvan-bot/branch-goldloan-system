@@ -1047,7 +1047,7 @@ branch_options = {b["branch_name"]: b["id"] for b in branches_data} if branches_
 branch_id_to_name = {b["id"]: b["branch_name"] for b in branches_data} if branches_data else {}
 
 # ==========================================
-# 5. உள்நுழைவு திரை (Login Screen )
+# 5. உள்நுழைவு திரை (Login Screen)
 # ==========================================
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
