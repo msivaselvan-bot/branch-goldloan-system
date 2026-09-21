@@ -4,7 +4,7 @@ import json
 import requests
 import pandas as pd
 import streamlit as st
-from supabase import Client, create_client
+from supabase import create_client, Client, ClientOptions
 import uuid
 import os
 import pytz
@@ -44,9 +44,13 @@ if not SUPABASE_URL or not SUPABASE_KEY:
     st.error("டேட்டாபேஸ் ரகசியங்கள் (SUPABASE_URL / SUPABASE_KEY) சரியாக அமைக்கப்படவில்லை. Hugging Face Settings -> Variables and secrets பக்கத்தில் சரிபார்க்கவும்.")
     st.stop()
 
-# 🌟 சர்வர் இணைப்பு துண்டிக்கப்படுவதைத் தடுக்கும் புதிய இணைப்பு:
-opts = ClientOptions(postgrest_client_timeout=30)
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY, options=opts)
+try:
+    from supabase import ClientOptions
+    opts = ClientOptions(postgrest_client_timeout=30)
+    supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY, options=opts)
+except Exception:
+    # ClientOptions அமைப்பதில் சிக்கல் வந்தால் நேரடி இணைப்பிற்கு மாறும்:
+    supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # ==============================================================================
 # நகை படம் பதிவேற்றும் செயல்பாடு (Supabase Storage Bucket: ornaments)
