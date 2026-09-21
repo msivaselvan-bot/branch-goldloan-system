@@ -44,7 +44,9 @@ if not SUPABASE_URL or not SUPABASE_KEY:
     st.error("டேட்டாபேஸ் ரகசியங்கள் (SUPABASE_URL / SUPABASE_KEY) சரியாக அமைக்கப்படவில்லை. Hugging Face Settings -> Variables and secrets பக்கத்தில் சரிபார்க்கவும்.")
     st.stop()
 
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+# 🌟 சர்வர் இணைப்பு துண்டிக்கப்படுவதைத் தடுக்கும் புதிய இணைப்பு:
+opts = ClientOptions(postgrest_client_timeout=30)
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY, options=opts)
 
 # ==============================================================================
 # நகை படம் பதிவேற்றும் செயல்பாடு (Supabase Storage Bucket: ornaments)
