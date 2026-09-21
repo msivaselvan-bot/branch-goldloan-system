@@ -7,15 +7,42 @@ import streamlit as st
 from supabase import Client, create_client
 import uuid
 import os
+import pytz
 
 # 1. பக்க வடிவமைப்பு
 st.set_page_config(page_title="Branch Operations System", layout="wide")
 
 # ==============================================================================
-# 2. டேட்டாபேஸ் இணைப்பு (Docker Environment & Streamlit Secrets)
+# 2. இந்திய நேர அமைப்பு (IST Timezone Helper)
 # ==============================================================================
-SUPABASE_URL = os.getenv("SUPABASE_URL") or st.secrets.get("SUPABASE_URL")
-SUPABASE_KEY = os.getenv("SUPABASE_KEY") or st.secrets.get("SUPABASE_KEY")
+IST = pytz.timezone('Asia/Kolkata')
+
+def get_ist_now():
+    """இந்திய நேரப்படி தற்போதைய datetime ஆப்ஜெக்ட்டை வழங்கும்"""
+    return datetime.now(IST)
+
+def get_ist_time_str(fmt="%Y-%m-%d %H:%M:%S"):
+    """இந்திய நேரத்தை வடிவமைக்கப்பட்ட உரை வடிவில் வழங்கும்"""
+    return datetime.now(IST).strftime(fmt)
+
+# ==============================================================================
+# 3. டேட்டாபேஸ் இணைப்பு (Docker Environment & Streamlit Secrets)
+# ==============================================================================
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+
+# Environment variables-ல் இல்லையெனில் மட்டும் st.secrets-ஐ பாதுகாப்பாகச் சரிபார்க்கும்
+if not SUPABASE_URL or not SUPABASE_KEY:
+    try:
+        if hasattr(st, "secrets") and len(st.secrets) > 0:
+            SUPABASE_URL = SUPABASE_URL or st.secrets.get("SUPABASE_URL")
+            SUPABASE_KEY = SUPABASE_KEY or st.secrets.get("SUPABASE_KEY")
+    except Exception:
+        pass
+
+if not SUPABASE_URL or not SUPABASE_KEY:
+    st.error("டேட்டாபேஸ் ரகசியங்கள் (SUPABASE_URL / SUPABASE_KEY) சரியாக அமைக்கப்படவில்லை. Hugging Face Settings -> Variables and secrets பக்கத்தில் சரிபார்க்கவும்.")
+    st.stop()
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
@@ -28,7 +55,7 @@ def upload_ornament_image(file_obj):
     try:
         bucket_name = "ornaments"
         file_ext = file_obj.name.split(".")[-1]
-        file_path = f"ornament_{datetime.now().strftime('%Y%m%d%H%M%S')}_{uuid.uuid4().hex[:6]}.{file_ext}"
+        file_path = f"ornament_{get_ist_now().strftime('%Y%m%d%H%M%S')}_{uuid.uuid4().hex[:6]}.{file_ext}"
         
         # ornaments பக்கெட்டில் பதிவேற்றுதல்
         supabase.storage.from_(bucket_name).upload(
@@ -1904,50 +1931,146 @@ else:
 
         with ops_tab1:
             st.subheader("🏦 தலைமையக & கிளை நிதிப் பரிமாற்ற ஒப்புதல் மேசை")
-            pending_fund_transfers = supabase.table("branch_fund_transfers").select("*, branches(branch_name)").eq("status", "Pending_Approval").order("id", desc=True).execute().data or []
+            
+            try:
+                pending_fund_transfers = (
+                    supabase.table("branch_fund_transfers")
+                    .select("*, branches(branch_name)")
+                    .eq("status", "Pending_Approval")
+                    .order("id", desc=True)
+                    .execute()
+                    .data or []
+                )
+            except Exception as e:
+                st.error(f"நிதிப் பரிமாற்றத் தரவுகளைப் பெறுவதில் பிழை: {e}")
+                pending_fund_transfers = []
+
             if not pending_fund_transfers:
-                st.info("✅ எந்த பணப் பரிமாற்றங்களும் நிலுவையில் இல்லை.")
+                st.info("✅ எந்தப் பணப் பரிமாற்றங்களும் ஒப்புதலுக்கு நிலுவையில் இல்லை.")
             else:
                 for f_item in pending_fund_transfers:
-                    b_name = f_item.get("branches", {}).get("branch_name", "Branch")
-                    with st.expander(f"💰 {f_item['transfer_type']} | {b_name} | ₹{float(f_item['amount']):,.2f}"):
-                        st.json(f_item.get("denomination_details", {}))
-                        if st.button("✅ அங்கீகரி", key=f"app_f_{f_item['id']}", type="primary"):
-                            supabase.table("branch_fund_transfers").update({"status": "Approved", "approved_by": st.session_state.username}).eq("id", f_item["id"]).execute()
-                            st.success("அங்கீகரிக்கப்பட்டது!")
-                            st.rerun()
+                    b_name = f_item.get("branches", {}).get("branch_name", "கிளை")
+                    t_type = f_item.get("transfer_type", "பரிமாற்றம்")
+                    amt = float(f_item.get("amount", 0))
+
+                    with st.expander(f"💰 {t_type} | {b_name} | ₹{amt:,.2f}"):
+                        col_info1, col_info2 = st.columns(2)
+                        with col_info1:
+                            st.write(f"• **கிளை:** {b_name}")
+                            st.write(f"• **பரிமாற்ற வகை:** {t_type}")
+                        with col_info2:
+                            st.write(f"• **தொகை:** ₹{amt:,.2f}")
+                            st.write(f"• **தேதி:** {f_item.get('created_at', '-')[:10] if f_item.get('created_at') else '-'}")
+                        
+                        st.markdown("##### 💵 டினாமினேஷன் விவரம்:")
+                        denoms = f_item.get("denomination_details") or {}
+                        if isinstance(denoms, dict) and denoms:
+                            denom_text = " | ".join([f"**₹{k}:** {v}" for k, v in denoms.items() if int(v or 0) > 0])
+                            st.info(denom_text if denom_text else "டினாமினேஷன் விவரம் இல்லை")
+                        else:
+                            st.json(denoms)
+
+                        current_user = st.session_state.get("username", "Admin")
+                        
+                        # 🌟 அங்கீகரி & ரத்து செய் பொத்தான்கள்
+                        col_f1, col_f2 = st.columns(2)
+                        with col_f1:
+                            if st.button("✅ அங்கீகரி (Approve)", key=f"app_f_{f_item['id']}", type="primary", use_container_width=True):
+                                try:
+                                    supabase.table("branch_fund_transfers").update({
+                                        "status": "Approved",
+                                        "approved_by": current_user
+                                    }).eq("id", f_item["id"]).execute()
+                                    st.success("✅ நிதிப் பரிமாற்றம் வெற்றிகரமாக அங்கீகரிக்கப்பட்டது!")
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"பிழை: {e}")
+
+                        with col_f2:
+                            if st.button("❌ ரத்து செய் (Reject)", key=f"rej_f_{f_item['id']}", type="secondary", use_container_width=True):
+                                try:
+                                    supabase.table("branch_fund_transfers").update({
+                                        "status": "Rejected",
+                                        "approved_by": current_user
+                                    }).eq("id", f_item["id"]).execute()
+                                    st.warning("⚠️ நிதிப் பரிமாற்றம் நிராகரிக்கப்பட்டது / ரத்து செய்யப்பட்டது.")
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"பிழை: {e}")
 
             st.markdown("---")
-            st.subheader("💸 கிளைச் செலவு ஒப்புதல் மேசை (Branch Expenses Approval Desk)")
-            pending_expenses = supabase.table("branch_expenses").select("*, branches(branch_name)").eq("status", "Pending_Approval").order("id", desc=True).execute().data or []
             
+            # -------------------------------------------------------------
+            # 💸 கிளைச் செலவு ஒப்புதல் மேசை
+            # -------------------------------------------------------------
+            st.subheader("💸 கிளைச் செலவு ஒப்புதல் மேசை (Branch Expenses Approval Desk)")
+            
+            try:
+                pending_expenses = (
+                    supabase.table("branch_expenses")
+                    .select("*, branches(branch_name)")
+                    .eq("status", "Pending_Approval")
+                    .order("id", desc=True)
+                    .execute()
+                    .data or []
+                )
+            except Exception as e:
+                st.error(f"செலவுத் தரவுகளைப் பெறுவதில் பிழை: {e}")
+                pending_expenses = []
+
             if not pending_expenses:
                 st.info("✅ ஒப்புதலுக்கு நிலுவையில் உள்ள கிளைச் செலவுகள் எதுவும் இல்லை.")
             else:
                 for ex in pending_expenses:
-                    b_name = ex.get("branches", {}).get("branch_name", "Branch")
-                    with st.expander(f"📌 செலவு: {ex['expense_head']} | கிளை: {b_name} | தொகை: ₹{float(ex['amount']):,.2f} | வவுச்சர்: {ex.get('voucher_no', '-')}"):
-                        st.write(f"• **விளக்கம்:** {ex.get('description', '-')}")
-                        st.write(f"• **பதிவு செய்தவர்:** {ex.get('created_by', '-')}")
-                        st.write(f"• **தேதி:** {ex.get('expense_date', '-')}")
-                        
+                    b_name = ex.get("branches", {}).get("branch_name", "கிளை")
+                    ex_amt = float(ex.get("amount", 0))
+
+                    with st.expander(f"📌 செலவு: {ex.get('expense_head', '-')} | கிளை: {b_name} | தொகை: ₹{ex_amt:,.2f} | வவுச்சர்: {ex.get('voucher_no', '-')}"):
+                        col_e1, col_e2 = st.columns(2)
+                        with col_e1:
+                            st.write(f"• **செலவுத் தலைப்பு:** {ex.get('expense_head', '-')}")
+                            st.write(f"• **விளக்கம்:** {ex.get('description', '-')}")
+                            st.write(f"• **தேதி:** {ex.get('expense_date', '-')}")
+                        with col_e2:
+                            st.write(f"• **வவுச்சர் எண்:** `{ex.get('voucher_no', '-')}`")
+                            st.write(f"• **பதிவு செய்தவர்:** `{ex.get('created_by', '-')}`")
+                            st.write(f"• **தொகை:** ₹{ex_amt:,.2f}")
+
                         st.markdown("##### 💵 செலவுக்கான டினாமினேஷன் விவரம்:")
-                        st.json(ex.get("denomination_details", {}))
+                        ex_denoms = ex.get("denomination_details") or {}
+                        if isinstance(ex_denoms, dict) and ex_denoms:
+                            ex_denom_text = " | ".join([f"**₹{k}:** {v}" for k, v in ex_denoms.items() if int(v or 0) > 0])
+                            st.info(ex_denom_text if ex_denom_text else "டினாமினேஷன் விவரம் இல்லை")
+                        else:
+                            st.json(ex_denoms)
+
+                        current_user = st.session_state.get("username", "Admin")
                         
+                        # 🌟 அங்கீகரி & ரத்து செய் பொத்தான்கள்
                         col_ex1, col_ex2 = st.columns(2)
                         with col_ex1:
-                            if st.button("✅ அங்கீகரி (Approve Expense)", key=f"app_ex_{ex['id']}", type="primary"):
+                            if st.button("✅ அங்கீகரி (Approve)", key=f"app_ex_{ex['id']}", type="primary", use_container_width=True):
                                 try:
-                                    supabase.table("branch_expenses").update({"status": "Approved", "approved_by": st.session_state.username}).eq("id", ex["id"]).execute()
-                                    st.success("செலவு அங்கீகரிக்கப்பட்டு கல்லாவில் இருந்து நோட்டுகள் கணக்கிடப்பட்டன!")
+                                    supabase.table("branch_expenses").update({
+                                        "status": "Approved",
+                                        "approved_by": current_user
+                                    }).eq("id", ex["id"]).execute()
+                                    st.success("✅ செலவு வெற்றிகரமாக அங்கீகரிக்கப்பட்டது!")
                                     st.rerun()
                                 except Exception as e:
                                     st.error(f"பிழை: {e}")
+                                    
                         with col_ex2:
-                            if st.button("❌ நிராகரி (Reject)", key=f"rej_ex_{ex['id']}", type="secondary"):
-                                supabase.table("branch_expenses").update({"status": "Rejected", "approved_by": st.session_state.username}).eq("id", ex["id"]).execute()
-                                st.warning("செலவு நிராகரிக்கப்பட்டது.")
-                                st.rerun()
+                            if st.button("❌ ரத்து செய் (Reject)", key=f"rej_ex_{ex['id']}", type="secondary", use_container_width=True):
+                                try:
+                                    supabase.table("branch_expenses").update({
+                                        "status": "Rejected",
+                                        "approved_by": current_user
+                                    }).eq("id", ex["id"]).execute()
+                                    st.warning("⚠️ செலவு நிராகரிக்கப்பட்டது.")
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"பிழை: {e}")
 
         with ops_tab2:
             st.subheader("👤 புதிய வாடிக்கையாளர் KYC ஒப்புதல்")
@@ -2008,9 +2131,14 @@ else:
             st.subheader("📞 பரிவர்த்தனை அழைப்பு சரிபார்ப்பு (Transaction Call Verification)")
             st.caption("கிளை ஊழியர்களால் முடிக்கப்பட்டு, வாடிக்கையாளர் அழைப்புச் சரிபார்ப்புக்காக நிலுவையில் உள்ள வருகைகள்.")
             
+            # 🔍 1. டேட்டாபேஸில் உள்ள நிலைகளைச் சோதிக்க (Debug):
+            debug_data = supabase.table("customer_visits").select("id, visit_no, status").order("id", desc=True).limit(5).execute().data
+            st.write("🔍 **டேட்டாபேஸில் உள்ள கடைசி 5 வருகைகள்:**", debug_data)
+
+            # 🔍 2. Join அட்டவணைகள் இன்றி நேரடி வினவல்:
             ops_visits = (
                 supabase.table("customer_visits")
-                .select("*, customers(name, mobile, mobile2), transactions(*), branches(branch_name)")
+                .select("*, customers(name, mobile, mobile2), branches(branch_name)")
                 .eq("status", "Pending_Calling_Verification")
                 .order("id", desc=True)
                 .execute()
@@ -2023,8 +2151,7 @@ else:
                 for item in ops_visits:
                     cust = item.get("customers", {}) or {}
                     b_name = item.get("branches", {}).get("branch_name", "கிளை")
-                    txns = item.get("transactions", []) or []
-
+                    
                     with st.expander(f"🔔 வருகை: {item['visit_no']} | {cust.get('name', '-')} | கிளை: {b_name} | நிகரத் தொகை: ₹{float(item.get('net_cash_amount', 0)):,.2f}"):
                         col_o1, col_o2 = st.columns(2)
                         with col_o1:
@@ -2040,18 +2167,10 @@ else:
                             st.write(f"• **OTP நிலை:** {'🟢 Verified' if item.get('otp_verified') else '🔴 Pending'}")
 
                         st.markdown("---")
-                        if txns:
-                            for idx, t in enumerate(txns, 1):
-                                st.markdown(f"**{idx}. {t.get('transaction_type', '-')}** | பணியாளர்: `{t.get('staff_name', '-')}`")
-                                st.write(f"   • பட்டுவாடா: ₹{float(t.get('paid_amount', 0)):,.2f} | வரவு: ₹{float(t.get('received_amount', 0)):,.2f}")
-                                st.write(f"   • குறிப்பு: {t.get('remarks', '-')}")
-
-                        st.markdown("---")
                         
-                        # 🌟 ஆப்பரேஷன்ஸ் விளக்கம் கேட்பதற்கான குறிப்பு
                         ops_call_remark = st.text_input(
                             "அழைப்பு சரிபார்ப்பு குறிப்பு / விளக்கம்:",
-                            placeholder="எ.கா: வாடிக்கையாளர் போனை எடுக்கவில்லை / தொகையில் முரண்பாடு உள்ளது...",
+                            placeholder="எ.கா: வாடிக்கையாளர் போனை எடுக்கவில்லை...",
                             key=f"ops_call_rem_{item['id']}"
                         )
 
@@ -2068,7 +2187,7 @@ else:
                         with o_btn2:
                             if st.button("⚠️ கிளை விளக்கம் கேட்க (Need Clarification)", key=f"v_clar_{item['id']}", type="secondary", use_container_width=True):
                                 if not ops_call_remark.strip():
-                                    st.error("⚠️ தயவுசெய்து என்ன விளக்கம் வேண்டும் என்பதைக் குறிப்பில் உள்ளிடவும்!")
+                                    st.error("⚠️ தயவுசெய்து குறிப்பில் என்ன விளக்கம் வேண்டும் என்பதை உள்ளிடவும்!")
                                 else:
                                     supabase.table("customer_visits").update({
                                         "status": "Needs_Clarification",
