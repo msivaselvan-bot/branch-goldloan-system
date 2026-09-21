@@ -1964,15 +1964,21 @@ else:
                         
                         st.markdown("##### 💵 டினாமினேஷன் விவரம்:")
                         denoms = f_item.get("denomination_details") or {}
+                        f_items = []
                         if isinstance(denoms, dict) and denoms:
-                            denom_text = " | ".join([f"**₹{k}:** {v}" for k, v in denoms.items() if int(v or 0) > 0])
+                            for k, v in denoms.items():
+                                try:
+                                    count = int(float(v)) if v not in (None, "", " ") else 0
+                                    if count > 0:
+                                        f_items.append(f"**₹{k}:** {count}")
+                                except (ValueError, TypeError):
+                                    continue
+                            denom_text = " | ".join(f_items)
                             st.info(denom_text if denom_text else "டினாமினேஷன் விவரம் இல்லை")
                         else:
                             st.json(denoms)
 
                         current_user = st.session_state.get("username", "Admin")
-                        
-                        # 🌟 அங்கீகரி & ரத்து செய் பொத்தான்கள்
                         col_f1, col_f2 = st.columns(2)
                         with col_f1:
                             if st.button("✅ அங்கீகரி (Approve)", key=f"app_f_{f_item['id']}", type="primary", use_container_width=True):
@@ -2038,16 +2044,23 @@ else:
 
                         st.markdown("##### 💵 செலவுக்கான டினாமினேஷன் விவரம்:")
                         ex_denoms = ex.get("denomination_details") or {}
+                        ex_items = []
                         if isinstance(ex_denoms, dict) and ex_denoms:
-                            ex_denom_text = " | ".join([f"**₹{k}:** {v}" for k, v in ex_denoms.items() if int(v or 0) > 0])
+                            for k, v in ex_denoms.items():
+                                try:
+                                    count = int(float(v)) if v not in (None, "", " ") else 0
+                                    if count > 0:
+                                        ex_items.append(f"**₹{k}:** {count}")
+                                except (ValueError, TypeError):
+                                    continue
+                            ex_denom_text = " | ".join(ex_items)
                             st.info(ex_denom_text if ex_denom_text else "டினாமினேஷன் விவரம் இல்லை")
                         else:
                             st.json(ex_denoms)
 
                         current_user = st.session_state.get("username", "Admin")
-                        
-                        # 🌟 அங்கீகரி & ரத்து செய் பொத்தான்கள்
                         col_ex1, col_ex2 = st.columns(2)
+                        
                         with col_ex1:
                             if st.button("✅ அங்கீகரி (Approve)", key=f"app_ex_{ex['id']}", type="primary", use_container_width=True):
                                 try:
