@@ -28,8 +28,21 @@ def get_ist_time_str(fmt="%Y-%m-%d %H:%M:%S"):
 # ==============================================================================
 # 3. டேட்டாபேஸ் இணைப்பு (Docker Environment & Streamlit Secrets)
 # ==============================================================================
-SUPABASE_URL = os.getenv("SUPABASE_URL") or st.secrets.get("SUPABASE_URL")
-SUPABASE_KEY = os.getenv("SUPABASE_KEY") or st.secrets.get("SUPABASE_KEY")
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+
+# Environment variables-ல் இல்லையெனில் மட்டும் st.secrets-ஐ பாதுகாப்பாகச் சரிபார்க்கும்
+if not SUPABASE_URL or not SUPABASE_KEY:
+    try:
+        if hasattr(st, "secrets") and len(st.secrets) > 0:
+            SUPABASE_URL = SUPABASE_URL or st.secrets.get("SUPABASE_URL")
+            SUPABASE_KEY = SUPABASE_KEY or st.secrets.get("SUPABASE_KEY")
+    except Exception:
+        pass
+
+if not SUPABASE_URL or not SUPABASE_KEY:
+    st.error("டேட்டாபேஸ் ரகசியங்கள் (SUPABASE_URL / SUPABASE_KEY) சரியாக அமைக்கப்படவில்லை. Hugging Face Settings -> Variables and secrets பக்கத்தில் சரிபார்க்கவும்.")
+    st.stop()
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
@@ -2022,9 +2035,14 @@ else:
             st.subheader("📞 பரிவர்த்தனை அழைப்பு சரிபார்ப்பு (Transaction Call Verification)")
             st.caption("கிளை ஊழியர்களால் முடிக்கப்பட்டு, வாடிக்கையாளர் அழைப்புச் சரிபார்ப்புக்காக நிலுவையில் உள்ள வருகைகள்.")
             
+            # 🔍 1. டேட்டாபேஸில் உள்ள நிலைகளைச் சோதிக்க (Debug):
+            debug_data = supabase.table("customer_visits").select("id, visit_no, status").order("id", desc=True).limit(5).execute().data
+            st.write("🔍 **டேட்டாபேஸில் உள்ள கடைசி 5 வருகைகள்:**", debug_data)
+
+            # 🔍 2. Join அட்டவணைகள் இன்றி நேரடி வினவல்:
             ops_visits = (
                 supabase.table("customer_visits")
-                .select("*, customers(name, mobile, mobile2), transactions(*), branches(branch_name)")
+                .select("*, customers(name, mobile, mobile2), branches(branch_name)")
                 .eq("status", "Pending_Calling_Verification")
                 .order("id", desc=True)
                 .execute()
@@ -2037,8 +2055,7 @@ else:
                 for item in ops_visits:
                     cust = item.get("customers", {}) or {}
                     b_name = item.get("branches", {}).get("branch_name", "கிளை")
-                    txns = item.get("transactions", []) or []
-
+                    
                     with st.expander(f"🔔 வருகை: {item['visit_no']} | {cust.get('name', '-')} | கிளை: {b_name} | நிகரத் தொகை: ₹{float(item.get('net_cash_amount', 0)):,.2f}"):
                         col_o1, col_o2 = st.columns(2)
                         with col_o1:
@@ -2054,18 +2071,10 @@ else:
                             st.write(f"• **OTP நிலை:** {'🟢 Verified' if item.get('otp_verified') else '🔴 Pending'}")
 
                         st.markdown("---")
-                        if txns:
-                            for idx, t in enumerate(txns, 1):
-                                st.markdown(f"**{idx}. {t.get('transaction_type', '-')}** | பணியாளர்: `{t.get('staff_name', '-')}`")
-                                st.write(f"   • பட்டுவாடா: ₹{float(t.get('paid_amount', 0)):,.2f} | வரவு: ₹{float(t.get('received_amount', 0)):,.2f}")
-                                st.write(f"   • குறிப்பு: {t.get('remarks', '-')}")
-
-                        st.markdown("---")
                         
-                        # 🌟 ஆப்பரேஷன்ஸ் விளக்கம் கேட்பதற்கான குறிப்பு
                         ops_call_remark = st.text_input(
                             "அழைப்பு சரிபார்ப்பு குறிப்பு / விளக்கம்:",
-                            placeholder="எ.கா: வாடிக்கையாளர் போனை எடுக்கவில்லை / தொகையில் முரண்பாடு உள்ளது...",
+                            placeholder="எ.கா: வாடிக்கையாளர் போனை எடுக்கவில்லை...",
                             key=f"ops_call_rem_{item['id']}"
                         )
 
@@ -2082,7 +2091,7 @@ else:
                         with o_btn2:
                             if st.button("⚠️ கிளை விளக்கம் கேட்க (Need Clarification)", key=f"v_clar_{item['id']}", type="secondary", use_container_width=True):
                                 if not ops_call_remark.strip():
-                                    st.error("⚠️ தயவுசெய்து என்ன விளக்கம் வேண்டும் என்பதைக் குறிப்பில் உள்ளிடவும்!")
+                                    st.error("⚠️ தயவுசெய்து குறிப்பில் என்ன விளக்கம் வேண்டும் என்பதை உள்ளிடவும்!")
                                 else:
                                     supabase.table("customer_visits").update({
                                         "status": "Needs_Clarification",
