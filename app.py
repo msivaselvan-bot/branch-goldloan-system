@@ -432,7 +432,42 @@ def get_branch_current_cash(branch_id):
         return float(total_val)
     except Exception:
         return 0.0
-
+# -------------------------------------------------------------
+# 🔄 கல்லா இருப்பைப் புதுப்பிக்கும் செயல்பாடு
+# -------------------------------------------------------------
+def update_branch_cash_box(branch_id, cash_in=0.0, cash_out=0.0):
+    """பரிவர்த்தனைக்கு ஏற்ப கல்லா இருப்பைப் புதுப்பிக்கும் செயல்பாடு"""
+    try:
+        if not branch_id:
+            return False
+            
+        net_change = float(cash_in or 0.0) - float(cash_out or 0.0)
+        
+        cash_res = (
+            supabase.table("branch_cash_box")
+            .select("*")
+            .eq("branch_id", branch_id)
+            .order("id", desc=True)
+            .limit(1)
+            .execute()
+        )
+        
+        if cash_res.data:
+            c_box = cash_res.data[0]
+            box_id = c_box["id"]
+            
+            open_bal = float(c_box.get("opening_balance") or 0.0)
+            cur_bal = c_box.get("current_balance")
+            prev_bal = open_bal if cur_bal is None else float(cur_bal)
+            new_bal = prev_bal + net_change
+            
+            supabase.table("branch_cash_box").update({
+                "current_balance": float(new_bal)
+            }).eq("id", box_id).execute()
+            
+        return True
+    except Exception:
+        return False
 
 # ---------------------------------------------------------------------
 # 💰 கல்லா ரொக்கம் & நோட்டுகளின் எண்ணிக்கையைப் புதுப்பிக்கும் முழுமையான செயல்பாடு
