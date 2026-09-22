@@ -8,6 +8,7 @@ from supabase import create_client, Client, ClientOptions
 import uuid
 import os
 import pytz
+import time  # 👈 இணைப்பு துண்டிப்பைச் சரிசெய்ய சேர்க்கப்பட்டுள்ளது
 
 # 1. பக்க வடிவமைப்பு
 st.set_page_config(page_title="Branch Operations System", layout="wide")
@@ -45,12 +46,25 @@ if not SUPABASE_URL or not SUPABASE_KEY:
     st.stop()
 
 try:
-    from supabase import ClientOptions
     opts = ClientOptions(postgrest_client_timeout=30)
     supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY, options=opts)
 except Exception:
     # ClientOptions அமைப்பதில் சிக்கல் வந்தால் நேரடி இணைப்பிற்கு மாறும்:
     supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+
+# ==============================================================================
+# 🌟 இணைப்பு துண்டிக்கப்படுவதைத் தடுக்கும் பாதுகாப்பு செயல்பாடு (Safe Query Runner)
+# ==============================================================================
+def safe_execute(query_builder, retries=2):
+    """சர்வர் இணைப்பு துண்டிக்கப்பட்டால் தானாக மீண்டும் இயக்கும் செயல்பாடு"""
+    for attempt in range(retries):
+        try:
+            return query_builder.execute()
+        except Exception as e:
+            if attempt < retries - 1:
+                time.sleep(0.5)
+                continue
+            raise e
 
 # ==============================================================================
 # நகை படம் பதிவேற்றும் செயல்பாடு (Supabase Storage Bucket: ornaments)
@@ -1296,7 +1310,9 @@ else:
                             except Exception as e:
                                 st.error(f"பிழை: {e}")
 
-                g_schemes = supabase.table("gold_loan_schemes").select("*").order("id", desc=True).execute().data or []
+                # ✅ புதிய பாதுகாப்பான முறை:
+                res = safe_execute(supabase.table("gold_loan_schemes").select("*").order("id", desc=True))
+                g_schemes = res.data or []
                 if g_schemes:
                     st.dataframe(pd.DataFrame(g_schemes)[["scheme_name", "rate_per_gram", "scheme_tenor_months", "min_loan_amount", "max_loan_amount"]], use_container_width=True)
 
