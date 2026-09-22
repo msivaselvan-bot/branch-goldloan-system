@@ -409,15 +409,18 @@ def generate_declaration_html(data):
 </body>
 </html>"""
     return html_content
+
 # -------------------------------------------------------------
 # 💰 கிளை நேரலை கல்லா ரொக்க இருப்பைப் பெறும் செயல்பாடு
 # -------------------------------------------------------------
 def get_branch_current_cash(branch_id):
     """கிளையின் தற்போதைய நேரலை கல்லா ரொக்க இருப்பை வழங்கும் செயல்பாடு"""
     try:
+        if not branch_id:
+            return 0.0
         res = (
             supabase.table("branch_cash_box")
-            .select("opening_balance, current_balance")
+            .select("*")
             .eq("branch_id", branch_id)
             .order("id", desc=True)
             .limit(1)
@@ -425,11 +428,67 @@ def get_branch_current_cash(branch_id):
         )
         if res.data:
             row = res.data[0]
-            # current_balance இருந்தால் அதை எடுக்கும், இல்லையெனில் opening_balance
-            return float(row.get("current_balance") if row.get("current_balance") is not None else row.get("opening_balance", 0.0))
+            val = row.get("current_balance")
+            if val is None:
+                val = row.get("closing_balance")
+            if val is None:
+                val = row.get("opening_balance", 0.0)
+            return float(val or 0.0)
         return 0.0
     except Exception:
         return 0.0
+
+
+# -------------------------------------------------------------
+# 🔄 கல்லா இருப்பைக் கூட்டும் / குறைக்கும் முழுமையான செயல்பாடு
+# -------------------------------------------------------------
+def update_branch_cash_box(branch_id, cash_in=0.0, cash_out=0.0):
+    """பரிவர்த்தனைக்கு ஏற்ப கல்லா இருப்பைப் புதுப்பிக்கும் அல்லது புதிய பதிவை உருவாக்கும்"""
+    try:
+        if not branch_id:
+            return False
+            
+        net_change = float(cash_in) - float(cash_out)
+        
+        # 1. கிளைக்குரிய கடைசி கல்லாப் பதிவை எடுத்தல்
+        cash_res = (
+            supabase.table("branch_cash_box")
+            .select("*")
+            .eq("branch_id", branch_id)
+            .order("id", desc=True)
+            .limit(1)
+            .execute()
+        )
+        
+        if cash_res.data:
+            # அ. ஏற்கனவே பதிவு இருந்தால்: இருப்பைப் புதுப்பித்தல் (Update)
+            c_box = cash_res.data[0]
+            box_id = c_box["id"]
+            
+            cur_val = c_box.get("current_balance")
+            if cur_val is None:
+                cur_val = c_box.get("closing_balance")
+            if cur_val is None:
+                cur_val = c_box.get("opening_balance", 0.0)
+                
+            prev_bal = float(cur_val or 0.0)
+            new_bal = prev_bal + net_change
+            
+            supabase.table("branch_cash_box").update({
+                "current_balance": float(new_bal)
+            }).eq("id", box_id).execute()
+        else:
+            # ஆ. பதிவு எதுவுமே இல்லை என்றால்: புதிய பதிவை உருவாக்குதல் (Insert Initial Row)
+            supabase.table("branch_cash_box").insert({
+                "branch_id": branch_id,
+                "opening_balance": 0.0,
+                "current_balance": float(net_change)
+            }).execute()
+            
+        return True
+    except Exception as err:
+        st.error(f"⚠️ கல்லா இருப்பைப் புதுப்பிப்பதில் பிழை: {err}")
+        return False
 # ==============================================================================
 # வருகை வரிசை எண் உருவாக்கும் செயல்பாடு (Unique Incrementing Visit No)
 # ==============================================================================
@@ -4103,39 +4162,15 @@ else:
                                     # -------------------------------------------------------------
                                     # 💰 கல்லா ரொக்க இருப்பைப் புதுப்பித்தல் (Cash Box Update)
                                     # -------------------------------------------------------------
-                                    tot_cash_in = 0.0
-                                    tot_cash_out = 0.0
-
-                                    # ரொக்கமாகப் பெறப்பட்டவை மற்றும் வழங்கப்பட்டவைகளைக் கணக்கிடுதல்
-                                    for t_item in st.session_state.transactions_cart:
-                                        tot_cash_out += float(t_item.get("paid_amount", 0.0) or 0.0)
-                                        tot_cash_in += float(t_item.get("received_amount", 0.0) or 0.0)
-
-                                    net_cash_change = tot_cash_in - tot_cash_out
-
-                                    # கிளைக்குரிய இன்றைய கடைசி கல்லா பதிவை எடுத்தல்
-                                    b_id_curr = st.session_state.branch_id
-                                    cash_box_res = (
-                                        supabase.table("branch_cash_box")
-                                        .select("id, opening_balance, current_balance")
-                                        .eq("branch_id", b_id_curr)
-                                        .order("id", desc=True)
-                                        .limit(1)
-                                        .execute()
+                                    tot_cash_in = sum(float(t.get("received_amount", 0.0) or 0.0) for t in st.session_state.transactions_cart)
+                                    tot_cash_out = sum(float(t.get("paid_amount", 0.0) or 0.0) for t in st.session_state.transactions_cart)
+                                    
+                                    # கல்லாப் பணத்தைக் கூட்டி/குறைக்கும் ஃபங்க்ஷனை இயக்குதல்
+                                    update_branch_cash_box(
+                                        branch_id=st.session_state.branch_id,
+                                        cash_in=tot_cash_in,
+                                        cash_out=tot_cash_out
                                     )
-
-                                    if cash_box_res.data:
-                                        c_box = cash_box_res.data[0]
-                                        box_id = c_box["id"]
-                                        
-                                        # முந்தைய இருப்பு இருந்தால் அதை எடுக்கும், இல்லையெனில் தொடக்க இருப்பை எடுக்கும்
-                                        prev_bal = float(c_box.get("current_balance") if c_box.get("current_balance") is not None else c_box.get("opening_balance", 0.0))
-                                        new_bal = prev_bal + net_cash_change
-
-                                        # கல்லா இருப்பைப் புதுப்பித்தல்
-                                        supabase.table("branch_cash_box").update({
-                                            "current_balance": float(new_bal)
-                                        }).eq("id", box_id).execute()
 
                                     # 3. டேட்டாபேஸில் சரியாகப் பதிவான பின் நினைவகத்தை ரீசெட் செய்தல்
                                     st.success(f"🎉 வருகை வெற்றிகரமாக நிறைவுபெற்றது!")
