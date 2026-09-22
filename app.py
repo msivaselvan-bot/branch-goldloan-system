@@ -2309,47 +2309,43 @@ else:
 
         with ops_tab4:
             st.subheader("📞 பரிவர்த்தனை அழைப்பு சரிபார்ப்பு (Transaction Call Verification)")
-            st.caption("கிளை ஊழியர்களால் முடிக்கப்பட்டு, வாடிக்கையாளர் அழைப்புச் சரிபார்ப்புக்காக நிலுவையில் உள்ள வருகைகள்.")
+            st.caption("கிளை ஊழியர்களால் முடிக்கப்பட்டு, தலைமை அலுவலக அழைப்புச் சரிபார்ப்புக்காக நிலுவையில் உள்ள வருகைகள்.")
 
-            # 1. கிளைப் பெயர்களை மேப் செய்தல் (Foreign key பிழை வராமல் இருக்க)
+            # 1. கிளைகள் மேப்பிங்
             try:
                 b_res = supabase.table("branches").select("id, branch_name").execute()
                 b_map = {b["id"]: b["branch_name"] for b in (b_res.data or [])}
             except Exception:
                 b_map = {}
 
-            # 2. நிலைகள் வடிகட்டல் (Filter)
-            f_col1, f_col2 = st.columns([2, 2])
-            with f_col1:
-                stat_filter = st.selectbox(
-                    "📌 வருகை நிலை (Status):",
-                    ["Pending_Calling_Verification", "அனைத்தும் (All)", "Pending_Branch_Docs", "Completed", "Needs_Clarification"],
-                    key="ops_visit_stat_filter"
-                )
-
-            # 3. Join இன்றி நேரடி பாதுகாப்பான வினவல்
+            # 2. நிலுவையில் உள்ள வருகைகளை எடுத்தல்
             try:
-                q = supabase.table("customer_visits").select("*")
-                if stat_filter != "அனைத்தும் (All)":
-                    q = q.eq("status", stat_filter)
-                
-                ops_visits = q.order("id", desc=True).limit(50).execute().data or []
+                ops_visits = (
+                    supabase.table("customer_visits")
+                    .select("*")
+                    .eq("status", "Pending_Calling_Verification")
+                    .order("id", desc=True)
+                    .execute()
+                    .data or []
+                )
             except Exception as e:
                 st.error(f"வருகைகளை எடுப்பதில் பிழை: {e}")
                 ops_visits = []
 
             if not ops_visits:
-                st.info("ℹ️ தேர்ந்தெடுக்கப்பட்ட நிலையில் வருகைகள் எதுவும் தற்போது நிலுவையில் இல்லை.")
+                st.info("✅ தற்போது அழைப்பு சரிபார்க்க வேண்டிய வருகைகள் எதுவும் நிலுவையில் இல்லை.")
             else:
-                st.write(f"🔔 கண்டறியப்பட்ட மொத்த வருகைகள்: **{len(ops_visits)}**")
+                st.write(f"🔔 **சரிபார்க்க வேண்டிய மொத்த வருகைகள்:** `{len(ops_visits)}`")
 
                 for item in ops_visits:
                     v_id = item["id"]
+                    v_no = item.get("visit_no", f"VST-{v_id}")
                     cust_id = item.get("customer_id")
                     b_id = item.get("branch_id")
                     b_name = b_map.get(b_id, f"கிளை {b_id}")
+                    net_amt = float(item.get("net_cash_amount", 0) or 0.0)
 
-                    # வாடிக்கையாளர் விவரங்களை எடுத்தல்
+                    # அ. வாடிக்கையாளர் தகவல்களை எடுத்தல்
                     cust = {}
                     if cust_id:
                         try:
@@ -2360,29 +2356,95 @@ else:
 
                     c_name = cust.get("name", item.get("customer_name", "-"))
                     c_mob = cust.get("mobile", item.get("mobile", "-"))
-                    v_no = item.get("visit_no", f"VISIT-{v_id}")
-                    cur_stat = item.get("status", "Pending")
+                    c_mob2 = cust.get("mobile2", "-")
 
-                    with st.expander(f"🔔 வருகை: {v_no} | {c_name} | கிளை: {b_name} | தொகை: ₹{float(item.get('net_cash_amount', 0)):,.2f} | [நிலை: {cur_stat}]"):
+                    # ஆ. இந்த வருகையில் நடந்த அனைத்து நடவடிக்கைகளையும் (Transactions) எடுத்தல்
+                    try:
+                        t_res = supabase.table("transactions").select("*").eq("visit_id", v_id).execute()
+                        visit_txns = t_res.data or []
+                    except Exception:
+                        visit_txns = []
+
+                    with st.expander(f"🔔 {v_no} | {c_name} | கிளை: {b_name} | நிகரத் தொகை: ₹{net_amt:,.2f}"):
+                        # ---------------------------------------------------------
+                        # 1. வாடிக்கையாளர் & பணம் செலுத்திய விபரம்
+                        # ---------------------------------------------------------
                         col_o1, col_o2 = st.columns(2)
                         with col_o1:
-                            st.markdown("##### 👤 வாடிக்கையாளர் விவரங்கள்:")
-                            st.write(f"• **பெயர்:** {c_name}")
-                            st.write(f"• **முதன்மை மொபைல்:** `{c_mob}`")
-                            st.write(f"• **கூடுதல் மொபைல்:** `{cust.get('mobile2', '-')}`")
+                            st.markdown("##### 👤 வாடிக்கையாளர் விவரங்கள்")
+                            st.write(f"• **பெயர்:** `{c_name}`")
+                            st.write(f"• **அழைக்க வேண்டிய எண்:** 📞 **`{c_mob}`**")
+                            if c_mob2 and c_mob2 != "-":
+                                st.write(f"• **கூடுதல் எண்:** `{c_mob2}`")
+                            st.write(f"• **கிளை:** {b_name}")
+
                         with col_o2:
-                            st.markdown("##### 💳 பரிவர்த்தனை விவரம்:")
+                            st.markdown("##### 💳 பணப் பரிமாற்ற விவரம்")
                             st.write(f"• **பரிமாற்ற முறை:** {item.get('payment_mode', 'Cash')}")
-                            if item.get('bank_reference_no'):
-                                st.write(f"• **UTR / Ref:** `{item.get('bank_reference_no')}`")
-                            st.write(f"• **OTP நிலை:** {'🟢 Verified' if item.get('otp_verified') else '🔴 Pending'}")
-                            st.write(f"• **தற்போதைய நிலை:** `{cur_stat}`")
+                            st.write(f"• **கல்லா நிகரப் பணம்:** ₹{net_amt:,.2f}")
+                            if item.get("bank_reference_no"):
+                                st.write(f"• **UTR / வங்கி Ref:** `{item.get('bank_reference_no')}`")
+                            st.write(f"• **OTP நிலை:** {'🟢 Verified' if item.get('otp_verified') else '🔴 Not Verified'}")
 
                         st.markdown("---")
-                        
+
+                        # ---------------------------------------------------------
+                        # 2. இந்த வருகையில் செய்யப்பட்ட நடவடிக்கைகள் (முழு விவரங்கள்)
+                        # ---------------------------------------------------------
+                        st.markdown("##### 🛒 இந்த வருகையில் மேற்கொள்ளப்பட்ட நடவடிக்கைகள் (Activities):")
+
+                        if visit_txns:
+                            for idx, t in enumerate(visit_txns, 1):
+                                t_type = t.get("transaction_type", "Pledge")
+                                p_amt = float(t.get("paid_amount", t.get("amount", 0)) or 0.0)
+                                r_amt = float(t.get("received_amount", 0) or 0.0)
+                                g_wt = float(t.get("gross_weight", 0) or 0.0)
+                                n_wt = float(t.get("net_weight", 0) or 0.0)
+                                itm_desc = t.get("item_details", "-") or "-"
+                                staff = t.get("staff_name", "-")
+                                rem = t.get("remarks", "-") or "-"
+
+                                with st.container():
+                                    st.markdown(f"**{idx}. வகை:** `{t_type}` | **பணியாளர்:** `{staff}`")
+                                    t_c1, t_c2, t_c3 = st.columns(3)
+                                    with t_c1:
+                                        if p_amt > 0:
+                                            st.write(f"• **பட்டுவாடா (வாடிக்கையாளருக்கு கொடுத்தது):** :green[**₹{p_amt:,.2f}**]")
+                                        if r_amt > 0:
+                                            st.write(f"• **வரவு (வாடிக்கையாளர் செலுத்தியது):** :blue[**₹{r_amt:,.2f}**]")
+                                    with t_c2:
+                                        if g_wt > 0 or n_wt > 0:
+                                            st.write(f"• **எடை:** ஜி: **{g_wt}g** | நெட்: **{n_wt}g**")
+                                        st.write(f"• **நகை விபரம்:** {itm_desc}")
+                                    with t_c3:
+                                        st.write(f"• **கடன் / ரசீது குறிப்பு:** `{rem}`")
+                                    st.markdown("")
+                        else:
+                            st.warning("⚠️ இந்த வருகைக்கான நடவடிக்கைகள் 'transactions' அட்டவணையில் இன்னும் பதிவாகவில்லை.")
+
+                        st.markdown("---")
+
+                        # ---------------------------------------------------------
+                        # 3. வாடிக்கையாளரிடம் கேட்க வேண்டிய சரிபார்ப்பு வினாக்கள் (Checklist)
+                        # ---------------------------------------------------------
+                        with st.expander("📋 வாடிக்கையாளரிடம் கேட்க வேண்டிய கேள்விகள் (Calling Script):", expanded=True):
+                            st.info("""
+                            **அழைப்பு வழிகாட்டுதல் (Script):**
+                            1. **அறிமுகம்:** *"வணக்கம் [வாடிக்கையாளர் பெயர்] அவர்களே, முத்துசிஸ் கோல்டு கம்பெனி தலைமை அலுவலகத்திலிருந்து அழைக்கிறோம்."*
+                            2. **கிளை வருகை:** *"இன்று எங்கள் [கிளை பெயர்] கிளைக்கு நேரில் வருகை தந்தீர்களா?"*
+                            3. **தொகை சரிபார்ப்பு (மிக முக்கியம்):**
+                               - கடன் பெற்றிருந்தால்: *"உங்களுக்குப் பட்டுவாடா தொகையான ₹[தொகை] ரொக்கமாக / வங்கிக் கணக்கில் முழுமையாகக் கிடைத்ததா?"*
+                               - பணம் செலுத்தியிருந்தால்: *"நீங்கள் செலுத்திய தொகை ₹[தொகை]-க்கு சரியான ரசீது வழங்கப்பட்டதா?"*
+                            4. **நகை & எடை சரிபார்ப்பு:** *"நீங்கள் அடகு வைத்த நகையின் எடை [நிகர எடை] கிராம் என்பது சரியாகக் கணக்கிடப்பட்டதா?"*
+                            5. **கூடுதல் கட்டணம்:** *"ரசீதில் உள்ள தொகையைத் தவிர வேறு ஏதேனும் கூடுதல் கட்டணம் அல்லது கமிஷன் ஊழியரால் கேட்கப்பட்டதா?"*
+                            """)
+
+                        # ---------------------------------------------------------
+                        # 4. அப்ரூவல் / கிளாரிஃபிகேஷன் பட்டன்கள்
+                        # ---------------------------------------------------------
                         ops_call_remark = st.text_input(
-                            "அழைப்பு சரிபார்ப்பு குறிப்பு / விளக்கம்:",
-                            placeholder="எ.கா: வாடிக்கையாளரிடம் பேசி சரிபார்க்கப்பட்டது...",
+                            "அழைப்பு சரிபார்ப்பு குறிப்பு (Remarks):",
+                            placeholder="எ.கா: வாடிக்கையாளரிடம் பேசப்பட்டது, தொகை மற்றும் நகை விவரங்கள் உறுதி செய்யப்பட்டது...",
                             key=f"ops_call_rem_{v_id}"
                         )
 
@@ -2392,9 +2454,9 @@ else:
                                 try:
                                     supabase.table("customer_visits").update({
                                         "status": "Pending_Branch_Docs",
-                                        "verification_remarks": ops_call_remark.strip() if ops_call_remark.strip() else "Call Verified"
+                                        "verification_remarks": ops_call_remark.strip() if ops_call_remark.strip() else "Call Verified Successfully"
                                     }).eq("id", v_id).execute()
-                                    st.success(f"✅ வருகை {v_no} ஆவணப் பதிவேற்றத்திற்கு அனுப்பப்பட்டது!")
+                                    st.success(f"✅ வருகை {v_no} ஆவணப் பதிவேற்றத்திற்கு (Pending Docs) மாற்றப்பட்டது!")
                                     st.rerun()
                                 except Exception as e:
                                     st.error(f"பிழை: {e}")
@@ -2402,7 +2464,7 @@ else:
                         with o_btn2:
                             if st.button("⚠️ கிளை விளக்கம் கேட்க (Need Clarification)", key=f"v_clar_{v_id}", type="secondary", use_container_width=True):
                                 if not ops_call_remark.strip():
-                                    st.error("⚠️ தயவுசெய்து குறிப்பில் என்ன விளக்கம் வேண்டும் என்பதை உள்ளிடவும்!")
+                                    st.error("⚠️ தயவுசெய்து குறிப்பில் என்ன விளக்கம் தேவை என்பதை உள்ளிடவும்!")
                                 else:
                                     try:
                                         supabase.table("customer_visits").update({
