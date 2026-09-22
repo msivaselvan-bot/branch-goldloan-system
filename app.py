@@ -1944,22 +1944,24 @@ else:
             render_staff_attribution_report(selected_branch_id=filter_b_id)
         
         # -------------------------------------------------------------
-        # 🪙 TAB 11: கிளை வாரியாக நகைக்கடன் மேலாண்மை (விரிவான விவரங்களுடன்)
+        # 🪙 TAB 11: கிளை வாரியாக நகைக்கடன் மேலாண்மை (Foreign Key பிழையின்றி)
         # -------------------------------------------------------------
         with tab11:
             st.subheader("📋 கிளை வாரியாக நகைக் கடன் மேலாண்மை & வரிசை எண் கட்டுப்பாடு")
             st.caption("பழைய மற்றும் புதிய கடன்களின் நகை விவரங்கள், எடை மற்றும் நிலையை ஆய்வு செய்யவும், திருத்தவும்.")
 
-            # 1. கிளைகள் பட்டியல்
+            # 1. கிளைகள் பட்டியல் மற்றும் கிளைப் பெயர் மேப்பிங்
             try:
                 branches_res = supabase.table("branches").select("id, branch_name").order("id").execute()
                 b_list = branches_res.data or []
                 b_dict = {b["branch_name"]: b["id"] for b in b_list}
+                b_name_map = {b["id"]: b["branch_name"] for b in b_list}  # 👈 ID-யில் இருந்து பெயரை எடுக்கும் மேப்
                 b_opts = ["அனைத்து கிளைகள்"] + list(b_dict.keys())
             except Exception as e:
                 st.error(f"கிளைகளை எடுப்பதில் பிழை: {e}")
                 b_opts = ["அனைத்து கிளைகள்"]
                 b_dict = {}
+                b_name_map = {}
 
             # வடிகட்டிகள் (Filters)
             f_col1, f_col2, f_col3 = st.columns([2, 2, 3])
@@ -1985,9 +1987,9 @@ else:
 
             st.markdown("---")
 
-            # ஆ. Transactions அட்டவணையில் இருந்து கடன்களை எடுத்தல்
+            # ஆ. Transactions அட்டவணையில் இருந்து கடன்களை எடுத்தல் (நேரடி Select - Foreign Key தேவையில்லை)
             try:
-                q = supabase.table("transactions").select("*, branches(branch_name)").ilike("transaction_type", "%Pledge%")
+                q = supabase.table("transactions").select("*").ilike("transaction_type", "%Pledge%")
 
                 if sel_b != "அனைத்து கிளைகள்" and sel_b in b_dict:
                     q = q.eq("branch_id", b_dict[sel_b])
@@ -2020,7 +2022,8 @@ else:
                     t_id = row["id"]
                     c_name = row.get("customer_name", "-") or "-"
                     c_mob = row.get("mobile", "-") or "-"
-                    b_label = row.get("branches", {}).get("branch_name", "கிளை") if row.get("branches") else "கிளை"
+                    # கிளை ID-யை வைத்து பெயரை நேரடியாக எடுத்தல்:
+                    b_label = b_name_map.get(row.get("branch_id"), f"கிளை {row.get('branch_id', '')}")
                     p_amt = float(row.get("principal_amount", row.get("amount", 0)) or 0.0)
                     g_wt = float(row.get("gross_weight", 0) or 0.0)
                     n_wt = float(row.get("net_weight", 0) or 0.0)
@@ -2029,7 +2032,7 @@ else:
                     t_status = row.get("status", "Approved") or "Approved"
                     t_type = row.get("transaction_type", "Pledge")
 
-                    # தலைப்பில் அனைத்து முக்கிய விபரங்களும் தோன்றும்
+                    # கார்டு விரிவடையும் பெட்டி
                     with st.expander(f"🏷️ {rem} | {c_name} ({b_label}) | ₹{p_amt:,.2f} | ஜி: {g_wt}g / நெட்: {n_wt}g | நிலை: {t_status}"):
                         col_t1, col_t2 = st.tabs(["✏️ விவரம் & திருத்து (Edit)", "🗑️ நீக்கு (Delete)"])
 
