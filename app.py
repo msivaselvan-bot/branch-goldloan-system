@@ -413,32 +413,35 @@ def generate_declaration_html(data):
 # ==============================================================================
 # வருகை வரிசை எண் உருவாக்கும் செயல்பாடு (Unique Incrementing Visit No)
 # ==============================================================================
-def generate_short_visit_no() -> str:
-    """டூப்ளிகேட் வராமல் தனித்துவமான வரிசை வருகை எண்ணை உருவாக்கும் முறை"""
+def generate_branch_visit_no(branch_id, branch_code="BR"):
+    """கிளை வாரியாக வரிசை எண்ணுடன் கூடிய வருகை எண்ணை உருவாக்குதல் (எ.கா: VST-TGL-0001)"""
     try:
-        res = (
+        b_code = str(branch_code or "BR").strip().upper()
+        
+        # அந்த கிளையில் கடைசியாக பதிவான VST எண்ணை எடுத்தல்
+        last_v = (
             supabase.table("customer_visits")
             .select("visit_no")
+            .eq("branch_id", branch_id)
+            .ilike("visit_no", f"VST-{b_code}-%")
             .order("id", desc=True)
-            .limit(50)
+            .limit(1)
             .execute()
         )
-        existing_numbers = []
-        if res.data:
-            for row in res.data:
-                v_no = str(row.get("visit_no", ""))
-                if v_no.startswith("VST-"):
-                    parts = v_no.replace("VST-", "").split("-")
-                    if parts[0].isdigit():
-                        existing_numbers.append(int(parts[0]))
         
-        if existing_numbers:
-            next_num = max(existing_numbers) + 1
-            return f"VST-{next_num:04d}"
-        return "VST-1001"
-    except Exception:
-        pass
-    return f"VST-{datetime.now().strftime('%y%m%d%H%M%S')}"
+        next_num = 1
+        if last_v.data:
+            last_no_str = str(last_v.data[0].get("visit_no", ""))
+            parts = last_no_str.split("-")
+            # கடைசிப் பகுதியிலிருந்து எண்ணைப் பிரித்தெடுத்தல்
+            if len(parts) >= 3 and parts[-1].isdigit():
+                next_num = int(parts[-1]) + 1
+        
+        return f"VST-{b_code}-{str(next_num).zfill(4)}"
+        
+    except Exception as e:
+        # ஏதேனும் பிழை வந்தால் பாதுகாப்புக்காக நேரத்தை வைத்து உருவாக்குதல்:
+        return f"VST-{branch_code}-{datetime.now().strftime('%d%H%M%S')}"
 
 # ==============================================================================
 # GP எண் உருவாக்கும் செயல்பாடு (GP Number Generator)
@@ -2954,8 +2957,12 @@ else:
                                         st.warning("⏳ **விவரத் திருத்தக் கோரிக்கை ஆப்பரேஷன்ஸ் ஒப்புதலுக்கு நிலுவையில் உள்ளது!**")
                                 with c_col3:
                                     if st.button("வருகையைத் தொடங்கு ➔", key=f"start_v_{selected_cust['id']}", type="primary", use_container_width=True):
+                                        # ✅ புதிய கிளை வாரியான வரிசை எண் உருவாக்கம்:
+                                        b_code = st.session_state.get("branch_code", st.session_state.get("branch", "BR")[:3]).upper()
+                                        v_token = generate_branch_visit_no(st.session_state.branch_id, b_code)
+
                                         st.session_state.current_visit = {
-                                            "visit_no": generate_short_visit_no(),
+                                            "visit_no": v_token,
                                             "customer_id": selected_cust["id"],
                                             "customer_name": selected_cust["name"],
                                             "customer_code": selected_cust.get("customer_code", ""),
@@ -2963,6 +2970,9 @@ else:
                                             "address": selected_cust.get("address", ""),
                                             "step": "TRANSACTIONS"
                                         }
+                                        st.session_state.transactions_cart = []
+                                        st.session_state.gp_ornament_rows = [{"item": "", "count": 1, "gross_wt": 0.0, "net_wt": 0.0, "purity": "916 KDM"}]
+                                        st.rerun()
                                         st.session_state.transactions_cart = []
                                         st.session_state.gp_ornament_rows = [{"item": "", "count": 1, "gross_wt": 0.0, "net_wt": 0.0, "purity": "916 KDM"}]
                                         st.rerun()
@@ -4017,9 +4027,17 @@ else:
                                         except Exception:
                                             pass
 
-                                    # 1. customer_visits அட்டவணையில் வருகையைச் சேர்த்தல்
+                                    # 1. வருகை எண்ணை எடுத்தல்
+                                    current_v_no = visit.get("visit_no")
+
+                                    # ஒரே நேரத்தில் இருவர் முடித்தால் மோதல் வராமல் இருக்க ஒரு பாதுகாப்பு:
+                                    chk_exist = supabase.table("customer_visits").select("id").eq("visit_no", current_v_no).execute()
+                                    if chk_exist.data:
+                                        b_code = st.session_state.get("branch_code", "BR")[:3].upper()
+                                        current_v_no = generate_branch_visit_no(st.session_state.branch_id, b_code)
+
                                     visit_payload = {
-                                        "visit_no": visit.get("visit_no"),
+                                        "visit_no": current_v_no,
                                         "customer_id": visit.get("customer_id"),
                                         "branch_id": st.session_state.branch_id,
                                         "payment_mode": payment_mode if 'payment_mode' in locals() else "Cash",
