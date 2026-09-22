@@ -1140,11 +1140,11 @@ else:
     st.markdown("---")
 
     # ----------------------------------------------------
-    # A. நிர்வாக மேலாண்மை திரை (ADMIN PANEL WITH 10 FULL TABS)
+    # A. நிர்வாக மேலாண்மை திரை (ADMIN PANEL WITH 11 FULL TABS)
     # ----------------------------------------------------
     if st.session_state.user_role == "Admin":
         st.header("⚙️ நிர்வாக மேலாண்மை (Admin Control Panel)")
-        tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10 = st.tabs(
+        tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11 = st.tabs(
             [
                 "🏢 கிளைகள்",
                 "👥 பணியாளர்கள்",
@@ -1155,7 +1155,8 @@ else:
                 "📊 வருகை & பரிவர்த்தனை திருத்தம்",
                 "💰 கிளை துவக்க இருப்பு & கல்லா",
                 "🏦 தலைமையக பணப் பரிமாற்றம்",
-                "📈 காரணப் பணியாளர் அறிக்கை"
+                "📈 காரணப் பணியாளர் அறிக்கை",
+                "🪙 நகைக் கடன் மேலாண்மை"  # 👈 புதிதாக சேர்க்கப்பட்ட 11-வது டேப்
             ]
         )
 
@@ -1923,6 +1924,138 @@ else:
             sel_rep_b = st.selectbox("கிளையை வடிகட்டவும்:", rep_b_opts, key="adm_rep_branch_sel")
             filter_b_id = branch_options.get(sel_rep_b) if sel_rep_b != "அனைத்து கிளைகளும் (All Branches)" else None
             render_staff_attribution_report(selected_branch_id=filter_b_id)
+        
+        # -------------------------------------------------------------
+        # 🪙 TAB 11: கிளை வாரியாக நகைக்கடன் மேலாண்மை (Edit / Delete)
+        # -------------------------------------------------------------
+        with tab11:
+            st.subheader("📋 கிளை வாரியாக நகைக்கடன் மேலாண்மை (Gold Loan Control Desk)")
+            st.caption("கிளை வாரியாக உள்ள நகைக் கடன்களை ஆய்வு செய்யவும், விவரங்களை மாற்றவும் மற்றும் நிர்வகிக்கவும்.")
+
+            try:
+                # கிளைகளின் பட்டியலை எடுத்தல்
+                branches_res = supabase.table("branches").select("id, branch_name").order("id").execute()
+                branch_list = branches_res.data or []
+                branch_dict = {b["branch_name"]: b["id"] for b in branch_list}
+                branch_options = ["அனைத்து கிளைகள்"] + list(branch_dict.keys())
+            except Exception as e:
+                st.error(f"கிளை விவரங்களைப் பெறுவதில் பிழை: {e}")
+                branch_options = ["அனைத்து கிளைகள்"]
+                branch_dict = {}
+
+            # பில்டர்கள் (Filters)
+            f_col1, f_col2, f_col3 = st.columns([2, 2, 3])
+            with f_col1:
+                selected_branch = st.selectbox("🏢 கிளையைத் தேர்ந்தெடுக்கவும்:", branch_options, key="adm_loan_branch_filter")
+            with f_col2:
+                selected_status = st.selectbox(
+                    "📌 கடன் நிலை (Status):",
+                    ["அனைத்தும்", "Active", "Closed", "Overdue", "Auctioned", "Pending"],
+                    key="adm_loan_status_filter"
+                )
+            with f_col3:
+                search_query = st.text_input("🔍 தேடல் (கடன் எண் / மொபைல் / பெயர்):", placeholder="எ.கா: LN1001 / 98765...", key="adm_loan_search")
+
+            # டேட்டாபேஸ் வினவல்
+            try:
+                query = supabase.table("loans").select("*, branches(branch_name), customers(name, mobile)")
+
+                if selected_branch != "அனைத்து கிளைகள்" and selected_branch in branch_dict:
+                    query = query.eq("branch_id", branch_dict[selected_branch])
+
+                if selected_status != "அனைத்தும்":
+                    query = query.eq("status", selected_status)
+
+                loans_data = query.order("id", desc=True).limit(50).execute().data or []
+            except Exception as e:
+                st.error(f"கடன்களை எடுப்பதில் பிழை: {e}")
+                loans_data = []
+
+            # உள்ளூர் தேடல்
+            if search_query.strip():
+                sq = search_query.strip().lower()
+                loans_data = [
+                    ln for ln in loans_data
+                    if sq in str(ln.get("loan_no", "")).lower()
+                    or sq in str(ln.get("customers", {}).get("mobile", "")).lower()
+                    or sq in str(ln.get("customers", {}).get("name", "")).lower()
+                ]
+
+            # கடன்கள் பட்டியல் மற்றும் எடிட் / டிலீட் செயல்பாடு
+            if not loans_data:
+                st.info("ℹ️ தேர்ந்தெடுக்கப்பட்ட நிபந்தனைகளில் நகைக் கடன்கள் எதுவும் இல்லை.")
+            else:
+                st.write(f"மொத்தம் கண்டறியப்பட்ட கடன்கள்: **{len(loans_data)}**")
+
+                for loan in loans_data:
+                    l_id = loan["id"]
+                    l_no = loan.get("loan_no", f"LN-{l_id}")
+                    cust_name = loan.get("customers", {}).get("name", "-") if loan.get("customers") else "-"
+                    cust_mob = loan.get("customers", {}).get("mobile", "-") if loan.get("customers") else "-"
+                    b_name = loan.get("branches", {}).get("branch_name", "கிளை") if loan.get("branches") else "கிளை"
+                    l_amt = float(loan.get("loan_amount", 0))
+                    l_status = loan.get("status", "Active")
+
+                    with st.expander(f"🏷️ கடன் எண்: {l_no} | {cust_name} ({b_name}) | ₹{l_amt:,.2f} | நிலை: {l_status}"):
+                        tab_view, tab_edit, tab_del = st.tabs(["👁️ விவரங்கள் (View)", "✏️ திருத்து (Edit)", "🗑️ நீக்கு (Delete)"])
+
+                        # பிரிவு 1: விவரங்கள்
+                        with tab_view:
+                            v_col1, v_col2 = st.columns(2)
+                            with v_col1:
+                                st.write(f"• **வாடிக்கையாளர்:** {cust_name}")
+                                st.write(f"• **மொபைல் எண்:** `{cust_mob}`")
+                                st.write(f"• **கிளை:** {b_name}")
+                                st.write(f"• **வழங்கப்பட்ட தேதி:** {loan.get('loan_date', loan.get('created_at', '-'))[:10]}")
+                            with v_col2:
+                                st.write(f"• **கடன் தொகை:** ₹{l_amt:,.2f}")
+                                st.write(f"• **மொத்த எடை (Gross):** {loan.get('gross_weight', 0)} g")
+                                st.write(f"• **நிகர எடை (Net):** {loan.get('net_weight', 0)} g")
+                                st.write(f"• **வட்டி விகிதம்:** {loan.get('interest_rate', 0)}%")
+                                st.write(f"• **தற்போதைய நிலை:** `{l_status}`")
+
+                        # பிரிவு 2: எடிட் செய்தல்
+                        with tab_edit:
+                            with st.form(key=f"edit_form_{l_id}"):
+                                e_col1, e_col2 = st.columns(2)
+                                with e_col1:
+                                    new_amount = st.number_input("கடன் தொகை (₹):", value=l_amt, step=500.0, key=f"e_amt_{l_id}")
+                                    new_gross = st.number_input("மொத்த எடை (Gross Wt g):", value=float(loan.get("gross_weight", 0)), step=0.1, key=f"e_gw_{l_id}")
+                                    new_net = st.number_input("நிகர எடை (Net Wt g):", value=float(loan.get("net_weight", 0)), step=0.1, key=f"e_nw_{l_id}")
+                                with e_col2:
+                                    status_list = ["Active", "Closed", "Overdue", "Auctioned", "Pending"]
+                                    default_status_idx = status_list.index(l_status) if l_status in status_list else 0
+                                    new_status = st.selectbox("கடன் நிலை:", status_list, index=default_status_idx, key=f"e_stat_{l_id}")
+                                    new_rate = st.number_input("வட்டி விகிதம் (%):", value=float(loan.get("interest_rate", 1.5)), step=0.1, key=f"e_rate_{l_id}")
+                                    new_remarks = st.text_input("நிர்வாகக் குறிப்பு (Remarks):", value=str(loan.get("remarks", "") or ""), key=f"e_rem_{l_id}")
+
+                                submit_edit = st.form_submit_button("💾 மாற்றங்களைச் சேமி (Update Loan)", type="primary")
+                                if submit_edit:
+                                    try:
+                                        supabase.table("loans").update({
+                                            "loan_amount": new_amount,
+                                            "gross_weight": new_gross,
+                                            "net_weight": new_net,
+                                            "status": new_status,
+                                            "interest_rate": new_rate,
+                                            "remarks": new_remarks.strip()
+                                        }).eq("id", l_id).execute()
+                                        st.success(f"✅ கடன் {l_no} வெற்றிகரமாகப் புதுப்பிக்கப்பட்டது!")
+                                        st.rerun()
+                                    except Exception as ex:
+                                        st.error(f"மாற்றுவதில் பிழை: {ex}")
+
+                        # பிரிவு 3: டிலீட் செய்தல்
+                        with tab_del:
+                            st.warning("⚠️ கவனிக்க: இக்கடனை நீக்கினால் அதன் தரவுகள் நிரந்தரமாக நீக்கப்படும்.")
+                            confirm_del = st.checkbox(f"நான் உறுதியாக கடன் {l_no}-ஐ நிரந்தரமாக நீக்க விரும்புகிறேன்.", key=f"chk_del_{l_id}")
+                            if st.button("🗑️ நிரந்தரமாக நீக்கு (Delete Loan)", key=f"btn_del_{l_id}", type="secondary", disabled=not confirm_del):
+                                try:
+                                    supabase.table("loans").delete().eq("id", l_id).execute()
+                                    st.success(f"✅ கடன் {l_no} வெற்றிகரமாக நீக்கப்பட்டது!")
+                                    st.rerun()
+                                except Exception as dex:
+                                    st.error(f"நீக்குவதில் பிழை: {dex}")
 
     # ----------------------------------------------------
     # B. ஆப்பரேஷன்ஸ் திரை (OPERATIONS DESK)
