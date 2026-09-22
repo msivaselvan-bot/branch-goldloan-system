@@ -3068,9 +3068,6 @@ else:
             # ---------------------------------------------------------------------
             # படி 2: வணிக நடவடிக்கைகள் சேர்த்தல் (TRANSACTIONS)
             # ---------------------------------------------------------------------
-            # ---------------------------------------------------------------------
-            # படி 2: வணிக நடவடிக்கைகள் சேர்த்தல் (TRANSACTIONS)
-            # ---------------------------------------------------------------------
             elif st.session_state.current_visit and st.session_state.current_visit.get("step") == "TRANSACTIONS":
                 visit = st.session_state.current_visit
                 st.success(f"வாடிக்கையாளர்: **{visit['customer_name']}** (வருகை எண்: **{visit['visit_no']}**)")
@@ -4020,6 +4017,45 @@ else:
                                         except Exception:
                                             pass
 
+                                    # 1. customer_visits அட்டவணையில் வருகையைச் சேர்த்தல்
+                                    visit_payload = {
+                                        "visit_no": visit.get("visit_no"),
+                                        "customer_id": visit.get("customer_id"),
+                                        "branch_id": st.session_state.branch_id,
+                                        "payment_mode": payment_mode if 'payment_mode' in locals() else "Cash",
+                                        "net_cash_amount": float(net_cash_amt if 'net_cash_amt' in locals() else (net_cash if 'net_cash' in locals() else 0.0)),
+                                        "otp_verified": True,
+                                        "status": "Pending_Calling_Verification"
+                                    }
+                                    v_insert = supabase.table("customer_visits").insert(visit_payload).execute()
+                                    
+                                    if not v_insert.data:
+                                        raise Exception("customer_visits அட்டவணையில் பதிவைச் சேர்க்க முடியவில்லை! RLS கொள்கையைச் சரிபார்க்கவும்.")
+                                    
+                                    new_visit_id = v_insert.data[0]["id"]
+
+                                    # 2. transactions அட்டவணையில் கார்ட்டில் உள்ள கடன்களைச் சேர்த்தல்
+                                    for item in st.session_state.transactions_cart:
+                                        item_payload = {
+                                            "visit_id": new_visit_id,
+                                            "branch_id": st.session_state.branch_id,
+                                            "customer_id": visit.get("customer_id"),
+                                            "customer_name": visit.get("customer_name"),
+                                            "mobile": visit.get("mobile"),
+                                            "transaction_type": item.get("transaction_type"),
+                                            "staff_name": item.get("staff_name"),
+                                            "amount": float(item.get("amount", 0.0)),
+                                            "paid_amount": float(item.get("paid_amount", 0.0)),
+                                            "received_amount": float(item.get("received_amount", 0.0)),
+                                            "gross_weight": float(item.get("total_weight", 0.0)),
+                                            "net_weight": float(item.get("net_weight", 0.0)),
+                                            "item_details": item.get("ornament_details", ""),
+                                            "remarks": item.get("remarks", ""),
+                                            "status": "Pending"
+                                        }
+                                        supabase.table("transactions").insert(item_payload).execute()
+
+                                    # 3. டேட்டாபேஸில் சரியாகப் பதிவான பின் நினைவகத்தை ரீசெட் செய்தல்
                                     st.success(f"🎉 வருகை வெற்றிகரமாக நிறைவுபெற்றது!")
                                     st.session_state.current_visit = None
                                     st.session_state.transactions_cart = []
