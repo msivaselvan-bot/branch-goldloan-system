@@ -673,11 +673,12 @@ def get_current_branch_cash_drawer(branch_id):
         # =========================================================================
         # 2. வாடிக்கையாளர் வருகைகளின் வரவு / செலவு நோட்டுகள் (Customer Visits)
         # =========================================================================
+        # ✅ ஆப்பரேஷன்ஸ் ஒப்புதல் பெற்ற வருகைகளை மட்டுமே கணக்கிடுதல் (Pending_Calling_Verification இதில் வராது)
         visits_query = (
             supabase.table("customer_visits")
-            .select("denomination_details, created_at")
+            .select("denomination_details, created_at, status")
             .eq("branch_id", clean_b_id)
-            .neq("status", "Rejected")
+            .in_("status", ["Pending_Branch_Docs", "Submitted_to_Auditor", "Approved", "Needs_Clarification"])
         )
         if last_op_date:
             visits_query = visits_query.gte("created_at", f"{last_op_date}T00:00:00")
@@ -4203,7 +4204,7 @@ else:
                                     
                                     new_visit_id = v_insert.data[0]["id"]
 
-                                    # 3. transactions அட்டவணையில் கடன்களைச் சேர்த்தல் (Operations சரிபார்ப்புக்குத் தேவையான அனைத்து விபரங்களுடன்)
+                                    # 3. transactions அட்டவணையில் கார்ட்டில் உள்ள கடன்களைச் சேர்த்தல்
                                     for item in st.session_state.transactions_cart:
                                         item_payload = {
                                             "visit_id": new_visit_id,
@@ -4224,17 +4225,8 @@ else:
                                         }
                                         supabase.table("transactions").insert(item_payload).execute()
 
-                                    # 4. கல்லா ரொக்க இருப்பைப் புதுப்பித்தல் (Cash Box Update)
-                                    tot_cash_in = sum(float(t.get("received_amount", 0.0) or 0.0) for t in st.session_state.transactions_cart)
-                                    tot_cash_out = sum(float(t.get("paid_amount", 0.0) or 0.0) for t in st.session_state.transactions_cart)
-                                    update_branch_cash_box(
-                                        branch_id=st.session_state.branch_id,
-                                        cash_in=tot_cash_in,
-                                        cash_out=tot_cash_out
-                                    )
-
-                                    # 5. நினைவகத்தை முழுமையாக ரீசெட் செய்தல் (Declaration உட்பட)
-                                    st.success(f"🎉 வருகை {current_v_no} வெற்றிகரமாக நிறைவுபெற்றது!")
+                                    # 4. நினைவகத்தை முழுமையாக ரீசெட் செய்தல்
+                                    st.success(f"🎉 வருகை {current_v_no} வெற்றிகரமாக நிறைவுபெற்றது! (ஆப்பரேஷன்ஸ் அழைப்பு ஒப்புதலுக்கு அனுப்பப்பட்டது)")
                                     st.session_state.current_visit = None
                                     st.session_state.transactions_cart = []
                                     st.session_state.generated_otp = None
