@@ -411,45 +411,45 @@ def generate_declaration_html(data):
     return html_content
 
 # -------------------------------------------------------------
-# 💰 கிளை நேரலை கல்லா ரொக்க இருப்பைப் பெறும் செயல்பாடு
+# 💰 கிளை நேரலை கல்லா ரொக்க இருப்பைப் பெறும் செயல்பாடு (Synced with Notes)
 # -------------------------------------------------------------
 def get_branch_current_cash(branch_id):
-    """கிளையின் தற்போதைய நேரலை கல்லா ரொக்க இருப்பை வழங்கும் செயல்பாடு"""
+    """கல்லா டிராயரில் உள்ள நேரடி நோட்டுகளின் மொத்த மதிப்பை துல்லியமாக வழங்கும்"""
     try:
         if not branch_id:
             return 0.0
-        res = (
-            supabase.table("branch_cash_box")
-            .select("*")
-            .eq("branch_id", branch_id)
-            .order("id", desc=True)
-            .limit(1)
-            .execute()
+        drawer = get_current_branch_cash_drawer(branch_id)
+        total_val = (
+            int(drawer.get("500", 0)) * 500 +
+            int(drawer.get("200", 0)) * 200 +
+            int(drawer.get("100", 0)) * 100 +
+            int(drawer.get("50", 0)) * 50 +
+            int(drawer.get("20", 0)) * 20 +
+            int(drawer.get("10", 0)) * 10 +
+            int(drawer.get("5", 0)) * 5 +
+            float(drawer.get("coins", 0.0) or 0.0)
         )
-        if res.data:
-            row = res.data[0]
-            val = row.get("current_balance")
-            if val is None:
-                val = row.get("closing_balance")
-            if val is None:
-                val = row.get("opening_balance", 0.0)
-            return float(val or 0.0)
-        return 0.0
+        return float(total_val)
     except Exception:
         return 0.0
 
 
-# -------------------------------------------------------------
-# 🔄 கல்லா இருப்பைக் கூட்டும் / குறைக்கும் முழுமையான செயல்பாடு
-# -------------------------------------------------------------
-def update_branch_cash_box(branch_id, cash_in=0.0, cash_out=0.0):
-    """பரிவர்த்தனைக்கு ஏற்ப கல்லா இருப்பைப் புதுப்பிக்கும் அல்லது புதிய பதிவை உருவாக்கும்"""
+# ---------------------------------------------------------------------
+# 💰 கல்லா ரொக்கம் & நோட்டுகளின் எண்ணிக்கையைப் புதுப்பிக்கும் முழுமையான செயல்பாடு
+# ---------------------------------------------------------------------
+def update_branch_cash_and_denominations(branch_id, cash_in=0.0, cash_out=0.0, denom_in=None, denom_out=None):
+    """
+    பரிவர்த்தனைக்கு ஏற்ப கல்லா இருப்பு மற்றும் நோட்டுகளின் எண்ணிக்கையைக் கூட்டும்/குறைக்கும்.
+    denom_in / denom_out வடிவம்: {"500": 0, "200": 0, "100": 0, "50": 0, "20": 0, "10": 0, "5": 0, "coins": 0.0}
+    """
     try:
         if not branch_id:
             return False
             
-        net_change = float(cash_in) - float(cash_out)
-        
+        denom_in = denom_in or {}
+        denom_out = denom_out or {}
+        net_cash_change = float(cash_in) - float(cash_out)
+
         # 1. கிளைக்குரிய கடைசி கல்லாப் பதிவை எடுத்தல்
         cash_res = (
             supabase.table("branch_cash_box")
@@ -459,35 +459,54 @@ def update_branch_cash_box(branch_id, cash_in=0.0, cash_out=0.0):
             .limit(1)
             .execute()
         )
-        
-        if cash_res.data:
-            # அ. ஏற்கனவே பதிவு இருந்தால்: இருப்பைப் புதுப்பித்தல் (Update)
-            c_box = cash_res.data[0]
-            box_id = c_box["id"]
-            
-            cur_val = c_box.get("current_balance")
-            if cur_val is None:
-                cur_val = c_box.get("closing_balance")
-            if cur_val is None:
-                cur_val = c_box.get("opening_balance", 0.0)
-                
-            prev_bal = float(cur_val or 0.0)
-            new_bal = prev_bal + net_change
-            
-            supabase.table("branch_cash_box").update({
-                "current_balance": float(new_bal)
-            }).eq("id", box_id).execute()
-        else:
-            # ஆ. பதிவு எதுவுமே இல்லை என்றால்: புதிய பதிவை உருவாக்குதல் (Insert Initial Row)
-            supabase.table("branch_cash_box").insert({
-                "branch_id": branch_id,
-                "opening_balance": 0.0,
-                "current_balance": float(net_change)
-            }).execute()
-            
+
+        if not cash_res.data:
+            return False
+
+        c_box = cash_res.data[0]
+        box_id = c_box["id"]
+
+        # முந்தைய இருப்பு
+        open_bal = float(c_box.get("opening_balance") or 0.0)
+        cur_bal = c_box.get("current_balance")
+        prev_bal = open_bal if cur_bal is None else float(cur_bal)
+        new_total_bal = prev_bal + net_cash_change
+
+        # 2. முந்தைய நோட்டுகளின் எண்ணிக்கை (Current Denominations)
+        # current_denominations இல்லையென்றால் opening_denominations-ஐ எடுக்கும்
+        curr_notes = c_box.get("current_denominations")
+        if not curr_notes:
+            curr_notes = c_box.get("opening_denominations") or c_box.get("denomination_details") or {}
+
+        # நிலையான நோட்டுகள் பட்டியல்
+        keys = ["500", "200", "100", "50", "20", "10", "5"]
+        updated_notes = {}
+
+        # தாள்களைக் கூட்டி/கழித்தல்
+        for k in keys:
+            cur_cnt = int(curr_notes.get(k, 0) or 0)
+            in_cnt = int(denom_in.get(k, 0) or 0)
+            out_cnt = int(denom_out.get(k, 0) or 0)
+            updated_notes[k] = max(0, cur_cnt + in_cnt - out_cnt)
+
+        # நாணயங்கள் (Coins)
+        cur_coins = float(curr_notes.get("coins", 0.0) or 0.0)
+        in_coins = float(denom_in.get("coins", 0.0) or 0.0)
+        out_coins = float(denom_out.get("coins", 0.0) or 0.0)
+        updated_notes["coins"] = max(0.0, cur_coins + in_coins - out_coins)
+
+        # 3. நோட்டுகளின் மூலம் கிடைக்கும் உண்மையான மொத்தத் தொகை சரிபார்ப்பு
+        calc_note_total = sum(int(k) * updated_notes[k] for k in keys) + updated_notes["coins"]
+
+        # 4. Supabase-ல் புதுப்பித்தல்
+        supabase.table("branch_cash_box").update({
+            "current_balance": float(calc_note_total if calc_note_total > 0 else new_total_bal),
+            "current_denominations": updated_notes
+        }).eq("id", box_id).execute()
+
         return True
-    except Exception as err:
-        st.error(f"⚠️ கல்லா இருப்பைப் புதுப்பிப்பதில் பிழை: {err}")
+    except Exception as e:
+        st.error(f"கல்லா நோட்டுகளைப் புதுப்பிப்பதில் பிழை: {e}")
         return False
 # ==============================================================================
 # வருகை வரிசை எண் உருவாக்கும் செயல்பாடு (Unique Incrementing Visit No)
@@ -4113,32 +4132,43 @@ else:
                                         except Exception:
                                             pass
 
-                                    # 1. வருகை எண்ணை எடுத்தல்
+                                    # ✅ 1. தனித்துவமான வருகை எண் உருவாக்கம்
                                     current_v_no = visit.get("visit_no")
-
-                                    # ஒரே நேரத்தில் இருவர் முடித்தால் மோதல் வராமல் இருக்க ஒரு பாதுகாப்பு:
                                     chk_exist = supabase.table("customer_visits").select("id").eq("visit_no", current_v_no).execute()
                                     if chk_exist.data:
                                         b_code = st.session_state.get("branch_code", "BR")[:3].upper()
                                         current_v_no = generate_branch_visit_no(st.session_state.branch_id, b_code)
 
-                                    visit_payload = {
+                                    pm_label = "Cash" if bank_portion == 0 else ("Bank/UPI" if cash_portion == 0 else "Split")
+
+                                    # 2. customer_visits-ல் நோட்டுகளின் விவரங்களுடன் சேர்த்தல் (கல்லா டிராயர் குறைய இதுவே முக்கியம்)
+                                    visit_data = {
                                         "visit_no": current_v_no,
                                         "customer_id": visit.get("customer_id"),
                                         "branch_id": st.session_state.branch_id,
-                                        "payment_mode": payment_mode if 'payment_mode' in locals() else "Cash",
-                                        "net_cash_amount": float(net_cash_amt if 'net_cash_amt' in locals() else (net_cash if 'net_cash' in locals() else 0.0)),
+                                        "total_paid": float(visit.get("total_paid", 0.0) or 0.0),
+                                        "total_received": float(visit.get("total_received", 0.0) or 0.0),
+                                        "net_cash_amount": float(visit.get("net_amount", 0.0) or (cash_portion if 'cash_portion' in locals() else 0.0)),
+                                        "cash_amount": float(cash_portion),
+                                        "bank_amount": float(bank_portion),
+                                        "payment_mode": pm_label,
+                                        "bank_reference_no": bank_ref_no.strip() if bank_portion > 0 else None,
+                                        # 👈 இந்த நோட்டுகள் விவரம் தான் கல்லா பெட்டியில் இருந்து நோட்டுகளைக் கழிக்கும்:
+                                        "denomination_details": {
+                                            "in": {"500": in_500, "200": in_200, "100": in_100, "50": in_50, "20": in_20, "10": in_10, "5": in_5, "coins": in_coins, "total": total_cash_in},
+                                            "out": {"500": out_500, "200": out_200, "100": out_100, "50": out_50, "20": out_20, "10": out_10, "5": out_5, "coins": out_coins, "total": total_cash_out},
+                                            "net_change": total_cash_in - total_cash_out,
+                                        },
                                         "otp_verified": True,
-                                        "status": "Pending_Calling_Verification"
+                                        "status": "Pending_Calling_Verification",
                                     }
-                                    v_insert = supabase.table("customer_visits").insert(visit_payload).execute()
-                                    
+                                    v_insert = supabase.table("customer_visits").insert(visit_data).execute()
                                     if not v_insert.data:
                                         raise Exception("customer_visits அட்டவணையில் பதிவைச் சேர்க்க முடியவில்லை! RLS கொள்கையைச் சரிபார்க்கவும்.")
                                     
                                     new_visit_id = v_insert.data[0]["id"]
 
-                                    # 2. transactions அட்டவணையில் கார்ட்டில் உள்ள கடன்களைச் சேர்த்தல்
+                                    # 3. transactions அட்டவணையில் கடன்களைச் சேர்த்தல் (Operations சரிபார்ப்புக்குத் தேவையான அனைத்து விபரங்களுடன்)
                                     for item in st.session_state.transactions_cart:
                                         item_payload = {
                                             "visit_id": new_visit_id,
@@ -4148,32 +4178,28 @@ else:
                                             "mobile": visit.get("mobile"),
                                             "transaction_type": item.get("transaction_type"),
                                             "staff_name": item.get("staff_name"),
-                                            "amount": float(item.get("amount", 0.0)),
-                                            "paid_amount": float(item.get("paid_amount", 0.0)),
-                                            "received_amount": float(item.get("received_amount", 0.0)),
-                                            "gross_weight": float(item.get("total_weight", 0.0)),
-                                            "net_weight": float(item.get("net_weight", 0.0)),
+                                            "amount": float(item.get("amount", 0.0) or 0.0),
+                                            "paid_amount": float(item.get("paid_amount", 0.0) or 0.0),
+                                            "received_amount": float(item.get("received_amount", 0.0) or 0.0),
+                                            "gross_weight": float(item.get("total_weight", 0.0) or 0.0),
+                                            "net_weight": float(item.get("net_weight", 0.0) or 0.0),
                                             "item_details": item.get("ornament_details", ""),
                                             "remarks": item.get("remarks", ""),
                                             "status": "Pending"
                                         }
                                         supabase.table("transactions").insert(item_payload).execute()
 
-                                    # -------------------------------------------------------------
-                                    # 💰 கல்லா ரொக்க இருப்பைப் புதுப்பித்தல் (Cash Box Update)
-                                    # -------------------------------------------------------------
+                                    # 4. கல்லா ரொக்க இருப்பைப் புதுப்பித்தல் (Cash Box Update)
                                     tot_cash_in = sum(float(t.get("received_amount", 0.0) or 0.0) for t in st.session_state.transactions_cart)
                                     tot_cash_out = sum(float(t.get("paid_amount", 0.0) or 0.0) for t in st.session_state.transactions_cart)
-                                    
-                                    # கல்லாப் பணத்தைக் கூட்டி/குறைக்கும் ஃபங்க்ஷனை இயக்குதல்
                                     update_branch_cash_box(
                                         branch_id=st.session_state.branch_id,
                                         cash_in=tot_cash_in,
                                         cash_out=tot_cash_out
                                     )
 
-                                    # 3. டேட்டாபேஸில் சரியாகப் பதிவான பின் நினைவகத்தை ரீசெட் செய்தல்
-                                    st.success(f"🎉 வருகை வெற்றிகரமாக நிறைவுபெற்றது!")
+                                    # 5. நினைவகத்தை முழுமையாக ரீசெட் செய்தல் (Declaration உட்பட)
+                                    st.success(f"🎉 வருகை {current_v_no} வெற்றிகரமாக நிறைவுபெற்றது!")
                                     st.session_state.current_visit = None
                                     st.session_state.transactions_cart = []
                                     st.session_state.generated_otp = None
