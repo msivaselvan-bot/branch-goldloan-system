@@ -2310,71 +2310,109 @@ else:
         with ops_tab4:
             st.subheader("📞 பரிவர்த்தனை அழைப்பு சரிபார்ப்பு (Transaction Call Verification)")
             st.caption("கிளை ஊழியர்களால் முடிக்கப்பட்டு, வாடிக்கையாளர் அழைப்புச் சரிபார்ப்புக்காக நிலுவையில் உள்ள வருகைகள்.")
-            
-            # 🔍 1. டேட்டாபேஸில் உள்ள நிலைகளைச் சோதிக்க (Debug):
-            debug_data = supabase.table("customer_visits").select("id, visit_no, status").order("id", desc=True).limit(5).execute().data
-            st.write("🔍 **டேட்டாபேஸில் உள்ள கடைசி 5 வருகைகள்:**", debug_data)
 
-            # 🔍 2. Join அட்டவணைகள் இன்றி நேரடி வினவல்:
-            ops_visits = (
-                supabase.table("customer_visits")
-                .select("*, customers(name, mobile, mobile2), branches(branch_name)")
-                .eq("status", "Pending_Calling_Verification")
-                .order("id", desc=True)
-                .execute()
-                .data or []
-            )
+            # 1. கிளைப் பெயர்களை மேப் செய்தல் (Foreign key பிழை வராமல் இருக்க)
+            try:
+                b_res = supabase.table("branches").select("id, branch_name").execute()
+                b_map = {b["id"]: b["branch_name"] for b in (b_res.data or [])}
+            except Exception:
+                b_map = {}
+
+            # 2. நிலைகள் வடிகட்டல் (Filter)
+            f_col1, f_col2 = st.columns([2, 2])
+            with f_col1:
+                stat_filter = st.selectbox(
+                    "📌 வருகை நிலை (Status):",
+                    ["Pending_Calling_Verification", "அனைத்தும் (All)", "Pending_Branch_Docs", "Completed", "Needs_Clarification"],
+                    key="ops_visit_stat_filter"
+                )
+
+            # 3. Join இன்றி நேரடி பாதுகாப்பான வினவல்
+            try:
+                q = supabase.table("customer_visits").select("*")
+                if stat_filter != "அனைத்தும் (All)":
+                    q = q.eq("status", stat_filter)
+                
+                ops_visits = q.order("id", desc=True).limit(50).execute().data or []
+            except Exception as e:
+                st.error(f"வருகைகளை எடுப்பதில் பிழை: {e}")
+                ops_visits = []
 
             if not ops_visits:
-                st.info("✅ சரிபார்க்க வேண்டிய வருகைகள் எதுவும் நிலுவையில் இல்லை.")
+                st.info("ℹ️ தேர்ந்தெடுக்கப்பட்ட நிலையில் வருகைகள் எதுவும் தற்போது நிலுவையில் இல்லை.")
             else:
+                st.write(f"🔔 கண்டறியப்பட்ட மொத்த வருகைகள்: **{len(ops_visits)}**")
+
                 for item in ops_visits:
-                    cust = item.get("customers", {}) or {}
-                    b_name = item.get("branches", {}).get("branch_name", "கிளை")
-                    
-                    with st.expander(f"🔔 வருகை: {item['visit_no']} | {cust.get('name', '-')} | கிளை: {b_name} | நிகரத் தொகை: ₹{float(item.get('net_cash_amount', 0)):,.2f}"):
+                    v_id = item["id"]
+                    cust_id = item.get("customer_id")
+                    b_id = item.get("branch_id")
+                    b_name = b_map.get(b_id, f"கிளை {b_id}")
+
+                    # வாடிக்கையாளர் விவரங்களை எடுத்தல்
+                    cust = {}
+                    if cust_id:
+                        try:
+                            c_res = supabase.table("customers").select("name, mobile, mobile2").eq("id", cust_id).execute()
+                            cust = c_res.data[0] if c_res.data else {}
+                        except Exception:
+                            cust = {}
+
+                    c_name = cust.get("name", item.get("customer_name", "-"))
+                    c_mob = cust.get("mobile", item.get("mobile", "-"))
+                    v_no = item.get("visit_no", f"VISIT-{v_id}")
+                    cur_stat = item.get("status", "Pending")
+
+                    with st.expander(f"🔔 வருகை: {v_no} | {c_name} | கிளை: {b_name} | தொகை: ₹{float(item.get('net_cash_amount', 0)):,.2f} | [நிலை: {cur_stat}]"):
                         col_o1, col_o2 = st.columns(2)
                         with col_o1:
                             st.markdown("##### 👤 வாடிக்கையாளர் விவரங்கள்:")
-                            st.write(f"• **பெயர்:** {cust.get('name', '-')}")
-                            st.write(f"• **முதன்மை மொபைல்:** `{cust.get('mobile', '-')}`")
+                            st.write(f"• **பெயர்:** {c_name}")
+                            st.write(f"• **முதன்மை மொபைல்:** `{c_mob}`")
                             st.write(f"• **கூடுதல் மொபைல்:** `{cust.get('mobile2', '-')}`")
                         with col_o2:
                             st.markdown("##### 💳 பரிவர்த்தனை விவரம்:")
-                            st.write(f"• **முறை:** {item.get('payment_mode', 'Cash')}")
+                            st.write(f"• **பரிமாற்ற முறை:** {item.get('payment_mode', 'Cash')}")
                             if item.get('bank_reference_no'):
                                 st.write(f"• **UTR / Ref:** `{item.get('bank_reference_no')}`")
                             st.write(f"• **OTP நிலை:** {'🟢 Verified' if item.get('otp_verified') else '🔴 Pending'}")
+                            st.write(f"• **தற்போதைய நிலை:** `{cur_stat}`")
 
                         st.markdown("---")
                         
                         ops_call_remark = st.text_input(
                             "அழைப்பு சரிபார்ப்பு குறிப்பு / விளக்கம்:",
-                            placeholder="எ.கா: வாடிக்கையாளர் போனை எடுக்கவில்லை...",
-                            key=f"ops_call_rem_{item['id']}"
+                            placeholder="எ.கா: வாடிக்கையாளரிடம் பேசி சரிபார்க்கப்பட்டது...",
+                            key=f"ops_call_rem_{v_id}"
                         )
 
                         o_btn1, o_btn2 = st.columns(2)
                         with o_btn1:
-                            if st.button("✅ தொலைபேசி வழி சரிபார்க்கப்பட்டது (Approve)", key=f"v_call_{item['id']}", type="primary", use_container_width=True):
-                                supabase.table("customer_visits").update({
-                                    "status": "Pending_Branch_Docs",
-                                    "verification_remarks": ops_call_remark.strip() if ops_call_remark.strip() else "Call Verified"
-                                }).eq("id", item["id"]).execute()
-                                st.success(f"✅ வருகை {item['visit_no']} ஆவணப் பதிவேற்றத்திற்கு அனுப்பப்பட்டது!")
-                                st.rerun()
+                            if st.button("✅ தொலைபேசி வழி சரிபார்க்கப்பட்டது (Approve)", key=f"v_call_{v_id}", type="primary", use_container_width=True):
+                                try:
+                                    supabase.table("customer_visits").update({
+                                        "status": "Pending_Branch_Docs",
+                                        "verification_remarks": ops_call_remark.strip() if ops_call_remark.strip() else "Call Verified"
+                                    }).eq("id", v_id).execute()
+                                    st.success(f"✅ வருகை {v_no} ஆவணப் பதிவேற்றத்திற்கு அனுப்பப்பட்டது!")
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"பிழை: {e}")
 
                         with o_btn2:
-                            if st.button("⚠️ கிளை விளக்கம் கேட்க (Need Clarification)", key=f"v_clar_{item['id']}", type="secondary", use_container_width=True):
+                            if st.button("⚠️ கிளை விளக்கம் கேட்க (Need Clarification)", key=f"v_clar_{v_id}", type="secondary", use_container_width=True):
                                 if not ops_call_remark.strip():
                                     st.error("⚠️ தயவுசெய்து குறிப்பில் என்ன விளக்கம் வேண்டும் என்பதை உள்ளிடவும்!")
                                 else:
-                                    supabase.table("customer_visits").update({
-                                        "status": "Needs_Clarification",
-                                        "verification_remarks": f"Operations: {ops_call_remark.strip()}"
-                                    }).eq("id", item["id"]).execute()
-                                    st.warning("⚠️ விளக்கம் கேட்டு கிளைக்கு அனுப்பப்பட்டது!")
-                                    st.rerun()
+                                    try:
+                                        supabase.table("customer_visits").update({
+                                            "status": "Needs_Clarification",
+                                            "verification_remarks": f"Operations: {ops_call_remark.strip()}"
+                                        }).eq("id", v_id).execute()
+                                        st.warning("⚠️ விளக்கம் கேட்டு கிளைக்கு அனுப்பப்பட்டது!")
+                                        st.rerun()
+                                    except Exception as e:
+                                        st.error(f"பிழை: {e}")
         # -----------------------------------------------------------------
         # ops_tab5: OTP விலக்கு இறுதி சரிபார்ப்பு மற்றும் அனுமதி (Operations Clearance)
         # -----------------------------------------------------------------
