@@ -579,25 +579,57 @@ def generate_branch_visit_no(branch_id, branch_code="BR"):
 # ==============================================================================
 # GP எண் உருவாக்கும் செயல்பாடு (GP Number Generator)
 # ==============================================================================
-def generate_gp_number(branch_code: str) -> str:
-    """கிளை கோடு/GP/வரிசை எண் உருவாக்கும் ஃபங்ஷன்"""
-    clean_code = branch_code.strip().upper() if branch_code else "BR"
+# -------------------------------------------------------------
+# 🪙 கிளை வாரியான ஜீபி எண் உருவாக்கும் செயல்பாடு (Format: AVL/GP/0001)
+# -------------------------------------------------------------
+def generate_gp_number(branch_identifier=None) -> str:
+    """கிளை கோடு அல்லது branch_id-ஐ வைத்து அடுத்த ஆட்டோ ஜீபி எண்ணை உருவாக்கும்"""
     try:
-        res = supabase.table("transactions")\
-            .select("gp_number")\
-            .ilike("gp_number", f"{clean_code}/GP/%")\
-            .order("id", desc=True)\
-            .limit(1)\
-            .execute()
+        prefix = "AVL"
         
+        # 1. கொடுக்கப்பட்ட மதிப்பு எண்ணா அல்லது பெயரா எனப் பிரித்தல்
+        if isinstance(branch_identifier, int) or (isinstance(branch_identifier, str) and branch_identifier.isdigit()):
+            b_id = int(branch_identifier)
+            seq_res = supabase.table("branch_loan_sequences").select("prefix").eq("branch_id", b_id).execute()
+            if seq_res.data and seq_res.data[0].get("prefix"):
+                prefix = str(seq_res.data[0]["prefix"]).strip().rstrip("/-")
+        elif isinstance(branch_identifier, str) and branch_identifier.strip():
+            prefix = branch_identifier.strip().upper().rstrip("/-")
+        else:
+            # session_state-ல் இருந்து பாதுகாப்பாக எடுத்தல்
+            cur_b_id = st.session_state.get("branch_id")
+            if cur_b_id:
+                seq_res = supabase.table("branch_loan_sequences").select("prefix").eq("branch_id", int(cur_b_id)).execute()
+                if seq_res.data and seq_res.data[0].get("prefix"):
+                    prefix = str(seq_res.data[0]["prefix"]).strip().rstrip("/-")
+
+        # 2. transactions அட்டவணையில் இந்தக் கிளையின் கடைசி GP எண்ணைத் தேடுதல்
+        res = (
+            supabase.table("transactions")
+            .select("gp_number")
+            .ilike("gp_number", f"{prefix}/GP/%")
+            .order("id", desc=True)
+            .limit(1)
+            .execute()
+        )
+
         last_num = 0
         if res.data and res.data[0].get("gp_number"):
-            parts = res.data[0]["gp_number"].split("/")
-            if len(parts) == 3 and parts[2].isdigit():
-                last_num = int(parts[2])
-        return f"{clean_code}/GP/{last_num + 1:04d}"
+            raw_gp = str(res.data[0]["gp_number"]).strip()
+            parts = raw_gp.split("/")
+            if len(parts) >= 3 and parts[-1].isdigit():
+                last_num = int(parts[-1])
+            else:
+                digits = "".join(filter(str.isdigit, raw_gp))
+                if digits:
+                    last_num = int(digits)
+
+        # 3. அடுத்த எண்ணை 4 இலக்க வடிவத்தில் அமைத்தல் (எ.கா: AVL/GP/0001)
+        next_no = last_num + 1
+        return f"{prefix}/GP/{next_no:04d}"
+
     except Exception:
-        return f"{clean_code}/GP/{datetime.now().strftime('%d%H%M')}"
+        return f"AVL/GP/{datetime.now().strftime('%d%H%M')}"
 
 def send_fast2sms_otp(mobile_no: str, otp_code: str):
     try:
@@ -3646,11 +3678,18 @@ else:
 
                     gp_col1, gp_col2 = st.columns(2)
                     with gp_col1:
-                        branch_code = st.session_state.get("branch_code", st.session_state.branch[:3])
-                        auto_gp_no = generate_gp_number(branch_code)
-                        gp_number = st.text_input("1) ஜீபி எண் (Auto-generated):", value=auto_gp_no, disabled=True)
+                        # 🌟 பாதுகாப்பாக branch_id அனுப்பி GP எண்ணை எடுத்தல்:
+                        auto_gp_no = generate_gp_number(st.session_state.get("branch_id"))
+                        
+                        # 🌟 key=f"gp_no_in_{fc}" கட்டாயம் சேர்க்கப்பட வேண்டும்:
+                        gp_number = st.text_input(
+                            "1) ஜீபி எண் (Auto-generated):", 
+                            value=auto_gp_no, 
+                            disabled=True,
+                            key=f"gp_no_in_{fc}"
+                        )
                     with gp_col2:
-                        voucher_no = st.text_input("2) வவுச்சர் எண் *:", placeholder="எ.கா: VCH-1002")
+                        voucher_no = st.text_input("2) வவுச்சர் எண் *:", placeholder="எ.கா: VCH-1002", key=f"gp_vch_{fc}")
 
                     st.markdown("---")
                     st.markdown("###### 📋 3) நகை விவரப் பட்டியல்:")
