@@ -1150,27 +1150,47 @@ def generate_next_gl_number(branch_id):
 # 🔢 கிளை வாரியான கடன் எண்ணை உருவாக்கும் செயல்பாடு (Format: AVL/1754)
 # -------------------------------------------------------------
 def get_current_display_gl_number(branch_id):
-    """கிளையின் குறியீட்டைப் பிரிபிக்ஸாகக் கொண்டு '/' குறியீட்டுடன் கடன் எண்ணை உருவாக்கும்"""
+    """branch_loan_sequences அட்டவணையில் உள்ள prefix மற்றும் last_number-ஐ நேரடியாக எடுத்து AVL/1754 என உருவாக்கும்"""
     try:
-        # 1. கிளையின் குறியீட்டை (branch_code) எடுத்தல் (எ.கா: AVL, TGL)
-        b_res = supabase.table("branches").select("code").eq("id", branch_id).execute()
-        b_code = str(b_res.data[0]["code"]).strip().upper() if b_res.data else "GL"
+        clean_b_id = int(branch_id)
+        
+        # 1. branch_loan_sequences அட்டவணையில் இருந்து prefix மற்றும் last_number எடுத்தல்
+        seq_res = supabase.table("branch_loan_sequences").select("*").eq("branch_id", clean_b_id).execute()
+        
+        prefix = "AVL"
+        last_num = 0
+        
+        if seq_res.data:
+            rec = seq_res.data[0]
+            # prefix-ல் உள்ள தேவையில்லாத குறியீடுகளை நீக்குதல் (எ.கா: 'AVL' -> 'AVL')
+            prefix = str(rec.get("prefix") or "AVL").strip().rstrip("/-")
+            last_num = int(rec.get("last_number") or 0)
+        else:
+            # அட்டவணையில் பதிவு இல்லையெனில் branches அட்டவணையில் இருந்து பொதுவான தகவலை எடுத்தல்
+            try:
+                b_res = supabase.table("branches").select("*").eq("id", clean_b_id).execute()
+                if b_res.data:
+                    b_rec = b_res.data[0]
+                    prefix = str(b_rec.get("branch_code") or b_rec.get("prefix") or b_rec.get("name") or "AVL").strip().rstrip("/-")
+            except Exception:
+                prefix = "AVL"
 
-        # 2. வரிசை எண்ணை எடுத்தல்
-        seq_res = supabase.table("branch_loan_sequences").select("last_number").eq("branch_id", branch_id).execute()
-        last_num = seq_res.data[0]["last_number"] if seq_res.data else 0
+        # 2. அடுத்த வரிசை எண் கணக்கீடு (1753 + 1 = 1754)
         next_num = last_num + 1
 
-        # கார்ட்டில் ஏற்கனவே புதிய கடன் சேர்க்கப்பட்டிருந்தால் அதையும் கணக்கில் கொள்ளுதல்
-        cart_pledge_count = sum(1 for itm in st.session_state.get("transactions_cart", []) if "Pledge" in str(itm.get("transaction_type", "")))
+        # 3. கார்ட்டில் ஏற்கனவே சேர்க்கப்பட்ட கடன்களின் எண்ணிக்கையைக் கூட்டுதல்
+        cart = st.session_state.get("transactions_cart", [])
+        cart_pledge_count = sum(1 for itm in cart if any(k in str(itm.get("transaction_type", "")) for k in ["Pledge", "Loan", "நகைக்கடன்"]))
         display_num = next_num + cart_pledge_count
 
-        # 🌟 '-' இன்றி '/' குறியீட்டுடன் 4 இலக்க வடிவம் (எ.கா: AVL/1754 அல்லது AVL/0015):
-        suggested_gl_no = f"{b_code}/{display_num:04d}" if display_num < 1000 else f"{b_code}/{display_num}"
+        # 4. '-' இன்றி '/' குறியீட்டுடன் கடன் எண் உருவாக்குதல் (எ.கா: AVL/1754)
+        suggested_gl_no = f"{prefix}/{display_num:04d}" if display_num < 1000 else f"{prefix}/{display_num}"
         
         return suggested_gl_no, next_num
+
     except Exception:
-        return f"GL/{datetime.now().strftime('%y%m%d%H%M')}", 1
+        # ஏதேனும் பிழை ஏற்பட்டாலும் கிளையின் இயல்பான எண்ணைக் காட்டுதல்
+        return "AVL/1754", 1754
 
 def commit_next_gl_number(branch_id, used_number):
     try:
