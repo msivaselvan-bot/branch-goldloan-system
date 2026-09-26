@@ -2129,16 +2129,16 @@ else:
                             if c_addr in ["nan", "None"]: 
                                 c_addr = ""
 
-                            cust_res = supabase.table("customers").select("id").eq("mobile", clean_mob).execute()
-                            if cust_res.data:
-                                c_id = cust_res.data[0]["id"]
-                            else:
-                                new_c = supabase.table("customers").insert({
-                                    "name": c_name, 
-                                    "mobile": clean_mob, 
-                                    "address": c_addr
-                                }).execute()
-                                c_id = new_c.data[0]["id"]
+                            # கவுண்ட்டரில் வாடிக்கையாளரைத் தேடும் இடம்:
+                            current_b_id = st.session_state.get("branch_id")
+
+                            cust_res = (
+                                supabase.table("customers")
+                                .select("*")
+                                .eq("branch_id", current_b_id)          # 👈 நடப்பு கிளைக்கு மட்டும் வடிகட்டல்
+                                .eq("mobile", search_mobile.strip())
+                                .execute()
+                            )
 
                             # தேதி சீரமைப்பு
                             raw_date = str(row.get("loan_date") or "").strip()
