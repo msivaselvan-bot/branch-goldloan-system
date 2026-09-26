@@ -1146,28 +1146,31 @@ def generate_next_gl_number(branch_id):
     except Exception as e:
         return "GL/1001", 1
 
+# -------------------------------------------------------------
+# 🔢 கிளை வாரியான கடன் எண்ணை உருவாக்கும் செயல்பாடு (Format: AVL/1754)
+# -------------------------------------------------------------
 def get_current_display_gl_number(branch_id):
-    """கார்ட்டில் உள்ள எண்ணிக்கைக்கு ஏற்ப கடன் எண்ணை முன்னும் பின்னும் நகர்த்துதல்"""
+    """கிளையின் குறியீட்டைப் பிரிபிக்ஸாகக் கொண்டு '/' குறியீட்டுடன் கடன் எண்ணை உருவாக்கும்"""
     try:
-        clean_b_id = int(branch_id)
-        res = supabase.table("branch_loan_sequences").select("*").eq("branch_id", clean_b_id).execute()
-        
-        prefix = "KMK"
-        db_last_no = 0
-        if res.data:
-            rec = res.data[0]
-            prefix = str(rec.get("prefix", "KMK")).strip().rstrip("/-")
-            db_last_no = int(rec.get("last_number", 0))
+        # 1. கிளையின் குறியீட்டை (branch_code) எடுத்தல் (எ.கா: AVL, TGL)
+        b_res = supabase.table("branches").select("code").eq("id", branch_id).execute()
+        b_code = str(b_res.data[0]["code"]).strip().upper() if b_res.data else "GL"
 
-        cart = st.session_state.get("transactions_cart", [])
-        pledge_count = sum(1 for item in cart if "Pledge" in str(item.get("transaction_type", "")))
+        # 2. வரிசை எண்ணை எடுத்தல்
+        seq_res = supabase.table("branch_loan_sequences").select("last_number").eq("branch_id", branch_id).execute()
+        last_num = seq_res.data[0]["last_number"] if seq_res.data else 0
+        next_num = last_num + 1
 
-        current_seq_no = db_last_no + pledge_count + 1
-        formatted_gl = f"{prefix}/{str(current_seq_no).zfill(4)}"
+        # கார்ட்டில் ஏற்கனவே புதிய கடன் சேர்க்கப்பட்டிருந்தால் அதையும் கணக்கில் கொள்ளுதல்
+        cart_pledge_count = sum(1 for itm in st.session_state.get("transactions_cart", []) if "Pledge" in str(itm.get("transaction_type", "")))
+        display_num = next_num + cart_pledge_count
+
+        # 🌟 '-' இன்றி '/' குறியீட்டுடன் 4 இலக்க வடிவம் (எ.கா: AVL/1754 அல்லது AVL/0015):
+        suggested_gl_no = f"{b_code}/{display_num:04d}" if display_num < 1000 else f"{b_code}/{display_num}"
         
-        return formatted_gl, current_seq_no
+        return suggested_gl_no, next_num
     except Exception:
-        return "KMK/1001", 1
+        return f"GL/{datetime.now().strftime('%y%m%d%H%M')}", 1
 
 def commit_next_gl_number(branch_id, used_number):
     try:
@@ -2058,51 +2061,123 @@ else:
             if uploaded_file and st.button("பழைய கடன்களைப் பதிவேற்று (Upload Records) 🚀", key="btn_run_bulk_upload"):
                 try:
                     df = pd.read_csv(uploaded_file) if uploaded_file.name.endswith(".csv") else pd.read_excel(uploaded_file)
-
-                    # 🌟 இந்த ஒரு வரியை மட்டும் df வாசித்த உடனே சேர்த்துக் கொள்ளுங்கள்
                     df.columns = df.columns.str.strip().str.lower()
 
-                    records = []
-                    max_gl_num = starting_gl_num
+                    # 1. அட்மின் ஸ்கீம் மாஸ்டர் விபரங்களை எடுத்தல்
+                    sch_res = supabase.table("gold_loan_schemes").select("*").execute()
+                    scheme_lookup = {}
+                    for s in (sch_res.data or []):
+                        s_name = str(s.get("scheme_name") or s.get("name") or "").strip().upper()
+                        s_code = str(s.get("scheme_code") or "").strip().upper()
+                        if s_name: scheme_lookup[s_name] = s
+                        if s_code: scheme_lookup[s_code] = s
 
-                    for _, row in df.iterrows():
-                        # மொபைல் எண்ணை ஸ்ட்ரிங்காக மற்றும் எண்களாக மட்டும் எடுத்தல்
-                        raw_mob = str(row.get("mobile", "")).split(".")[0].strip()
-                        clean_mob = "".join(filter(str.isdigit, raw_mob))[-10:]
+                    # 2. கிளை விபரங்களை எடுத்தல் (10 கிளைகளுக்கும் பொருந்தும்)
+                    b_res = supabase.table("branches").select("id, code").execute()
+                    branch_map = {str(b["code"]).strip().upper(): b["id"] for b in (b_res.data or [])}
 
-                        records.append({
-                            "branch_id": target_b_id,
-                            "transaction_type": "Pledge (Old)",
-                            "staff_name": "Admin Migration",
-                            "customer_name": str(row.get("customer_name", "")).strip(),
-                            "mobile": clean_mob,
-                            "amount": float(row.get("principal_amount", 0) or 0.0),
-                            "principal_amount": float(row.get("principal_amount", 0) or 0.0),
-                            "gross_weight": float(row.get("gross_weight", row.get("net_weight", 0)) or 0.0), # 👈 மொத்த எடை
-                            "net_weight": float(row.get("net_weight", 0) or 0.0),
-                            "item_details": str(row.get("item_details", row.get("jewel_details", "")) or "").strip(), # 👈 நகை விபரம்
-                            "remarks": f"Old GL: {str(row.get('gl_no', '')).strip()}",
-                            "status": str(row.get("status", "Approved")).strip() # 👈 கடன் நிலை
-                        })
+                    success_count = 0
+                    branch_max_seq = {}
+                    prog_bar = st.progress(0)
+                    status_text = st.empty()
+
+                    for idx, row in df.iterrows():
+                        row_no = idx + 1
+                        try:
+                            # கிளை ID கண்டறிதல்
+                            b_code = str(row.get("branch_code") or "").strip().upper()
+                            b_id = branch_map.get(b_code) or target_b_id
+
+                            # வாடிக்கையாளர் சரிபார்ப்பு / சேர்த்தல்
+                            c_name = str(row.get("customer_name") or "வாடிக்கையாளர்").strip()
+                            raw_mob = str(row.get("mobile", "")).split(".")[0].strip()
+                            clean_mob = "".join(filter(str.isdigit, raw_mob))[-10:]
+                            if not clean_mob: clean_mob = f"99999{row_no:05d}"
+                            
+                            c_addr = str(row.get("address") or "").strip()
+                            if c_addr in ["nan", "None"]: c_addr = ""
+
+                            cust_res = supabase.table("customers").select("id").eq("mobile", clean_mob).execute()
+                            if cust_res.data:
+                                c_id = cust_res.data[0]["id"]
+                            else:
+                                new_c = supabase.table("customers").insert({
+                                    "name": c_name, "mobile": clean_mob, "address": c_addr
+                                }).execute()
+                                c_id = new_c.data[0]["id"]
+
+                            # தேதி சீரமைப்பு
+                            raw_date = str(row.get("loan_date") or "").strip()
+                            try:
+                                clean_date = datetime.strptime(raw_date, "%d/%m/%Y").strftime("%Y-%m-%d")
+                            except Exception:
+                                clean_date = datetime.now().strftime("%Y-%m-%d")
+
+                            # ஸ்கீம் மாஸ்டர் வட்டி எடுத்தல்
+                            sch_in = str(row.get("scheme_name") or "").strip().upper()
+                            matched_sch = scheme_lookup.get(sch_in)
+                            roi = float(matched_sch.get("interest_rate") or matched_sch.get("rate") or 18.0) if matched_sch else 18.0
+
+                            # கடன் எண் மற்றும் அதிகபட்ச எண் கண்காணிப்பு
+                            loan_num_str = str(row.get("loan_no") or row.get("gl_no") or f"GL/{row_no}").strip()
+                            digits = "".join(filter(str.isdigit, loan_num_str))
+                            if digits:
+                                cur_val = int(digits)
+                                if b_id not in branch_max_seq or cur_val > branch_max_seq[b_id]:
+                                    branch_max_seq[b_id] = cur_val
+
+                            # 🌟 3. நேரடியாக gold_loans அட்டவணைக்குச் சேமித்தல் (17 பத்திகள் மட்டும்):
+                            loan_payload = {
+                                "branch_id": b_id,
+                                "customer_id": c_id,
+                                "loan_no": loan_num_str,
+                                "ornament_details": str(row.get("ornament_details") or row.get("item_details") or "Gold Jewellery").strip(),
+                                "items_count": int(float(row.get("items_count") or 1)),
+                                "gross_weight": float(row.get("gross_weight") or row.get("net_weight") or 0.0),
+                                "net_weight": float(row.get("net_weight") or 0.0),
+                                "purity": "916 KDM",
+                                "market_rate_per_gram": 0.0,
+                                "sanctioned_amount": float(row.get("sanctioned_amount") or row.get("principal_amount") or row.get("amount") or 0.0),
+                                "interest_rate": roi,
+                                "scheme_name": sch_in if sch_in else "Regular",
+                                "staff_name": "Admin Migration",
+                                "status": "Active",
+                                "created_at": clean_date
+                            }
+
+                            ins_res = supabase.table("gold_loans").insert(loan_payload).execute()
+                            if ins_res.data:
+                                success_count += 1
+
+                        except Exception as row_err:
+                            pass
+
+                        prog_bar.progress(row_no / len(df))
+                        status_text.text(f"ஏற்றப்படுகிறது: {row_no}/{len(df)} | வெற்றி: {success_count}")
+
+                    # -------------------------------------------------------------
+                    # 4. ஆட்டோ சீக்வென்ஸ் எண்களைப் புதுப்பித்து அறிவித்தல்
+                    # -------------------------------------------------------------
+                    if success_count > 0:
+                        for b_id, max_num in branch_max_seq.items():
+                            supabase.table("branch_loan_sequences").upsert({
+                                "branch_id": b_id,
+                                "last_number": max_num
+                            }).execute()
+
+                        st.success(f"🎉 மொத்தம் {success_count} பழைய கடன்கள் வெற்றிகரமாக `gold_loans` அட்டவணையில் ஏற்றப்பட்டன!")
                         
-                        raw_gl = str(row.get("gl_no", ""))
-                        digits = "".join(filter(str.isdigit, raw_gl))
-                        if digits and int(digits) > max_gl_num:
-                            max_gl_num = int(digits)
-                    
-                    if records:
-                        supabase.table("transactions").insert(records).execute()
-                        
-                        supabase.table("branch_loan_sequences").upsert({
-                            "branch_id": target_b_id,
-                            "prefix": branch_prefix.strip(),
-                            "last_number": int(max_gl_num)
-                        }).execute()
-                        
-                        st.success(f"✅ {len(records)} பழைய கடன்கள் வெற்றிகரமாக ஏற்றப்பட்டன! அடுத்த ஆட்டோ கடன் எண்: {branch_prefix.strip()}-{str(max_gl_num + 1).zfill(4)}")
+                        # 👈 நீங்கள் கேட்ட அறிவிப்புப் பகுதி இங்கே கச்சிதமாக அமைகிறது:
+                        st.markdown("##### 📌 கிளை வாரியாக அடுத்த புதிய கடன் எண்கள்:")
+                        for b_id, max_num in branch_max_seq.items():
+                            b_code_name = [k for k, v in branch_map.items() if v == b_id]
+                            b_code_str = b_code_name[0] if b_code_name else f"Branch_{b_id}"
+                            next_val = max_num + 1
+                            formatted_next_no = f"{b_code_str}/{next_val:04d}" if next_val < 1000 else f"{b_code_str}/{next_val}"
+                            st.info(f"🏢 கிளை **{b_code_str}**: கடைசி எண் = **{b_code_str}/{max_num}** ➡️ அடுத்த ஆட்டோ எண் = **{formatted_next_no}**")
+
                 except Exception as e:
                     st.error(f"❌ கோப்பைப் பதிவேற்றுவதில் பிழை: {e}")
-
         with tab9:
             st.subheader("🏦 தலைமையக பணப் பரிமாற்றம் (HO ⇄ Branch)")
             with st.form("adm_fund_form"):
