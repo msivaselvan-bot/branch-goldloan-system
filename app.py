@@ -631,6 +631,179 @@ def generate_gp_number(branch_identifier=None) -> str:
     except Exception:
         return f"AVL/GP/{datetime.now().strftime('%d%H%M')}"
 
+# -------------------------------------------------------------------------------------------------
+# 📜 சட்டபூர்வ தங்கக் கொள்முதல் உறுதிமொழிப் படிவம் (Legal GP Declaration & Indemnity Bond Generator)
+# -------------------------------------------------------------------------------------------------
+def generate_gp_declaration_html(gp_data):
+    """
+    Direct மற்றும் Takeover இரண்டிற்கும் சட்டப்படி செல்லுபடியாகும் 
+    A4 பிரிண்ட் உறுதிமொழிப் படிவத்தை (HTML/CSS) உருவாக்கும் ஃபங்க்ஷன்.
+    """
+    is_takeover = "Takeover" in str(gp_data.get("gp_mode", ""))
+    
+    # நகைகள் அட்டவணை வரிசைகள்
+    ornament_rows_html = ""
+    for idx, item in enumerate(gp_data.get("ornaments", [])):
+        ornament_rows_html += f"""
+        <tr>
+            <td style="text-align: center;">{idx + 1}</td>
+            <td>{item.get('item', '-')}</td>
+            <td style="text-align: center;">{item.get('count', 1)}</td>
+            <td style="text-align: right;">{float(item.get('gross_wt', 0)):.3f} g</td>
+            <td style="text-align: right;">{float(item.get('net_wt', 0)):.3f} g</td>
+            <td style="text-align: center;">{item.get('purity', '916 KDM')}</td>
+        </tr>
+        """
+
+    # டேக் ஓவர் நிதி விவரங்கள் (Takeover ஆக இருந்தால் மட்டும்)
+    takeover_section_html = ""
+    if is_takeover:
+        takeover_section_html = f"""
+        <div style="background-color: #f8f9fa; border: 1px solid #dee2e6; padding: 10px; border-radius: 5px; margin-top: 10px; font-size: 13px;">
+            <strong style="color: #723a91;">🏦 பிற நிறுவனக் கடன் மீட்பு விவரம் (Takeover Loan Settlement):</strong>
+            <table style="width: 100%; margin-top: 5px; font-size: 12px; border-collapse: collapse;">
+                <tr>
+                    <td style="width: 50%;"><strong>முந்தைய வங்கி / நிறுவனம்:</strong> {gp_data.get('bank_source', '-')}</td>
+                    <td style="width: 50%;"><strong>அடகு கடன் எண்:</strong> {gp_data.get('prev_loan_no', '-')}</td>
+                </tr>
+                <tr>
+                    <td><strong>நிறுவனத்திற்கு செலுத்திய மீட்புத் தொகை:</strong> ₹{float(gp_data.get('advance_paid', 0)):,.2f}</td>
+                    <td><strong>வாடிக்கையாளருக்கு வழங்கிய மீதித் தொகை:</strong> ₹{float(gp_data.get('balance_payable', 0)):,.2f}</td>
+                </tr>
+            </table>
+        </div>
+        """
+
+    html_content = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <style>
+            @page {{ size: A4; margin: 15mm; }}
+            body {{ font-family: 'Arial', 'Latha', sans-serif; color: #111; line-height: 1.4; font-size: 12px; }}
+            .header {{ text-align: center; border-bottom: 2px solid #723a91; padding-bottom: 8px; margin-bottom: 12px; }}
+            .header h2 {{ margin: 0; color: #723a91; font-size: 20px; }}
+            .header p {{ margin: 2px 0; font-size: 11px; color: #555; }}
+            .title-badge {{ display: inline-block; background-color: #723a91; color: #fff; padding: 4px 15px; border-radius: 3px; font-weight: bold; font-size: 13px; margin-top: 6px; }}
+            .meta-box {{ display: flex; justify-content: space-between; margin-bottom: 12px; font-size: 12px; border: 1px solid #ccc; padding: 8px; border-radius: 4px; }}
+            table.data-table {{ width: 100%; border-collapse: collapse; margin-top: 8px; margin-bottom: 10px; }}
+            table.data-table th, table.data-table td {{ border: 1px solid #999; padding: 5px 8px; font-size: 11px; }}
+            table.data-table th {{ background-color: #f2f2f2; text-align: center; }}
+            .legal-terms {{ border: 1px solid #333; padding: 10px; font-size: 11px; text-align: justify; background-color: #fafafa; border-radius: 4px; margin-top: 10px; }}
+            .signatures {{ width: 100%; margin-top: 35px; border-collapse: collapse; }}
+            .signatures td {{ vertical-align: top; text-align: center; font-size: 11px; padding: 0 10px; }}
+            @media print {{
+                .no-print {{ display: none !important; }}
+                body {{ -webkit-print-color-adjust: exact; }}
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="no-print" style="margin-bottom: 15px; text-align: right;">
+            <button onclick="window.print()" style="background-color: #723a91; color: white; padding: 8px 18px; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: bold;">🖨️ பிரிண்ட் எடுக்க (Print Form)</button>
+        </div>
+
+        <div class="header">
+            <h2>முத்துசிஸ் கோல்டு கம்பெனி (Muthusise Gold Company)</h2>
+            <p>கிளை: {gp_data.get('branch_name', 'முதன்மை கிளை')} | தொடர்புக்கு: {gp_data.get('branch_phone', 'Official Branch Contact')}</p>
+            <div class="title-badge">பழைய தங்க நகைகள் விற்பனை & சட்டபூர்வ உரிமை உறுதிமொழிப் படிவம் (GP DECLARATION)</div>
+        </div>
+
+        <table style="width: 100%; margin-bottom: 8px; font-size: 12px;">
+            <tr>
+                <td style="width: 50%;"><strong>ஜீபி எண் (GP No):</strong> <span style="font-size: 14px; font-weight: bold; color: #723a91;">{gp_data.get('gp_number')}</span></td>
+                <td style="width: 50%; text-align: right;"><strong>தேதி (Date):</strong> {gp_data.get('date')}</td>
+            </tr>
+            <tr>
+                <td><strong>வவுச்சர் எண் (Voucher No):</strong> {gp_data.get('voucher_no', '-')}</td>
+                <td style="text-align: right;"><strong>விற்பனை முறை:</strong> {gp_data.get('gp_mode')}</td>
+            </tr>
+        </table>
+
+        <!-- வாடிக்கையாளர் விவரம் -->
+        <div style="border: 1px solid #ccc; padding: 8px; border-radius: 4px; margin-bottom: 8px; font-size: 12px;">
+            <table style="width: 100%;">
+                <tr>
+                    <td style="width: 50%;"><strong>விற்பனையாளர் பெயர்:</strong> {gp_data.get('customer_name')}</td>
+                    <td style="width: 50%;"><strong>மொபைல் எண்:</strong> {gp_data.get('customer_mobile')}</td>
+                </tr>
+                <tr>
+                    <td colspan="2"><strong>முகவரி:</strong> {gp_data.get('customer_address', 'பதிவு செய்யப்படவில்லை')}</td>
+                </tr>
+            </table>
+        </div>
+
+        <!-- நகைகள் பட்டியல் -->
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>வ.எண்</th>
+                    <th>நகை விவரம் (Ornament)</th>
+                    <th>எண்ணிக்கை</th>
+                    <th>மொத்த எடை (Gross Wt)</th>
+                    <th>நிகர எடை (Net Wt)</th>
+                    <th>தூய்மை (Purity)</th>
+                </tr>
+            </thead>
+            <tbody>
+                {ornament_rows_html}
+                <tr style="font-weight: bold; background-color: #f9f9f9;">
+                    <td colspan="2" style="text-align: right;">மொத்தம்:</td>
+                    <td style="text-align: center;">{gp_data.get('total_items', 1)}</td>
+                    <td style="text-align: right;">{float(gp_data.get('gross_wt', 0)):.3f} g</td>
+                    <td style="text-align: right;">{float(gp_data.get('net_wt', 0)):.3f} g</td>
+                    <td style="text-align: center;">-</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <div style="text-align: right; font-size: 13px; margin: 6px 0;">
+            <strong>நிர்ணயிக்கப்பட்ட மொத்த கொள்முதல் மதிப்பு:</strong> <span style="font-size: 16px; font-weight: bold; color: #b33939;">₹{float(gp_data.get('total_value', 0)):,.2f}</span>
+        </div>
+
+        {takeover_section_html}
+
+        <!-- சட்டபூர்வ உறுதிமொழி -->
+        <div class="legal-terms">
+            <strong style="text-decoration: underline;">வாடிக்கையாளரின் சட்டபூர்வ உறுதிமொழி & நிபந்தனைகள்:</strong>
+            <ol style="margin: 4px 0 0 15px; padding: 0;">
+                <li>மேலே விவரிக்கப்பட்ட தங்க நகைகள் அனைத்தும் எனது சுய உழைப்பில்/பூர்வீகமாக/பரிசாக எனக்குச் சொந்தமானவை. இந்நகைகள் மீது வேறு எவருக்கும் எவ்வித உரிமையோ, கூட்டுரிமையோ அல்லது நிதியியல் வில்லங்கங்களோ இல்லை.</li>
+                <li>இந்நகைகள் எந்த ஒரு குற்றச் செயலிலோ, திருட்டு சம்பவத்திலோ தொடர்புடையவை அல்ல என்றும், காவல் துறை அல்லது நீதிமன்றத்தில் எவ்வித வழக்கும் நிலுவையில் இல்லை என்றும் முழு மனதுடன் உறுதி கூறுகிறேன்.</li>
+                <li>இந்நகைகளின் மாற்றுத்தரம் மற்றும் எடையை எனது முன்னிலையிலேயே பரிசோதித்து, தற்போதைய சந்தை மதிப்பை முழுமையாக அறிந்து, என் சொந்த விருப்பத்தின் பேரில் முத்துசிஸ் கோல்டு கம்பெனிக்கு நிரந்தரமாக விற்பனை செய்கிறேன்.</li>
+                <li><strong>இழப்பீட்டுப் பொறுப்பு:</strong> இந்நகைகள் சம்பந்தமாக எதிர்காலத்தில் காவல் துறை, நீதிமன்றம் அல்லது எந்த ஒரு மூன்றாம் நபராலும் ஏதேனும் சட்டரீதியான ஆட்சேபனையோ, புகாரோ அல்லது இழப்போ ஏற்பட்டால், அதற்கு <u>நானே முழு முதற் பொறுப்பாவேன்</u>. மேலும் முத்துசிஸ் கோல்டு கம்பெனிக்கு ஏற்படும் அனைத்து இழப்பீடுகளையும் நானே முழுமையாக ஈடுசெய்வேன் என உறுதியளிக்கிறேன்.</li>
+            </ol>
+        </div>
+
+        <!-- கையொப்பங்கள் -->
+        <table class="signatures">
+            <tr>
+                <td style="width: 33%;">
+                    <div style="border-top: 1px dashed #333; padding-top: 5px; margin-top: 35px;">
+                        <strong>வாடிக்கையாளர் கையொப்பம் / இடது பெருவிரல் ரேகை</strong><br>
+                        (Customer Signature / LTI)
+                    </div>
+                </td>
+                <td style="width: 33%;">
+                    <div style="border-top: 1px dashed #333; padding-top: 5px; margin-top: 35px;">
+                        <strong>சாட்சி 1 (அறிமுகம் / ரெபரண்ஸ்):</strong><br>
+                        பெயர்: {gp_data.get('ref1_name', '-')}<br>
+                        மொபைல்: {gp_data.get('ref1_phone', '-')}
+                    </div>
+                </td>
+                <td style="width: 34%;">
+                    <div style="border-top: 1px dashed #333; padding-top: 5px; margin-top: 35px;">
+                        <strong>அங்கீகரிக்கப்பட்ட கிளை அலுவலர்</strong><br>
+                        முத்துசிஸ் கோல்டு கம்பெனி
+                    </div>
+                </td>
+            </tr>
+        </table>
+    </body>
+    </html>
+    """
+    return html_content        
+
 def send_fast2sms_otp(mobile_no: str, otp_code: str):
     try:
         api_key = "eBGQYanRZNKVCpMSg3KB5kUxY2QhDnOjxesh3Hqr7FOG792XV9wut4TPhQia"
@@ -3769,7 +3942,7 @@ else:
                     with ref2_c3:
                         gp_ref2_rel = st.text_input("உறவுமுறை:", key="gp_r2_r")
                     with ref2_c4:
-                        gp_ref2_phone = st.text_input("மொபைல் எண்:", key="gp_r2_p")
+                        gp_ref2_phone = st.text_input("மொபைல் எண்:", key="gp_r2_p"
 
                     paid_amt = balance_payable if is_takeover else total_gp_value
                     received_amt = 0.0
@@ -3777,6 +3950,46 @@ else:
                     gp_remarks = f"GP வகை: {gp_mode} | வவுச்சர்: {voucher_no.strip() if voucher_no else '-'} | உருப்படிகள்: {calc_total_items} nos | நிகர எடை: {calc_total_net:.3f}g"
                     if is_takeover:
                         gp_remarks += f" | அட்வான்ஸ்: ₹{advance_paid:,.2f} | மீதி: ₹{balance_payable:,.2f}"
+                    
+                    # -----------------------------------------------------------------
+                    # 📄 சட்டபூர்வ உறுதிமொழிப் படிவ முன்னோட்டம் & பிரிண்ட் பட்டன்
+                    # -----------------------------------------------------------------
+                    st.markdown("---")
+                    col_gp_act1, col_gp_act2 = st.columns(2)
+                    with col_gp_act1:
+                        if st.button("📄 சட்டபூர்வ உறுதிமொழிப் படிவத்தை உருவாக்கு (Generate GP Form)", key="btn_gen_gp_doc"):
+                            st.session_state["show_gp_print_modal"] = True
+
+                    if st.session_state.get("show_gp_print_modal"):
+                        st.markdown("---")
+                        st.subheader("🖨️ வாடிக்கையாளர் உறுதிமொழிப் படிவம் (Print Preview)")
+                        
+                        gp_preview_data = {
+                            "gp_number": gp_number,
+                            "voucher_no": voucher_no,
+                            "date": datetime.now().strftime("%d/%m/%Y"),
+                            "gp_mode": gp_mode,
+                            "branch_name": st.session_state.get("branch_name", "Aundivilai"),
+                            "branch_phone": st.session_state.get("branch_phone", ""),
+                            "customer_name": visit.get("customer_name"),
+                            "customer_mobile": visit.get("mobile"),
+                            "customer_address": visit.get("address", ""),
+                            "ornaments": st.session_state.gp_ornament_rows,
+                            "total_items": calc_total_items,
+                            "gross_wt": calc_total_gross,
+                            "net_wt": calc_total_net,
+                            "total_value": total_gp_value,
+                            "bank_source": bank_source if is_takeover else "",
+                            "prev_loan_no": prev_loan_no if is_takeover else "",
+                            "advance_paid": advance_paid if is_takeover else 0.0,
+                            "balance_payable": balance_payable if is_takeover else total_gp_value,
+                            "ref1_name": gp_ref1_name,
+                            "ref1_phone": gp_ref1_phone
+                        }
+
+                        import streamlit.components.v1 as components
+                        doc_html = generate_gp_declaration_html(gp_preview_data)
+                        components.html(doc_html, height=800, scrolling=True)
 
                     if st.button("➕ பட்டியலில் சேர் (Add to Cart)", type="primary", key="btn_add_gp_to_cart"):
                         if not voucher_no.strip():
