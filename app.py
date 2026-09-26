@@ -1057,28 +1057,65 @@ def load_branches_data():
     except Exception as e:
         return []
 
+# -------------------------------------------------------------
+# 🏷️ அட்மின் ஸ்கீம் மாஸ்டரில் இருந்து முழு திட்டங்களை எடுக்கும் செயல்பாடு
+# -------------------------------------------------------------
 @st.cache_data(ttl=60)
 def get_active_loan_schemes():
+    """அட்மின் அமைத்த செயல்பாட்டில் உள்ள கடன் திட்டங்களின் முழு விவரங்களை வழங்கும்"""
     try:
         res = supabase.table("gold_loan_schemes").select("*").execute()
         if res.data:
-            schemes = []
+            valid_schemes = []
             for row in res.data:
-                # திட்டத்தின் பெயர் அல்லது ஸ்கீம் கோடு
+                # is_active பத்தி இருந்து False என இருந்தால் மட்டும் தவிர்க்கும்
+                if row.get("is_active") is False:
+                    continue
+
+                # திட்டத்தின் பெயர்
                 s_name = (
                     row.get("scheme_name") or 
                     row.get("name") or 
                     row.get("scheme_code") or 
                     row.get("scheme")
                 )
-                if s_name:
-                    schemes.append(str(s_name).strip())
+                if not s_name:
+                    continue
+
+                # திட்டத்தின் வட்டி, காலம் மற்றும் கிராம் விலை ஆகியவற்றை எடுத்தல்
+                valid_schemes.append({
+                    "id": row.get("id"),
+                    "scheme_name": str(s_name).strip(),
+                    "scheme_code": str(row.get("scheme_code") or s_name[:6]).strip().upper(),
+                    "interest_rate": float(row.get("interest_rate") or row.get("rate") or row.get("roi") or 18.0),
+                    "tenure_months": int(row.get("tenure_months") or row.get("tenure") or row.get("duration") or 12),
+                    "max_rate_per_gram": float(row.get("max_rate_per_gram") or row.get("rpg") or row.get("rate_per_gram") or 0.0),
+                })
             
-            if schemes:
-                return list(dict.fromkeys(schemes))
+            if valid_schemes:
+                return valid_schemes
     except Exception:
         pass
-    return ["VVH149", "Standard Gold Loan"]
+
+    # டேட்டாபேஸ் கிடைக்காத பட்சத்தில் இயல்பான மாற்றுத் திட்டங்கள் (Fallback)
+    return [
+        {
+            "id": 1,
+            "scheme_name": "VVH149",
+            "scheme_code": "VVH149",
+            "interest_rate": 18.0,
+            "tenure_months": 12,
+            "max_rate_per_gram": 6500.0
+        },
+        {
+            "id": 2,
+            "scheme_name": "Standard Gold Loan",
+            "scheme_code": "STDGL",
+            "interest_rate": 12.0,
+            "tenure_months": 3,
+            "max_rate_per_gram": 6800.0
+        }
+    ]
 
 def generate_next_gl_number(branch_id):
     try:
@@ -3273,6 +3310,10 @@ else:
 
                 # 1. நகைக்கடன் (Pledge)
                 if "Pledge" in txn_category:
+                    # 🌟 அட்மின் திட்டங்களை எடுத்தல்
+                    db_schemes = get_active_loan_schemes()
+                    scheme_map = {s["scheme_name"]: s for s in db_schemes} if db_schemes else {}
+                    
                     pl_col1, pl_col2, pl_col3 = st.columns(3)
             
                     with pl_col1:
@@ -3286,8 +3327,18 @@ else:
                             key=f"gl_no_in_{fc}"
                         )
                         
-                        db_schemes = get_active_loan_schemes()
-                        scheme_name = st.selectbox("அட்மின் நகைக் கடன் திட்டம் (Scheme) *", db_schemes, key=f"sch_sel_{fc}")
+                        # திட்டங்கள் தேர்வுப் பட்டியல் (Scheme Dropdown)
+                        scheme_options = list(scheme_map.keys()) if scheme_map else ["Standard Gold Loan"]
+                        selected_scheme = st.selectbox(
+                            "அட்மின் நகைக் கடன் திட்டம் (Scheme) *", 
+                            options=scheme_options, 
+                            key=f"sch_sel_{fc}"
+                        )
+                        scheme_name = selected_scheme
+                        cur_scheme = scheme_map.get(selected_scheme, {})
+                        cur_rpg = float(cur_scheme.get("max_rate_per_gram", 0.0))
+                        cur_roi = float(cur_scheme.get("interest_rate", 18.0))
+                        cur_tenure = int(cur_scheme.get("tenure_months", 12))
 
                     with pl_col2:
                         total_weight = st.number_input("மொத்த எடை (Gross Weight - gms) *", min_value=0.0, step=0.001, format="%.3f", key=f"gwt_in_{fc}")
@@ -3297,15 +3348,26 @@ else:
                         paid_amt = st.number_input("கடன் தொகை (Paid ₹) *", min_value=0.0, step=500.0, key=f"amt_in_{fc}")
                         other_charges = st.number_input("இதர கட்டணங்கள் (Other Charges ₹)", min_value=0.0, step=10.0, key=f"chg_in_{fc}")
 
+                    # 💡 திட்டத்தின் வட்டி மற்றும் அதிகபட்ச கடன் தகுதியைக் காட்டுதல்
+                    max_eligible = net_weight * cur_rpg if cur_rpg > 0 else 0.0
+                    info_col1, info_col2, info_col3 = st.columns(3)
+                    with info_col1:
+                        st.caption(f"📈 ஆண்டு வட்டி: **{cur_roi}%** ({cur_roi/12:.2f}% / மாதம்)")
+                    with info_col2:
+                        st.caption(f"⏳ கால அளவு: **{cur_tenure} மாதங்கள்**")
+                    with info_col3:
+                        if cur_rpg > 0:
+                            st.caption(f"💰 அதிகபட்ச கடன் தகுதி (RPG ₹{cur_rpg:,.2f}): **₹{max_eligible:,.2f}**")
+
                     ornament_details = st.text_area("நகை விபரம்", key=f"orn_det_{fc}")
                     ornament_file = st.file_uploader("நகை படம்", type=["jpg", "jpeg", "png"], key=f"orn_file_{fc}")
                     detail_summary = [
-                        f"GL: {new_gl_no if 'new_gl_no' in locals() else '-'}", 
-                        f"ஸ்கீம்: {selected_scheme if 'selected_scheme' in locals() else (scheme_name if 'scheme_name' in locals() else '-')}", 
-                        f"RPG: ₹{cur_rpg if 'cur_rpg' in locals() else '-'}", 
-                        f"எடை: {net_weight if 'net_weight' in locals() else 0.0}g"
+                        f"GL: {new_gl_no}", 
+                        f"ஸ்கீம்: {selected_scheme}", 
+                        f"வட்டி: {cur_roi}%",
+                        f"RPG: ₹{cur_rpg:,.2f}", 
+                        f"எடை: {net_weight:.3f}g"
                     ]
-
                 # 2. அடமானம் மீட்டல் (GL Release)
                 elif txn_category == "GL Release (அடமானம் மீட்டல்)":
                     # 🌟 வாடிக்கையாளரின் மொபைல் மற்றும் பெயரைப் பாதுகாப்பாக எடுத்தல்
@@ -3647,6 +3709,12 @@ else:
                                 "nominee_name": nominee_name if ('nominee_name' in locals() and nominee_name) else "",
                                 "nominee_relation": nominee_relation if ('nominee_relation' in locals() and nominee_relation) else "",
                                 "nominee_address": nominee_address if ('nominee_address' in locals() and nominee_address) else "",
+
+                                # 🌟 திட்ட மாஸ்டரின் தகவல்கள் (Scheme Master Details):
+                                "scheme_name": selected_scheme if 'selected_scheme' in locals() else (scheme_name if 'scheme_name' in locals() else ""),
+                                "interest_rate": float(cur_roi) if 'cur_roi' in locals() else 18.0,
+                                "tenure_months": int(cur_tenure) if 'cur_tenure' in locals() else 12,
+                                "market_rate": float(cur_rpg) if 'cur_rpg' in locals() else 0.0
                             }
 
                             # 🌟 அடமானம் மீட்டல் (Release) என்றால் Closed செய்யக் குறித்தல்:
@@ -3670,16 +3738,8 @@ else:
                             if "மீட்டல்" in txn_category or "Release" in txn_category:
                                 cart_entry["closed_gl_no"] = selected_gl_no if 'selected_gl_no' in locals() else ""
                                 cart_entry["closed_loan_id"] = selected_loan_db_id if 'selected_loan_db_id' in locals() else None
-
-                            # 🌟 புதிய அடமானம் (Pledge) கார்ட்டில் சேர்ந்தால் அடுத்த ஆட்டோ கடன் எண்ணை உறுதி செய்தல்
-                            if "Pledge" in txn_category and 'next_seq_num' in locals():
-                                commit_next_gl_number(st.session_state.branch_id, next_seq_num)
-
-                            st.session_state.transactions_cart.append(cart_entry)
-                            st.session_state.form_reset_counter += 1
-                            st.rerun()
-
-                            # Pledge உறுதி ஆவணம் உருவாக்கம்
+                            
+                            # 1. Pledge உறுதி ஆவணம் உருவாக்கம் (Declaration Form)
                             if "Pledge" in txn_category:
                                 decl_payload = {
                                     "customer_name": visit.get("customer_name", ""),
@@ -3693,6 +3753,16 @@ else:
                                 }
                                 st.session_state.declaration_gl_no = new_gl_no if 'new_gl_no' in locals() else "GL"
                                 st.session_state.current_declaration = generate_declaration_html(decl_payload)
+
+                            # 2. புதிய அடமானம் (Pledge) கார்ட்டில் சேர்ந்தால் அடுத்த ஆட்டோ கடன் எண்ணை உறுதி செய்தல்
+                            if "Pledge" in txn_category and 'next_seq_num' in locals():
+                                commit_next_gl_number(st.session_state.branch_id, next_seq_num)
+
+                            # 3. கார்ட்டில் சேர்த்தல் மற்றும் படிவத்தை ரீசெட் செய்தல்
+                            st.session_state.transactions_cart.append(cart_entry)
+                            st.session_state.form_reset_counter += 1
+                            st.rerun()
+
 
                             # கார்ட்டில் சேர்த்த பின் படிவத்தை ரீசெட் செய்தல்
                             if "form_reset_counter" not in st.session_state:
