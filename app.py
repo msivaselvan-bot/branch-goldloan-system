@@ -4392,6 +4392,8 @@ else:
                                     st.session_state.current_declaration = None
                                     st.session_state.declaration_gl_no = None
                                     st.rerun()
+                                except Exception as e:
+                                    st.error(f"நிறைவு செய்வதில் பிழை: {e}")
         # =========================================================================
         # 2-வது டேப்: கிளை ஆவணங்கள் பதிவேற்றம் (Upload Docs Desk)
         # =========================================================================
