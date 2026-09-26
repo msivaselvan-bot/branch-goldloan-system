@@ -1201,61 +1201,83 @@ def commit_next_gl_number(branch_id, used_number):
     except Exception:
         pass
 
+# -----------------------------------------------------------------------------------------
+# 🔍 குறிப்பிட்ட கிளையில் வாடிக்கையாளரின் நிலுவையில் உள்ள (Active) கடன்களை மட்டும் எடுத்தல்
+# -----------------------------------------------------------------------------------------
 def get_customer_active_loans(customer_mobile="", customer_name="", branch_id=None):
-    """வாடிக்கையாளரின் சரியான கடன்களை மட்டும் துல்லியமாக எடுத்தல்"""
+    """
+    1. நடப்பு கிளைக்குரிய கடன்களை மட்டும் காட்டும் (Branch Isolation).
+    2. gold_loans அட்டவணையில் இருந்து Active கடன்களை மட்டும் எடுக்கும்.
+    3. பழைய UI குறியீடுகள் எவையும் உடையாமல் இருக்க gl_no, principal போன்ற பழைய பெயர்களையும் தரும்.
+    """
     try:
-        # 1. வெறும் Pledge கடன்களை மட்டுமே எடுக்க வேண்டும் (Release பரிவர்த்தனைகளைத் தவிர்க்க)
-        res = supabase.table("transactions").select("*").ilike("transaction_type", "%Pledge%").execute()
-        
-        if not res.data:
+        # 1. நடப்பு கிளையின் ID-ஐ உறுதி செய்தல்
+        b_id = branch_id or st.session_state.get("branch_id")
+        if not b_id:
             return []
-            
-        all_rows = res.data
-        active_loans = []
 
-        clean_nm = str(customer_name).strip().lower() if customer_name else ""
         clean_mob = "".join(filter(str.isdigit, str(customer_mobile)))[-10:] if customer_mobile else ""
+        c_ids = []
 
-        for row in all_rows:
-            # Closed கடன்களைத் தவிர்த்தல்
-            status_val = str(row.get("status") or "").strip().lower()
-            if status_val == "closed":
-                continue
+        # 2. வாடிக்கையாளர் ID-ஐ கண்டறிதல் (மொபைல் எண் மூலம் முதன்மைத் தேடல்)
+        if clean_mob:
+            c_res = supabase.table("customers").select("id").eq("mobile", clean_mob).execute()
+            if c_res.data:
+                c_ids = [c["id"] for c in c_res.data]
+        
+        # மொபைல் எண் இல்லாத பட்சத்தில் பெயரை வைத்து அதே கிளையில் மட்டும் தேடுதல்
+        if not c_ids and customer_name:
+            c_name_clean = str(customer_name).strip()
+            c_res = supabase.table("customers").select("id").eq("branch_id", b_id).ilike("name", f"%{c_name_clean}%").execute()
+            if c_res.data:
+                c_ids = [c["id"] for c in c_res.data]
 
-            # Release பதிவுகள் தவறுதலாக வந்துவிடாமல் தடுத்தல்
-            tx_type = str(row.get("transaction_type") or "").lower()
-            if "release" in tx_type or "மீட்டல்" in tx_type:
-                continue
+        if not c_ids:
+            return []
 
-            row_name = str(row.get("customer_name") or "").strip().lower()
-            row_mob = "".join(filter(str.isdigit, str(row.get("mobile") or "")))[-10:]
+        # 3. 🌟 gold_loans அட்டவணையில் இருந்து நடப்பு கிளை + இந்த வாடிக்கையாளர் + Active கடன்களை மட்டும் எடுத்தல்
+        loans_res = (
+            supabase.table("gold_loans")
+            .select("*")
+            .eq("branch_id", b_id)                                           # 👈 நடப்பு கிளைக்கு மட்டுமேயான வடிகட்டல்
+            .in_("customer_id", c_ids)                                       # 👈 இந்த குறிப்பிட்ட வாடிக்கையாளர்
+            .in_("status", ["Active", "active", "Approved", "active\r"])      # 👈 நிலுவையில் உள்ள கடன்கள் மட்டும்
+            .order("id", desc=True)
+            .execute()
+        )
 
-            match_found = False
-            
-            # 🌟 மொபைல் அல்லது பெயர் துல்லியமாகப் பொருந்தினால் மட்டுமே அனுமதிக்க வேண்டும்
-            if clean_mob and row_mob and clean_mob == row_mob:
-                match_found = True
-            elif clean_nm and row_name and (clean_nm in row_name or row_name in clean_nm):
-                match_found = True
+        if not loans_res.data:
+            return []
 
-            if match_found:
-                gl_no = row.get("loan_number") or row.get("gp_number") or row.get("gl_no") or ""
-                remarks = str(row.get("remarks") or "")
-                
-                if not gl_no:
-                    if "Old GL:" in remarks:
-                        gl_no = remarks.split("Old GL:")[-1].split("|")[0].strip()
-                    elif "GL:" in remarks:
-                        gl_no = remarks.split("GL:")[-1].split("|")[0].strip()
-                
-                if gl_no:
-                    active_loans.append({
-                        "id": row.get("id"),
-                        "gl_no": gl_no,
-                        "principal": float(row.get("principal_amount") or row.get("amount") or 0.0),
-                        "net_wt": float(row.get("net_weight") or 0.0)
-                    })
+        active_loans = []
+        for row in loans_res.data:
+            l_num = str(row.get("loan_no") or "").strip()
+            p_amt = float(row.get("sanctioned_amount") or 0.0)
+            n_wt = float(row.get("net_weight") or 0.0)
+            g_wt = float(row.get("gross_weight") or 0.0)
+            roi = float(row.get("interest_rate") or 18.0)
 
+            # பழைய UI மற்றும் புதிய UI இரண்டிற்கும் பொருந்தும் வகையில் தகவல்களை அமைத்தல்:
+            active_loans.append({
+                "id": row.get("id"),
+                "loan_no": l_num,
+                "gl_no": l_num,                                   # 👈 பழைய UI-க்காக
+                "principal": p_amt,                               # 👈 பழைய UI-க்காக
+                "sanctioned_amount": p_amt,
+                "net_wt": n_wt,                                   # 👈 பழைய UI-க்காக
+                "net_weight": n_wt,
+                "gross_weight": g_wt,
+                "ornament_details": row.get("ornament_details") or "Gold Jewellery",
+                "scheme_name": row.get("scheme_name") or "Regular",
+                "interest_rate": roi,
+                "created_at": str(row.get("created_at") or "")[:10]
+            })
+
+        return active_loans
+
+    except Exception as e:
+        return []
+        
         # கார்ட்டில் ஏற்கனவே சேர்க்கப்பட்ட கடன்களை நீக்குதல்
         cart_closed_gls = [
             c.get("closed_gl_no") for c in st.session_state.get("transactions_cart", []) 
