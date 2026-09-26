@@ -3991,38 +3991,60 @@ else:
                         doc_html = generate_gp_declaration_html(gp_preview_data)
                         components.html(doc_html, height=800, scrolling=True)
 
+                    # -------------------------------------------------------------
+                    # ➕ GP நடவடிக்கையைக் கார்ட்டில் சேர்த்தல் (Add to Cart)
+                    # -------------------------------------------------------------
                     if st.button("➕ பட்டியலில் சேர் (Add to Cart)", type="primary", key="btn_add_gp_to_cart"):
                         if not voucher_no.strip():
                             st.warning("⚠️ தயவுசெய்து வவுச்சர் எண்ணை உள்ளிடவும்!")
                         elif total_gp_value <= 0:
                             st.warning("⚠️ மொத்த மதிப்பு ₹0-க்கு மேல் இருக்க வேண்டும்!")
+                        elif is_takeover and not bank_source.strip():
+                            st.warning("⚠️ தயவுசெய்து முந்தைய நிறுவனம் / வங்கிப் பெயரை உள்ளிடவும்!")
+                        elif is_takeover and not prev_loan_no.strip():
+                            st.warning("⚠️ தயவுசெய்து முந்தைய அடகு கடன் எண்ணை உள்ளிடவும்!")
                         else:
                             try:
                                 with st.spinner("விவரங்கள் கார்ட்டில் சேர்க்கப்படுகின்றன..."):
                                     cust_pic_url = upload_ornament_image(cust_with_ornaments_img) if cust_with_ornaments_img else None
                                     orn_pic_url = upload_ornament_image(ornaments_summary_img) if ornaments_summary_img else None
 
+                                    # நகைகள் விவரங்களை டெக்ஸ்டாக மாற்றுதல்
                                     orn_list_details = []
+                                    valid_ornaments = []
                                     for idx, r in enumerate(st.session_state.gp_ornament_rows):
                                         if r.get("item", "").strip():
                                             orn_list_details.append(
                                                 f"{idx+1}. {r['item']} ({r.get('count', 1)} nos) - Gross: {r.get('gross_wt', 0.0)}g, Net: {r.get('net_wt', 0.0)}g, Purity: {r.get('purity', '916 KDM')}"
                                             )
+                                            valid_ornaments.append(dict(r))
+                                    
                                     full_ornament_text = "\n".join(orn_list_details) if orn_list_details else "விவரங்கள் இல்லை"
 
+                                    # 🌟 gold_purchases மற்றும் transactions ஆகிய இரண்டிற்கும் தேவையான முழு விவரங்களையும் கார்ட்டில் சேர்த்தல்:
                                     st.session_state.transactions_cart.append({
                                         "transaction_type": f"GP - {gp_mode}",
+                                        "gp_mode": gp_mode,
+                                        "is_takeover": is_takeover,
                                         "staff_name": staff,
                                         "paid_amount": float(paid_amt),
                                         "received_amount": 0.0,
                                         "amount": float(total_gp_value),
+                                        "total_value": float(total_gp_value),
+                                        "advance_paid": float(advance_paid if is_takeover else 0.0),
+                                        "balance_payable": float(balance_payable if is_takeover else total_gp_value),
+                                        "bank_source": bank_source.strip() if is_takeover else "",
+                                        "prev_loan_no": prev_loan_no.strip() if is_takeover else "",
                                         "remarks": gp_remarks,
+                                        "custom_remarks": custom_remarks,
                                         "ornament_details": full_ornament_text,
+                                        "ornaments": valid_ornaments,                    # 👈 gold_purchases அட்டவணைக்குத் தேவையான பட்டியல்
                                         "other_charges": 0.0,
                                         "ornament_image_url": orn_pic_url,
                                         "customer_photo_url": cust_pic_url,
                                         "total_weight": float(calc_total_gross),
                                         "net_weight": float(calc_total_net),
+                                        "gross_weight": float(calc_total_gross),
                                         "gp_number": gp_number,
                                         "voucher_no": voucher_no.strip(),
                                         "ref1_name": f"{gp_ref1_name} ({gp_ref1_rel})" if gp_ref1_name else "",
@@ -4033,9 +4055,15 @@ else:
                                         "interest_amount": 0.0
                                     })
 
+                                    # கார்ட்டில் சேர்த்த பின் படிவத்தை ரீசெட் செய்தல்
                                     st.session_state.gp_ornament_rows = [{"item": "", "count": 1, "gross_wt": 0.0, "net_wt": 0.0, "purity": "916 KDM"}]
+                                    if "form_reset_counter" in st.session_state:
+                                        st.session_state.form_reset_counter += 1
+                                    st.session_state["show_gp_print_modal"] = False
+
                                     st.success("✅ GP நடவடிக்கை வெற்றிகரமாகப் பட்டியலில் சேர்க்கப்பட்டது!")
                                     st.rerun()
+
                             except Exception as err:
                                 st.error(f"❌ கார்ட்டில் சேர்ப்பதில் பிழை: {err}")
 
@@ -4719,25 +4747,38 @@ else:
                                             supabase.table("gold_sales").insert(sale_payload).execute()
 
                                         # =============================================================
-                                        # இ. பழைய நகை வாங்குதல் (Old Gold Purchase / Scrap)
+                                        # இ. தங்கம் வாங்குதல் (Gold Purchase / GP)
                                         # =============================================================
-                                        elif any(k in t_type for k in ["Purchase", "வாங்க"]):
-                                            purchase_payload = {
-                                                "visit_id": new_visit_id,
-                                                "branch_id": b_id,
-                                                "customer_id": c_id,
-                                                "purchase_bill_no": f"PUR-{datetime.now().strftime('%y%m%d%H%M%S')}",
-                                                "item_details": item.get("ornament_details", "Old Gold"),
-                                                "gross_weight": float(item.get("total_weight", 0.0) or 0.0),
-                                                "net_pure_weight": float(item.get("net_weight", 0.0) or 0.0),
-                                                
-                                                # 👈 2. இங்கே மாற்றப்பட்டுள்ளது:
-                                                "buy_rate_per_gram": float(item.get("rate_per_gram") or item.get("buy_rate_per_gram") or item.get("market_rate") or 0.0),
-                                                
-                                                "purchase_amount": float(item.get("paid_amount", 0.0) or item.get("amount", 0.0)),
-                                                "staff_name": s_name
-                                            }
-                                            supabase.table("gold_purchases").insert(purchase_payload).execute()
+                                        elif any(k in t_type for k in ["GP", "Purchase", "வாங்க", "கொள்முதல்"]):
+                                            try:
+                                                # நகைகளின் பட்டியல் (JSON அல்லது உரை வடிவம்)
+                                                orn_data = item.get("ornaments") or item.get("ornament_details", "Gold Ornaments")
+
+                                                purchase_payload = {
+                                                    "visit_id": new_visit_id if 'new_visit_id' in locals() else None,
+                                                    "branch_id": b_id,
+                                                    "customer_id": c_id,
+                                                    "gp_number": item.get("gp_number") or item.get("loan_number") or f"GP-{datetime.now().strftime('%y%m%d%H%M%S')}",
+                                                    "voucher_no": item.get("voucher_no", ""),
+                                                    "gp_mode": item.get("gp_mode", "Direct"),
+                                                    "gross_weight": float(item.get("gross_weight") or item.get("total_weight") or 0.0),
+                                                    "net_weight": float(item.get("net_weight") or 0.0),
+                                                    "total_value": float(item.get("total_value") or item.get("amount") or 0.0),
+                                                    "advance_paid": float(item.get("advance_paid") or 0.0),
+                                                    "balance_payable": float(item.get("balance_payable") or item.get("paid_amount") or 0.0),
+                                                    "bank_source": item.get("bank_source", ""),
+                                                    "prev_loan_no": item.get("prev_loan_no", ""),
+                                                    "ornaments_detail": orn_data,
+                                                    "staff_name": s_name,
+                                                    "remarks": item.get("remarks") or item.get("custom_remarks") or "",
+                                                    "ref1_name": item.get("ref1_name", ""),
+                                                    "ref1_phone": item.get("ref1_phone", ""),
+                                                    "ref2_name": item.get("ref2_name", ""),
+                                                    "ref2_phone": item.get("ref2_phone", "")
+                                                }
+                                                supabase.table("gold_purchases").insert(purchase_payload).execute()
+                                            except Exception as gp_err:
+                                                st.error(f"⚠️ gold_purchases அட்டவணையில் சேமிப்பதில் பிழை: {gp_err}")
 
                                         # ஈ. நிலையான வைப்பு நிதி (Fixed Deposit - FD)
                                         elif any(k in t_type for k in ["FD", "Fixed Deposit"]):
