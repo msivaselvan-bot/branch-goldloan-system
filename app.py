@@ -4801,6 +4801,7 @@ else:
                                             try:
                                                 # நகைகளின் பட்டியல் (JSON அல்லது உரை வடிவம்)
                                                 orn_data = item.get("ornaments") or item.get("ornament_details", "Gold Ornaments")
+                                                clean_net_wt = float(item.get("net_weight") or 0.0)
 
                                                 purchase_payload = {
                                                     "visit_id": new_visit_id if 'new_visit_id' in locals() else None,
@@ -4810,7 +4811,11 @@ else:
                                                     "voucher_no": item.get("voucher_no", ""),
                                                     "gp_mode": item.get("gp_mode", "Direct"),
                                                     "gross_weight": float(item.get("gross_weight") or item.get("total_weight") or 0.0),
-                                                    "net_weight": float(item.get("net_weight") or 0.0),
+                                                    
+                                                    # 🌟 பிழை வராமல் இருக்க இரண்டு பத்திகளுக்கும் ஒரே எடையை ஒதுக்குதல்:
+                                                    "net_weight": clean_net_wt,
+                                                    "net_pure_weight": clean_net_wt,     # 👈 NOT NULL பிழையைத் தடுக்கும் முக்கிய வரி
+                                                    
                                                     "total_value": float(item.get("total_value") or item.get("amount") or 0.0),
                                                     "advance_paid": float(item.get("advance_paid") or 0.0),
                                                     "balance_payable": float(item.get("balance_payable") or item.get("paid_amount") or 0.0),
