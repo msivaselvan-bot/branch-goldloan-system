@@ -3942,7 +3942,7 @@ else:
                     with ref2_c3:
                         gp_ref2_rel = st.text_input("உறவுமுறை:", key="gp_r2_r")
                     with ref2_c4:
-                        gp_ref2_phone = st.text_input("மொபைல் எண்:", key="gp_r2_p"
+                        gp_ref2_phone = st.text_input("மொபைல் எண்:", key="gp_r2_p")
 
                     paid_amt = balance_payable if is_takeover else total_gp_value
                     received_amt = 0.0
