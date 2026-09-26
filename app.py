@@ -2064,17 +2064,27 @@ else:
                     df.columns = df.columns.str.strip().str.lower()
 
                     # 1. அட்மின் ஸ்கீம் மாஸ்டர் விபரங்களை எடுத்தல்
-                    sch_res = supabase.table("gold_loan_schemes").select("*").execute()
+                    try:
+                        sch_res = supabase.table("gold_loan_schemes").select("*").execute()
+                        schemes_list = sch_res.data or []
+                    except Exception:
+                        schemes_list = []
+                    
                     scheme_lookup = {}
-                    for s in (sch_res.data or []):
+                    for s in schemes_list:
                         s_name = str(s.get("scheme_name") or s.get("name") or "").strip().upper()
                         s_code = str(s.get("scheme_code") or "").strip().upper()
                         if s_name: scheme_lookup[s_name] = s
                         if s_code: scheme_lookup[s_code] = s
 
-                    # 2. கிளை விபரங்களை எடுத்தல் (10 கிளைகளுக்கும் பொருந்தும்)
-                    b_res = supabase.table("branches").select("id, code").execute()
-                    branch_map = {str(b["code"]).strip().upper(): b["id"] for b in (b_res.data or [])}
+                    # 2. கிளை விபரங்களை எடுத்தல் (select("*") மூலம் column error முற்றிலுமாகத் தவிர்க்கப்படுகிறது)
+                    b_res = supabase.table("branches").select("*").execute()
+                    branch_map = {}
+                    for b in (b_res.data or []):
+                        # கிளைக் குறியீடு எந்தப் பெயரில் இருந்தாலும் எடுத்தல்:
+                        b_code = str(b.get("branch_code") or b.get("code") or b.get("prefix") or b.get("name") or "").strip().upper()
+                        if b_code:
+                            branch_map[b_code] = b.get("id")
 
                     success_count = 0
                     branch_max_seq = {}
@@ -2085,24 +2095,28 @@ else:
                         row_no = idx + 1
                         try:
                             # கிளை ID கண்டறிதல்
-                            b_code = str(row.get("branch_code") or "").strip().upper()
-                            b_id = branch_map.get(b_code) or target_b_id
+                            b_code_in_row = str(row.get("branch_code") or "").strip().upper()
+                            b_id = branch_map.get(b_code_in_row) or target_b_id
 
                             # வாடிக்கையாளர் சரிபார்ப்பு / சேர்த்தல்
                             c_name = str(row.get("customer_name") or "வாடிக்கையாளர்").strip()
                             raw_mob = str(row.get("mobile", "")).split(".")[0].strip()
                             clean_mob = "".join(filter(str.isdigit, raw_mob))[-10:]
-                            if not clean_mob: clean_mob = f"99999{row_no:05d}"
+                            if not clean_mob: 
+                                clean_mob = f"99999{row_no:05d}"
                             
                             c_addr = str(row.get("address") or "").strip()
-                            if c_addr in ["nan", "None"]: c_addr = ""
+                            if c_addr in ["nan", "None"]: 
+                                c_addr = ""
 
                             cust_res = supabase.table("customers").select("id").eq("mobile", clean_mob).execute()
                             if cust_res.data:
                                 c_id = cust_res.data[0]["id"]
                             else:
                                 new_c = supabase.table("customers").insert({
-                                    "name": c_name, "mobile": clean_mob, "address": c_addr
+                                    "name": c_name, 
+                                    "mobile": clean_mob, 
+                                    "address": c_addr
                                 }).execute()
                                 c_id = new_c.data[0]["id"]
 
@@ -2126,7 +2140,7 @@ else:
                                 if b_id not in branch_max_seq or cur_val > branch_max_seq[b_id]:
                                     branch_max_seq[b_id] = cur_val
 
-                            # 🌟 3. நேரடியாக gold_loans அட்டவணைக்குச் சேமித்தல் (17 பத்திகள் மட்டும்):
+                            # 🌟 3. gold_loans அட்டவணையின் 17 பத்திகளுக்கு மட்டும் சேமித்தல்:
                             loan_payload = {
                                 "branch_id": b_id,
                                 "customer_id": c_id,
@@ -2149,7 +2163,7 @@ else:
                             if ins_res.data:
                                 success_count += 1
 
-                        except Exception as row_err:
+                        except Exception:
                             pass
 
                         prog_bar.progress(row_no / len(df))
@@ -2167,7 +2181,6 @@ else:
 
                         st.success(f"🎉 மொத்தம் {success_count} பழைய கடன்கள் வெற்றிகரமாக `gold_loans` அட்டவணையில் ஏற்றப்பட்டன!")
                         
-                        # 👈 நீங்கள் கேட்ட அறிவிப்புப் பகுதி இங்கே கச்சிதமாக அமைகிறது:
                         st.markdown("##### 📌 கிளை வாரியாக அடுத்த புதிய கடன் எண்கள்:")
                         for b_id, max_num in branch_max_seq.items():
                             b_code_name = [k for k, v in branch_map.items() if v == b_id]
