@@ -3849,6 +3849,12 @@ else:
                     gp_mode = st.radio("GP வகை தேர்வு செய்க *:", ["Direct (நேரடி கொள்முதல்)", "Takeover (பிற நிறுவன மீட்டல் வழி கொள்முதல்)"], horizontal=True)
                     is_takeover = "Takeover" in gp_mode
 
+                    # 🌟 பிழையைத் தவிர்க்க தொடக்கத்திலேயே மாறிகளை உருவாக்குதல்:
+                    bank_source = ""
+                    prev_loan_no = ""
+                    advance_paid = 0.0
+                    balance_payable = 0.0
+
                     gp_col1, gp_col2 = st.columns(2)
                     with gp_col1:
                         # 🌟 பாதுகாப்பாக branch_id அனுப்பி GP எண்ணை எடுத்தல்:
@@ -3912,10 +3918,17 @@ else:
                     if is_takeover:
                         t_col1, t_col2 = st.columns(2)
                         with t_col1:
-                            advance_paid = st.number_input("7) அட்வான்ஸ் பெற்ற தொகை (₹):", min_value=0.0, max_value=float(total_gp_value), step=500.0, format="%.2f")
+                            advance_paid = st.number_input("7) அட்வான்ஸ் செலுத்திய தொகை (₹):", min_value=0.0, max_value=float(total_gp_value), step=500.0, format="%.2f", key=f"gp_adv_{fc}")
                         with t_col2:
                             balance_payable = max(0.0, float(total_gp_value) - float(advance_paid))
-                            st.number_input("8) மீதி தொகை (Balance Payable - ₹):", value=balance_payable, format="%.2f", disabled=True)
+                            st.number_input("8) மீதி தொகை (Balance Payable - ₹):", value=balance_payable, format="%.2f", disabled=True, key=f"gp_bal_{fc}")
+
+                        # 🌟 முந்தைய வங்கி / கடன் விவரங்களை உள்ளிடும் பகுதி:
+                        tb_c1, tb_c2 = st.columns(2)
+                        with tb_c1:
+                            bank_source = st.text_input("முந்தைய நிறுவனம் / வங்கி பெயர் *:", placeholder="எ.கா: SBI / Muthoot", key=f"gp_bsrc_{fc}")
+                        with tb_c2:
+                            prev_loan_no = st.text_input("முந்தைய அடகு கடன் எண் *:", placeholder="எ.கா: 12450/2025", key=f"gp_plno_{fc}")
 
                     st.markdown("---")
                     img_c1, img_c2 = st.columns(2)
