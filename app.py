@@ -4285,22 +4285,34 @@ else:
 
                                         # அ. நகைக்கடன் (Gold Loans)
                                         if any(k in t_type for k in ["Pledge", "Loan", "நகைக்கடன்"]):
+                                            # கார்ட்டில் உள்ள கடன் எண்ணை (GL No) துல்லியமாக எடுத்தல்
+                                            actual_gl_no = item.get("loan_no") or item.get("gp_number") or f"GL-{datetime.now().strftime('%y%m%d%H%M%S')}"
+
                                             loan_payload = {
                                                 "visit_id": new_visit_id,
                                                 "branch_id": b_id,
                                                 "customer_id": c_id,
-                                                "loan_no": item.get("loan_no") or f"GL-{datetime.now().strftime('%y%m%d%H%M%S')}",
+                                                "loan_no": actual_gl_no,
                                                 "ornament_details": item.get("ornament_details", ""),
+                                                "items_count": int(item.get("items_count") or 1),
                                                 "gross_weight": float(item.get("total_weight", 0.0) or 0.0),
                                                 "net_weight": float(item.get("net_weight", 0.0) or 0.0),
                                                 "purity": item.get("purity", "916 KDM"),
                                                 "sanctioned_amount": float(item.get("paid_amount", 0.0) or item.get("amount", 0.0)),
+                                                
+                                                # 🌟 ஸ்கீம் மாஸ்டர் விபரங்கள் (Scheme Details):
+                                                "scheme_name": item.get("scheme_name", "Regular"),
+                                                "interest_rate": float(item.get("interest_rate", 18.0) or 18.0),
+                                                "market_rate_per_gram": float(item.get("market_rate", 0.0) or 0.0),
+                                                
                                                 "staff_name": s_name,
                                                 "status": "Active"
                                             }
                                             supabase.table("gold_loans").insert(loan_payload).execute()
 
+                                        # =============================================================
                                         # ஆ. நகை விற்பனை (Gold Sales)
+                                        # =============================================================
                                         elif any(k in t_type for k in ["Sale", "விற்பனை"]):
                                             sale_payload = {
                                                 "visit_id": new_visit_id,
@@ -4310,13 +4322,18 @@ else:
                                                 "item_name": item.get("ornament_details", "Gold Jewellery"),
                                                 "gross_weight": float(item.get("total_weight", 0.0) or 0.0),
                                                 "net_weight": float(item.get("net_weight", 0.0) or 0.0),
-                                                "gold_rate_per_gram": float(item.get("rate_per_gram", 0.0) or 0.0),
+                                                
+                                                # 👈 1. இங்கே மாற்றப்பட்டுள்ளது:
+                                                "gold_rate_per_gram": float(item.get("rate_per_gram") or item.get("gold_rate_per_gram") or item.get("market_rate") or 0.0),
+                                                
                                                 "total_sale_amount": float(item.get("received_amount", 0.0) or item.get("amount", 0.0)),
                                                 "staff_name": s_name
                                             }
                                             supabase.table("gold_sales").insert(sale_payload).execute()
 
+                                        # =============================================================
                                         # இ. பழைய நகை வாங்குதல் (Old Gold Purchase / Scrap)
+                                        # =============================================================
                                         elif any(k in t_type for k in ["Purchase", "வாங்க"]):
                                             purchase_payload = {
                                                 "visit_id": new_visit_id,
@@ -4326,7 +4343,10 @@ else:
                                                 "item_details": item.get("ornament_details", "Old Gold"),
                                                 "gross_weight": float(item.get("total_weight", 0.0) or 0.0),
                                                 "net_pure_weight": float(item.get("net_weight", 0.0) or 0.0),
-                                                "buy_rate_per_gram": float(item.get("rate_per_gram", 0.0) or 0.0),
+                                                
+                                                # 👈 2. இங்கே மாற்றப்பட்டுள்ளது:
+                                                "buy_rate_per_gram": float(item.get("rate_per_gram") or item.get("buy_rate_per_gram") or item.get("market_rate") or 0.0),
+                                                
                                                 "purchase_amount": float(item.get("paid_amount", 0.0) or item.get("amount", 0.0)),
                                                 "staff_name": s_name
                                             }
