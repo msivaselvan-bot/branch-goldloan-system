@@ -576,57 +576,45 @@ def generate_branch_visit_no(branch_id, branch_code="BR"):
         # ஏதேனும் பிழை வந்தால் பாதுகாப்புக்காக நேரத்தை வைத்து உருவாக்குதல்:
         return f"VST-{branch_code}-{datetime.now().strftime('%d%H%M%S')}"
 
-# ==============================================================================
-# GP எண் உருவாக்கும் செயல்பாடு (GP Number Generator)
-# ==============================================================================
 # -------------------------------------------------------------
 # 🪙 கிளை வாரியான ஜீபி எண் உருவாக்கும் செயல்பாடு (Format: AVL/GP/0001)
 # -------------------------------------------------------------
 def generate_gp_number(branch_identifier=None) -> str:
-    """கிளை கோடு அல்லது branch_id-ஐ வைத்து அடுத்த ஆட்டோ ஜீபி எண்ணை உருவாக்கும்"""
+    """டேட்டாபேஸ் மற்றும் கார்ட்டில் உள்ள GP எண்ணிக்கையை வைத்து அடுத்த ஆட்டோ எண்ணை உருவாக்கும்"""
     try:
-        prefix = "AVL"
+        clean_b_id = int(branch_identifier or st.session_state.get("branch_id", 1))
         
-        # 1. கொடுக்கப்பட்ட மதிப்பு எண்ணா அல்லது பெயரா எனப் பிரித்தல்
-        if isinstance(branch_identifier, int) or (isinstance(branch_identifier, str) and branch_identifier.isdigit()):
-            b_id = int(branch_identifier)
-            seq_res = supabase.table("branch_loan_sequences").select("prefix").eq("branch_id", b_id).execute()
-            if seq_res.data and seq_res.data[0].get("prefix"):
-                prefix = str(seq_res.data[0]["prefix"]).strip().rstrip("/-")
-        elif isinstance(branch_identifier, str) and branch_identifier.strip():
-            prefix = branch_identifier.strip().upper().rstrip("/-")
-        else:
-            # session_state-ல் இருந்து பாதுகாப்பாக எடுத்தல்
-            cur_b_id = st.session_state.get("branch_id")
-            if cur_b_id:
-                seq_res = supabase.table("branch_loan_sequences").select("prefix").eq("branch_id", int(cur_b_id)).execute()
-                if seq_res.data and seq_res.data[0].get("prefix"):
-                    prefix = str(seq_res.data[0]["prefix"]).strip().rstrip("/-")
+        # 1. கிளையின் குறியீட்டை எடுத்தல் (எ.கா: AVL)
+        seq_res = supabase.table("branch_loan_sequences").select("prefix").eq("branch_id", clean_b_id).execute()
+        prefix = "AVL"
+        if seq_res.data and seq_res.data[0].get("prefix"):
+            prefix = str(seq_res.data[0]["prefix"]).strip().rstrip("/-")
 
-        # 2. transactions அட்டவணையில் இந்தக் கிளையின் கடைசி GP எண்ணைத் தேடுதல்
-        res = (
+        # 2. transactions அட்டவணையில் கடைசி GP எண்ணைத் தேடுதல்
+        tx_res = (
             supabase.table("transactions")
-            .select("gp_number")
-            .ilike("gp_number", f"{prefix}/GP/%")
+            .select("gp_number, loan_number")
+            .eq("branch_id", clean_b_id)
+            .ilike("transaction_type", "%GP%")
             .order("id", desc=True)
             .limit(1)
             .execute()
         )
-
+        
         last_num = 0
-        if res.data and res.data[0].get("gp_number"):
-            raw_gp = str(res.data[0]["gp_number"]).strip()
-            parts = raw_gp.split("/")
-            if len(parts) >= 3 and parts[-1].isdigit():
-                last_num = int(parts[-1])
-            else:
-                digits = "".join(filter(str.isdigit, raw_gp))
-                if digits:
-                    last_num = int(digits)
+        if tx_res.data:
+            rec = tx_res.data[0]
+            raw_gp = rec.get("gp_number") or rec.get("loan_number") or ""
+            digits = "".join(filter(str.isdigit, str(raw_gp)))
+            if digits:
+                last_num = int(digits)
 
-        # 3. அடுத்த எண்ணை 4 இலக்க வடிவத்தில் அமைத்தல் (எ.கா: AVL/GP/0001)
-        next_no = last_num + 1
-        return f"{prefix}/GP/{next_no:04d}"
+        # 3. கார்ட்டில் (Cart) ஏற்கனவே GP சேர்க்கப்பட்டிருந்தால் அதையும் கூட்டுதல்
+        cart = st.session_state.get("transactions_cart", [])
+        gp_in_cart = sum(1 for itm in cart if "GP" in str(itm.get("transaction_type", "")))
+        
+        next_gp_no = last_num + gp_in_cart + 1
+        return f"{prefix}/GP/{next_gp_no:04d}"
 
     except Exception:
         return f"AVL/GP/{datetime.now().strftime('%d%H%M')}"
@@ -3843,29 +3831,26 @@ else:
                             received_amt = st.number_input("பெற்ற தவணைத் தொகை (₹) *", min_value=0.0, step=100.0)
                     detail_summary = [f"A/c: {acc_no}"]
 
-                # 7. GP (Gold Purchase)
+                # -------------------------------------------------------------
+                # 7. GP (Gold Purchase) - முழுமையான திருத்தப்பட்ட பகுதி
+                # -------------------------------------------------------------
                 elif txn_category == "GP (Gold Purchase)":
                     st.markdown("##### 🪙 தங்கம் வாங்குதல் (GP Details)")
                     gp_mode = st.radio("GP வகை தேர்வு செய்க *:", ["Direct (நேரடி கொள்முதல்)", "Takeover (பிற நிறுவன மீட்டல் வழி கொள்முதல்)"], horizontal=True)
                     is_takeover = "Takeover" in gp_mode
 
-                    # 🌟 பிழையைத் தவிர்க்க தொடக்கத்திலேயே மாறிகளை உருவாக்குதல்:
                     bank_source = ""
                     prev_loan_no = ""
                     advance_paid = 0.0
-                    balance_payable = 0.0
 
                     gp_col1, gp_col2 = st.columns(2)
                     with gp_col1:
-                        # 🌟 பாதுகாப்பாக branch_id அனுப்பி GP எண்ணை எடுத்தல்:
+                        # 🌟 ஆட்டோ ஜீபி எண் (key நீக்கப்பட்டுள்ளதால் அடுத்தடுத்த எண்கள் உடனுக்குடன் மாறும்)
                         auto_gp_no = generate_gp_number(st.session_state.get("branch_id"))
-                        
-                        # 🌟 key=f"gp_no_in_{fc}" கட்டாயம் சேர்க்கப்பட வேண்டும்:
                         gp_number = st.text_input(
                             "1) ஜீபி எண் (Auto-generated):", 
                             value=auto_gp_no, 
-                            disabled=True,
-                            key=f"gp_no_in_{fc}"
+                            disabled=True
                         )
                     with gp_col2:
                         voucher_no = st.text_input("2) வவுச்சர் எண் *:", placeholder="எ.கா: VCH-1002", key=f"gp_vch_{fc}")
@@ -3911,19 +3896,21 @@ else:
                     with w_col2:
                         net_weight = st.number_input("5) மொத்த நிகர எடை (Net Wt - g):", value=calc_total_net, format="%.3f", disabled=True)
                     with w_col3:
-                        total_gp_value = st.number_input("6) மொத்த மதிப்பு (Total Value - ₹) *:", min_value=0.0, step=500.0, format="%.2f")
+                        total_gp_value = st.number_input("6) மொத்த மதிப்பு (Total Value - ₹) *:", min_value=0.0, step=500.0, format="%.2f", key=f"gp_val_{fc}")
 
-                    advance_paid = 0.0
-                    balance_payable = total_gp_value
+                    # -------------------------------------------------------------
+                    # 🌟 மீதித் தொகை கணக்கீடு (key இல்லாததால் தானாக உடனடியாக மாறும்)
+                    # -------------------------------------------------------------
+                    balance_payable = float(total_gp_value)
                     if is_takeover:
                         t_col1, t_col2 = st.columns(2)
                         with t_col1:
                             advance_paid = st.number_input("7) அட்வான்ஸ் செலுத்திய தொகை (₹):", min_value=0.0, max_value=float(total_gp_value), step=500.0, format="%.2f", key=f"gp_adv_{fc}")
                         with t_col2:
                             balance_payable = max(0.0, float(total_gp_value) - float(advance_paid))
-                            st.number_input("8) மீதி தொகை (Balance Payable - ₹):", value=balance_payable, format="%.2f", disabled=True, key=f"gp_bal_{fc}")
+                            # 🌟 key நீக்கப்பட்டுள்ளது (இதனால் ₹40,000 உடனே தானாக வரும்):
+                            st.number_input("8) மீதி தொகை (Balance Payable - ₹):", value=balance_payable, format="%.2f", disabled=True)
 
-                        # 🌟 முந்தைய வங்கி / கடன் விவரங்களை உள்ளிடும் பகுதி:
                         tb_c1, tb_c2 = st.columns(2)
                         with tb_c1:
                             bank_source = st.text_input("முந்தைய நிறுவனம் / வங்கி பெயர் *:", placeholder="எ.கா: SBI / Muthoot", key=f"gp_bsrc_{fc}")
@@ -3963,10 +3950,10 @@ else:
                     gp_remarks = f"GP வகை: {gp_mode} | வவுச்சர்: {voucher_no.strip() if voucher_no else '-'} | உருப்படிகள்: {calc_total_items} nos | நிகர எடை: {calc_total_net:.3f}g"
                     if is_takeover:
                         gp_remarks += f" | அட்வான்ஸ்: ₹{advance_paid:,.2f} | மீதி: ₹{balance_payable:,.2f}"
-                    
-                    # -----------------------------------------------------------------
+
+                    # -------------------------------------------------------------
                     # 📄 சட்டபூர்வ உறுதிமொழிப் படிவ முன்னோட்டம் & பிரிண்ட் பட்டன்
-                    # -----------------------------------------------------------------
+                    # -------------------------------------------------------------
                     st.markdown("---")
                     col_gp_act1, col_gp_act2 = st.columns(2)
                     with col_gp_act1:
