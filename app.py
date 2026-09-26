@@ -52,6 +52,19 @@ except Exception:
     # ClientOptions அமைப்பதில் சிக்கல் வந்தால் நேரடி இணைப்பிற்கு மாறும்:
     supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
+# -------------------------------------------------------------
+# ⚡ மின்னல் வேக மாஸ்டர் திட்டங்கள் கேச்சிங் (10 நிமிடங்களுக்கு ஒருமுறை மட்டும் எடுக்கும்)
+# -------------------------------------------------------------
+@st.cache_data(ttl=600)
+def get_cached_master_schemes():
+    try:
+        g_data = supabase.table("gold_loan_schemes").select("*").eq("is_active", True).execute().data or []
+        fd_data = supabase.table("fd_schemes").select("*").eq("is_active", True).execute().data or []
+        rd_data = supabase.table("rd_schemes").select("*").eq("is_active", True).execute().data or []
+        return g_data, fd_data, rd_data
+    except Exception:
+        return [], [], []
+
 # ==============================================================================
 # 🌟 இணைப்பு துண்டிக்கப்படுவதைத் தடுக்கும் பாதுகாப்பு செயல்பாடு (Safe Query Runner)
 # ==============================================================================
@@ -3620,9 +3633,7 @@ else:
                     st.session_state.form_reset_counter = 0
                 fc = st.session_state.form_reset_counter
 
-                active_g_schemes = supabase.table("gold_loan_schemes").select("*").eq("is_active", True).execute().data or []
-                active_fd_schemes = supabase.table("fd_schemes").select("*").eq("is_active", True).execute().data or []
-                active_rd_schemes = supabase.table("rd_schemes").select("*").eq("is_active", True).execute().data or []
+                active_g_schemes, active_fd_schemes, active_rd_schemes = get_cached_master_schemes()
 
                 g_scheme_map = {s["scheme_name"]: s for s in active_g_schemes}
                 gold_scheme_options = list(g_scheme_map.keys()) if g_scheme_map else ["General 12%"]
