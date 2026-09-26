@@ -4204,16 +4204,105 @@ else:
                                     
                                     new_visit_id = v_insert.data[0]["id"]
 
-                                    # 3. transactions அட்டவணையில் கார்ட்டில் உள்ள கடன்களைச் சேர்த்தல்
+                                    # -------------------------------------------------------------------------
+                                    # 3. நடவடிக்கை வகைக்கு ஏற்ப தனித்தனி அட்டவணைகளில் பிரித்துச் சேமித்தல் (Data Router)
+                                    # -------------------------------------------------------------------------
                                     for item in st.session_state.transactions_cart:
-                                        item_payload = {
+                                        t_type = str(item.get("transaction_type", ""))
+                                        b_id = st.session_state.branch_id
+                                        c_id = visit.get("customer_id")
+                                        s_name = item.get("staff_name", "")
+
+                                        # அ. நகைக்கடன் (Gold Loans)
+                                        if any(k in t_type for k in ["Pledge", "Loan", "நகைக்கடன்"]):
+                                            loan_payload = {
+                                                "visit_id": new_visit_id,
+                                                "branch_id": b_id,
+                                                "customer_id": c_id,
+                                                "loan_no": item.get("loan_no") or f"GL-{datetime.now().strftime('%y%m%d%H%M%S')}",
+                                                "ornament_details": item.get("ornament_details", ""),
+                                                "gross_weight": float(item.get("total_weight", 0.0) or 0.0),
+                                                "net_weight": float(item.get("net_weight", 0.0) or 0.0),
+                                                "purity": item.get("purity", "916 KDM"),
+                                                "sanctioned_amount": float(item.get("paid_amount", 0.0) or item.get("amount", 0.0)),
+                                                "staff_name": s_name,
+                                                "status": "Active"
+                                            }
+                                            supabase.table("gold_loans").insert(loan_payload).execute()
+
+                                        # ஆ. நகை விற்பனை (Gold Sales)
+                                        elif any(k in t_type for k in ["Sale", "விற்பனை"]):
+                                            sale_payload = {
+                                                "visit_id": new_visit_id,
+                                                "branch_id": b_id,
+                                                "customer_id": c_id,
+                                                "bill_no": f"SL-{datetime.now().strftime('%y%m%d%H%M%S')}",
+                                                "item_name": item.get("ornament_details", "Gold Jewellery"),
+                                                "gross_weight": float(item.get("total_weight", 0.0) or 0.0),
+                                                "net_weight": float(item.get("net_weight", 0.0) or 0.0),
+                                                "gold_rate_per_gram": float(item.get("rate_per_gram", 0.0) or 0.0),
+                                                "total_sale_amount": float(item.get("received_amount", 0.0) or item.get("amount", 0.0)),
+                                                "staff_name": s_name
+                                            }
+                                            supabase.table("gold_sales").insert(sale_payload).execute()
+
+                                        # இ. பழைய நகை வாங்குதல் (Old Gold Purchase / Scrap)
+                                        elif any(k in t_type for k in ["Purchase", "வாங்க"]):
+                                            purchase_payload = {
+                                                "visit_id": new_visit_id,
+                                                "branch_id": b_id,
+                                                "customer_id": c_id,
+                                                "purchase_bill_no": f"PUR-{datetime.now().strftime('%y%m%d%H%M%S')}",
+                                                "item_details": item.get("ornament_details", "Old Gold"),
+                                                "gross_weight": float(item.get("total_weight", 0.0) or 0.0),
+                                                "net_pure_weight": float(item.get("net_weight", 0.0) or 0.0),
+                                                "buy_rate_per_gram": float(item.get("rate_per_gram", 0.0) or 0.0),
+                                                "purchase_amount": float(item.get("paid_amount", 0.0) or item.get("amount", 0.0)),
+                                                "staff_name": s_name
+                                            }
+                                            supabase.table("gold_purchases").insert(purchase_payload).execute()
+
+                                        # ஈ. நிலையான வைப்பு நிதி (Fixed Deposit - FD)
+                                        elif any(k in t_type for k in ["FD", "Fixed Deposit"]):
+                                            fd_payload = {
+                                                "visit_id": new_visit_id,
+                                                "branch_id": b_id,
+                                                "customer_id": c_id,
+                                                "fd_account_no": f"FD-{datetime.now().strftime('%y%m%d%H%M%S')}",
+                                                "deposit_amount": float(item.get("received_amount", 0.0) or item.get("amount", 0.0)),
+                                                "tenure_months": int(item.get("tenure_months", 12)),
+                                                "interest_rate": float(item.get("interest_rate", 10.0)),
+                                                "maturity_amount": float(item.get("maturity_amount", 0.0)),
+                                                "nominee_name": item.get("nominee_name", ""),
+                                                "status": "Active"
+                                            }
+                                            supabase.table("fixed_deposits").insert(fd_payload).execute()
+
+                                        # உ. தொடர் வைப்பு நிதி (Recurring Deposit - RD)
+                                        elif any(k in t_type for k in ["RD", "Recurring Deposit"]):
+                                            rd_payload = {
+                                                "visit_id": new_visit_id,
+                                                "branch_id": b_id,
+                                                "customer_id": c_id,
+                                                "rd_account_no": f"RD-{datetime.now().strftime('%y%m%d%H%M%S')}",
+                                                "monthly_installment": float(item.get("received_amount", 0.0) or item.get("amount", 0.0)),
+                                                "tenure_months": int(item.get("tenure_months", 12)),
+                                                "interest_rate": float(item.get("interest_rate", 8.0)),
+                                                "total_target_amount": float(item.get("target_amount", 0.0)),
+                                                "nominee_name": item.get("nominee_name", ""),
+                                                "status": "Active"
+                                            }
+                                            supabase.table("recurring_deposits").insert(rd_payload).execute()
+
+                                        # ஊ. தலைமை அலுவலக தணிக்கை & அழைப்புச் சரிபார்ப்புக்காக transactions அட்டவணையில் பதிவு:
+                                        general_txn = {
                                             "visit_id": new_visit_id,
-                                            "branch_id": st.session_state.branch_id,
-                                            "customer_id": visit.get("customer_id"),
+                                            "branch_id": b_id,
+                                            "customer_id": c_id,
                                             "customer_name": visit.get("customer_name"),
                                             "mobile": visit.get("mobile"),
-                                            "transaction_type": item.get("transaction_type"),
-                                            "staff_name": item.get("staff_name"),
+                                            "transaction_type": t_type,
+                                            "staff_name": s_name,
                                             "amount": float(item.get("amount", 0.0) or 0.0),
                                             "paid_amount": float(item.get("paid_amount", 0.0) or 0.0),
                                             "received_amount": float(item.get("received_amount", 0.0) or 0.0),
@@ -4223,7 +4312,7 @@ else:
                                             "remarks": item.get("remarks", ""),
                                             "status": "Pending"
                                         }
-                                        supabase.table("transactions").insert(item_payload).execute()
+                                        supabase.table("transactions").insert(general_txn).execute()
 
                                     # 4. நினைவகத்தை முழுமையாக ரீசெட் செய்தல்
                                     st.success(f"🎉 வருகை {current_v_no} வெற்றிகரமாக நிறைவுபெற்றது! (ஆப்பரேஷன்ஸ் அழைப்பு ஒப்புதலுக்கு அனுப்பப்பட்டது)")
@@ -4233,8 +4322,6 @@ else:
                                     st.session_state.current_declaration = None
                                     st.session_state.declaration_gl_no = None
                                     st.rerun()
-                                except Exception as e:
-                                    st.error(f"நிறைவு செய்வதில் பிழை: {e}")
         # =========================================================================
         # 2-வது டேப்: கிளை ஆவணங்கள் பதிவேற்றம் (Upload Docs Desk)
         # =========================================================================
