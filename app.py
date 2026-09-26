@@ -577,47 +577,84 @@ def generate_branch_visit_no(branch_id, branch_code="BR"):
         return f"VST-{branch_code}-{datetime.now().strftime('%d%H%M%S')}"
 
 # -------------------------------------------------------------
-# 🪙 கிளை வாரியான ஜீபி எண் உருவாக்கும் செயல்பாடு (Format: AVL/GP/0001)
+# 🪙 கிளை வாரியான ஜீபி எண் உருவாக்கும் செயல்பாடு (Format: AVL/GP/001)
 # -------------------------------------------------------------
 def generate_gp_number(branch_identifier=None) -> str:
-    """டேட்டாபேஸ் மற்றும் கார்ட்டில் உள்ள GP எண்ணிக்கையை வைத்து அடுத்த ஆட்டோ எண்ணை உருவாக்கும்"""
+    """
+    1. கிளை பிரபிக்ஸை (AVL) துல்லியமாக எடுக்கும்.
+    2. gold_purchases மற்றும் transactions ஆகிய இரண்டிலும் உள்ள அதிகபட்ச GP எண்ணைக் கண்டறியும்.
+    3. வரிசையாக AVL/GP/001, AVL/GP/002 என 3 இலக்க வடிவில் உருவாக்கும்.
+    4. தேதி-நேர எண்களை ஒருபோதும் காட்டாது.
+    """
     try:
-        clean_b_id = int(branch_identifier or st.session_state.get("branch_id", 1))
-        
-        # 1. கிளையின் குறியீட்டை எடுத்தல் (எ.கா: AVL)
-        seq_res = supabase.table("branch_loan_sequences").select("prefix").eq("branch_id", clean_b_id).execute()
+        # 1. கிளையின் பிரபிக்ஸை (Prefix - எ.கா: AVL) எடுத்தல்
         prefix = "AVL"
-        if seq_res.data and seq_res.data[0].get("prefix"):
-            prefix = str(seq_res.data[0]["prefix"]).strip().rstrip("/-")
-
-        # 2. transactions அட்டவணையில் கடைசி GP எண்ணைத் தேடுதல்
-        tx_res = (
-            supabase.table("transactions")
-            .select("gp_number, loan_number")
-            .eq("branch_id", clean_b_id)
-            .ilike("transaction_type", "%GP%")
-            .order("id", desc=True)
-            .limit(1)
-            .execute()
-        )
+        b_id = None
         
-        last_num = 0
-        if tx_res.data:
-            rec = tx_res.data[0]
-            raw_gp = rec.get("gp_number") or rec.get("loan_number") or ""
-            digits = "".join(filter(str.isdigit, str(raw_gp)))
-            if digits:
-                last_num = int(digits)
+        if isinstance(branch_identifier, int) or (isinstance(branch_identifier, str) and str(branch_identifier).isdigit()):
+            b_id = int(branch_identifier)
+        else:
+            b_id = st.session_state.get("branch_id")
+            
+        if b_id:
+            try:
+                seq_res = supabase.table("branch_loan_sequences").select("prefix").eq("branch_id", int(b_id)).execute()
+                if seq_res.data and seq_res.data[0].get("prefix"):
+                    prefix = str(seq_res.data[0]["prefix"]).strip().rstrip("/-")
+            except Exception:
+                prefix = "AVL"
+        elif isinstance(branch_identifier, str) and branch_identifier.strip():
+            prefix = branch_identifier.strip().upper().rstrip("/-")
 
-        # 3. கார்ட்டில் (Cart) ஏற்கனவே GP சேர்க்கப்பட்டிருந்தால் அதையும் கூட்டுதல்
+        # 2. ஏற்கனவே உள்ள GP எண்களில் அதிகபட்ச எண்ணைக் கண்டறிதல்
+        max_num = 0
+        
+        # அ. gold_purchases அட்டவணையில் தேடுதல்
+        try:
+            gp_res = supabase.table("gold_purchases").select("gp_number").ilike("gp_number", f"{prefix}/GP/%").execute()
+            if gp_res.data:
+                for row in gp_res.data:
+                    val = str(row.get("gp_number") or "")
+                    parts = val.split("/")
+                    if len(parts) >= 3 and parts[-1].isdigit():
+                        max_num = max(max_num, int(parts[-1]))
+                    else:
+                        digits = "".join(filter(str.isdigit, val.replace(prefix, "")))
+                        if digits:
+                            max_num = max(max_num, int(digits))
+        except Exception:
+            pass
+
+        # ஆ. transactions அட்டவணையிலும் தேடுதல்
+        try:
+            tx_res = supabase.table("transactions").select("gp_number").ilike("gp_number", f"{prefix}/GP/%").execute()
+            if tx_res.data:
+                for row in tx_res.data:
+                    val = str(row.get("gp_number") or "")
+                    parts = val.split("/")
+                    if len(parts) >= 3 and parts[-1].isdigit():
+                        max_num = max(max_num, int(parts[-1]))
+                    else:
+                        digits = "".join(filter(str.isdigit, val.replace(prefix, "")))
+                        if digits:
+                            max_num = max(max_num, int(digits))
+        except Exception:
+            pass
+
+        # 3. கார்ட்டில் (Cart) ஏற்கனவே சேர்க்கப்பட்டுள்ள GP எண்ணிக்கையைக் கூட்டுதல்
         cart = st.session_state.get("transactions_cart", [])
         gp_in_cart = sum(1 for itm in cart if "GP" in str(itm.get("transaction_type", "")))
+
+        # 4. அடுத்த எண் கணக்கீடு (0 + 1 = 1)
+        next_gp_no = max_num + gp_in_cart + 1
         
-        next_gp_no = last_num + gp_in_cart + 1
-        return f"{prefix}/GP/{next_gp_no:04d}"
+        # 🌟 3 இலக்க வடிவம்: AVL/GP/001 (1000-க்கு மேல் போனால் AVL/GP/1000)
+        formatted_no = f"{next_gp_no:03d}" if next_gp_no < 1000 else f"{next_gp_no}"
+        return f"{prefix}/GP/{formatted_no}"
 
     except Exception:
-        return f"AVL/GP/{datetime.now().strftime('%d%H%M')}"
+        # ஏதேனும் பிழை ஏற்பட்டாலும் தேதி நேரம் வராமல் ஒழுங்கான ஆரம்ப எண்ணைத் தருதல்
+        return "AVL/GP/001"
 
 # -------------------------------------------------------------------------------------------------
 # 📜 சட்டபூர்வ தங்கக் கொள்முதல் உறுதிமொழிப் படிவம் (Legal GP Declaration & Indemnity Bond Generator)
