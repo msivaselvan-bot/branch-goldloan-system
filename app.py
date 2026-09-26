@@ -1204,28 +1204,26 @@ def commit_next_gl_number(branch_id, used_number):
 # -----------------------------------------------------------------------------------------
 # 🔍 குறிப்பிட்ட கிளையில் வாடிக்கையாளரின் நிலுவையில் உள்ள (Active) கடன்களை மட்டும் எடுத்தல்
 # -----------------------------------------------------------------------------------------
-def get_customer_active_loans(customer_mobile="", customer_name="", branch_id=None):
-    """
-    1. நடப்பு கிளைக்குரிய கடன்களை மட்டும் காட்டும் (Branch Isolation).
-    2. gold_loans அட்டவணையில் இருந்து Active கடன்களை மட்டும் எடுக்கும்.
-    3. பழைய UI குறியீடுகள் எவையும் உடையாமல் இருக்க gl_no, principal போன்ற பழைய பெயர்களையும் தரும்.
-    """
+def get_customer_active_loans(customer_id=None, customer_mobile="", customer_name="", branch_id=None):
     try:
-        # 1. நடப்பு கிளையின் ID-ஐ உறுதி செய்தல்
         b_id = branch_id or st.session_state.get("branch_id")
         if not b_id:
             return []
 
-        clean_mob = "".join(filter(str.isdigit, str(customer_mobile)))[-10:] if customer_mobile else ""
         c_ids = []
-
-        # 2. வாடிக்கையாளர் ID-ஐ கண்டறிதல் (மொபைல் எண் மூலம் முதன்மைத் தேடல்)
-        if clean_mob:
-            c_res = supabase.table("customers").select("id").eq("mobile", clean_mob).execute()
-            if c_res.data:
-                c_ids = [c["id"] for c in c_res.data]
+        # 1. customer_id நேரடியாக வந்தால் அதை முதன்மையாக எடுத்தல்
+        if customer_id:
+            c_ids = [customer_id]
         
-        # மொபைல் எண் இல்லாத பட்சத்தில் பெயரை வைத்து அதே கிளையில் மட்டும் தேடுதல்
+        # 2. மொபைல் எண் மூலம் வாடிக்கையாளர் ID எடுத்தல்
+        if not c_ids and customer_mobile:
+            clean_mob = "".join(filter(str.isdigit, str(customer_mobile)))[-10:]
+            if clean_mob:
+                c_res = supabase.table("customers").select("id").eq("mobile", clean_mob).execute()
+                if c_res.data:
+                    c_ids = [c["id"] for c in c_res.data]
+
+        # 3. பெயரை வைத்து அதே கிளையில் மட்டும் தேடுதல்
         if not c_ids and customer_name:
             c_name_clean = str(customer_name).strip()
             c_res = supabase.table("customers").select("id").eq("branch_id", b_id).ilike("name", f"%{c_name_clean}%").execute()
@@ -1235,36 +1233,32 @@ def get_customer_active_loans(customer_mobile="", customer_name="", branch_id=No
         if not c_ids:
             return []
 
-        # 3. 🌟 gold_loans அட்டவணையில் இருந்து நடப்பு கிளை + இந்த வாடிக்கையாளர் + Active கடன்களை மட்டும் எடுத்தல்
+        # 🌟 gold_loans அட்டவணையில் நடப்பு கிளை + இந்த வாடிக்கையாளர் + Active கடன்களை மட்டும் எடுத்தல்
         loans_res = (
             supabase.table("gold_loans")
             .select("*")
-            .eq("branch_id", b_id)                                           # 👈 நடப்பு கிளைக்கு மட்டுமேயான வடிகட்டல்
-            .in_("customer_id", c_ids)                                       # 👈 இந்த குறிப்பிட்ட வாடிக்கையாளர்
-            .in_("status", ["Active", "active", "Approved", "active\r"])      # 👈 நிலுவையில் உள்ள கடன்கள் மட்டும்
+            .eq("branch_id", b_id)                                           # 👈 நடப்பு கிளை மட்டும்
+            .in_("customer_id", c_ids)                                       # 👈 இந்த வாடிக்கையாளர் மட்டும்
+            .in_("status", ["Active", "active", "Approved", "active\r"])      # 👈 நிலுவைக் கடன்கள் மட்டும்
             .order("id", desc=True)
             .execute()
         )
 
-        if not loans_res.data:
-            return []
-
         active_loans = []
-        for row in loans_res.data:
+        for row in (loans_res.data or []):
             l_num = str(row.get("loan_no") or "").strip()
             p_amt = float(row.get("sanctioned_amount") or 0.0)
             n_wt = float(row.get("net_weight") or 0.0)
             g_wt = float(row.get("gross_weight") or 0.0)
             roi = float(row.get("interest_rate") or 18.0)
 
-            # பழைய UI மற்றும் புதிய UI இரண்டிற்கும் பொருந்தும் வகையில் தகவல்களை அமைத்தல்:
             active_loans.append({
                 "id": row.get("id"),
                 "loan_no": l_num,
-                "gl_no": l_num,                                   # 👈 பழைய UI-க்காக
-                "principal": p_amt,                               # 👈 பழைய UI-க்காக
+                "gl_no": l_num,
+                "principal": p_amt,
                 "sanctioned_amount": p_amt,
-                "net_wt": n_wt,                                   # 👈 பழைய UI-க்காக
+                "net_wt": n_wt,
                 "net_weight": n_wt,
                 "gross_weight": g_wt,
                 "ornament_details": row.get("ornament_details") or "Gold Jewellery",
@@ -1277,7 +1271,7 @@ def get_customer_active_loans(customer_mobile="", customer_name="", branch_id=No
 
     except Exception as e:
         return []
-        
+
         # கார்ட்டில் ஏற்கனவே சேர்க்கப்பட்ட கடன்களை நீக்குதல்
         cart_closed_gls = [
             c.get("closed_gl_no") for c in st.session_state.get("transactions_cart", []) 
@@ -3498,32 +3492,30 @@ else:
                         f"RPG: ₹{cur_rpg:,.2f}", 
                         f"எடை: {net_weight:.3f}g"
                     ]
+                # -------------------------------------------------------------
                 # 2. அடமானம் மீட்டல் (GL Release)
+                # -------------------------------------------------------------
                 elif txn_category == "GL Release (அடமானம் மீட்டல்)":
-                    # 🌟 வாடிக்கையாளரின் மொபைல் மற்றும் பெயரைப் பாதுகாப்பாக எடுத்தல்
                     v_info = st.session_state.get("current_visit", {}) or (visit if 'visit' in locals() else {})
+                    cust_id = v_info.get("customer_id")
+                    cust_mobile = v_info.get("mobile") or v_info.get("customer_mobile") or v_info.get("phone") or ""
+                    cust_name = v_info.get("customer_name") or v_info.get("name") or ""
                     
-                    cust_mobile = (
-                        v_info.get("mobile") or 
-                        v_info.get("customer_mobile") or 
-                        v_info.get("phone") or 
-                        ""
+                    # 🌟 நடப்பு கிளையின் ஐடி (branch_id) மற்றும் வாடிக்கையாளர் ஐடி இணைக்கப்பட்டு துல்லியமாக எடுத்தல்:
+                    active_loans = get_customer_active_loans(
+                        customer_id=cust_id,
+                        customer_mobile=cust_mobile, 
+                        customer_name=cust_name,
+                        branch_id=st.session_state.get("branch_id")
                     )
-                    cust_name = (
-                        v_info.get("customer_name") or 
-                        v_info.get("name") or 
-                        ""
-                    )
-                    
-                    active_loans = get_customer_active_loans(cust_mobile, cust_name)
                     
                     loan_display_map = {
-                        f"{l['gl_no']} (அசல்: ₹{l['principal']:,.2f}, எடை: {l['net_wt']}g)": l 
+                        f"📌 {l['gl_no']} (அசல்: ₹{l['principal']:,.2f}, எடை: {l['net_wt']:.2f}g | {l.get('scheme_name', '')})": l 
                         for l in active_loans
                     }
 
                     if not loan_display_map:
-                        st.warning("⚠️ இந்த வாடிக்கையாளரின் பெயரில் நிலுவையில் உள்ள அடமானக் கடன்கள் எதுவும் இல்லை!")
+                        st.warning("⚠️ இந்த வாடிக்கையாளருக்கு இந்தக் கிளையில் நிலுவையில் உள்ள அடமானக் கடன்கள் எதுவும் இல்லை!")
                         selected_gl_no = ""
                         rel_gl_no = ""
                         selected_loan_db_id = None
@@ -3551,23 +3543,34 @@ else:
 
                     detail_summary = [f"GL: {rel_gl_no}", f"அசல்: ₹{principal_amount}", f"வட்டி: ₹{interest_amount}"]
 
-                # 3. அசல் வரவு & வட்டி வரவு
+                # -------------------------------------------------------------
+                # 3. அசல் வரவு & வட்டி வரவு (Interest Payment & Part Payment)
+                # -------------------------------------------------------------
                 elif txn_category in ["Interest Payment (வட்டி வரவு)", "Part Payment (அசல் வரவு)"]:
-                    # 🌟 வாடிக்கையாளரின் நடப்பில் உள்ள அடமானக் கடன்களை எடுத்தல்
                     v_info = st.session_state.get("current_visit", {}) or (visit if 'visit' in locals() else {})
+                    cust_id = v_info.get("customer_id")
                     cust_mobile = v_info.get("mobile") or v_info.get("customer_mobile") or v_info.get("phone") or ""
                     cust_name = v_info.get("customer_name") or v_info.get("name") or ""
                     
-                    active_loans = get_customer_active_loans(cust_mobile, cust_name)
+                    # 🌟 நடப்பு கிளையின் ஐடி (branch_id) மற்றும் வாடிக்கையாளர் ஐடி இணைக்கப்பட்டு துல்லியமாக எடுத்தல்:
+                    active_loans = get_customer_active_loans(
+                        customer_id=cust_id,
+                        customer_mobile=cust_mobile, 
+                        customer_name=cust_name,
+                        branch_id=st.session_state.get("branch_id")
+                    )
+                    
                     loan_display_map = {
-                        f"{l['gl_no']} (அசல்: ₹{l['principal']:,.2f}, எடை: {l['net_wt']}g)": l 
+                        f"📌 {l['gl_no']} (அசல்: ₹{l['principal']:,.2f}, எடை: {l['net_wt']:.2f}g | {l.get('scheme_name', '')})": l 
                         for l in active_loans
                     }
 
                     if not loan_display_map:
-                        st.warning("⚠️ இந்த வாடிக்கையாளரின் பெயரில் நிலுவையில் உள்ள அடமானக் கடன்கள் எதுவும் இல்லை!")
+                        st.warning("⚠️ இந்த வாடிக்கையாளருக்கு இந்தக் கிளையில் நிலுவையில் உள்ள அடமானக் கடன்கள் எதுவும் இல்லை!")
                         part_gl_no = ""
                         selected_gl_no = ""
+                        selected_loan_db_id = None
+                        auto_principal = 0.0
                     else:
                         selected_loan_label = st.selectbox(
                             "கடன் எண்ணைத் தேர்ந்தெடுக்கவும் *",
@@ -3577,10 +3580,12 @@ else:
                         chosen_loan = loan_display_map[selected_loan_label]
                         part_gl_no = chosen_loan["gl_no"]
                         selected_gl_no = chosen_loan["gl_no"]
+                        selected_loan_db_id = chosen_loan["id"]
+                        auto_principal = float(chosen_loan["principal"])
 
                     i_col1, i_col2 = st.columns(2)
                     with i_col1:
-                        principal_amount = st.number_input("அசல் தொகை (₹)", min_value=0.0, step=100.0, key=f"pi_pr_{fc}") if "Part" in txn_category else 0.0
+                        principal_amount = st.number_input("அசல் தொகை (₹)", value=auto_principal if "Part" in txn_category else 0.0, min_value=0.0, step=100.0, key=f"pi_pr_{fc}")
                     with i_col2:
                         interest_amount = st.number_input("வட்டித் தொகை (₹)", min_value=0.0, step=50.0, key=f"pi_int_{fc}")
                     
