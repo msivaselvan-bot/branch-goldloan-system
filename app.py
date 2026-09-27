@@ -592,23 +592,22 @@ def generate_branch_visit_no(branch_id, branch_code="BR"):
 # -------------------------------------------------------------
 # 🪙 கிளை வாரியான ஜீபி எண் உருவாக்கும் செயல்பாடு (Format: AVL/GP/001)
 # -------------------------------------------------------------
+import re
+
+# ---------------------------------------------------------------------------------
+# 🪙 கிளை வாரியான ஜீபி எண் உருவாக்கும் செயல்பாடு (Format: AVL/GP/001, AVL/GP/002...)
+# ---------------------------------------------------------------------------------
 def generate_gp_number(branch_identifier=None) -> str:
     """
-    1. கிளை பிரபிக்ஸை (AVL) துல்லியமாக எடுக்கும்.
-    2. gold_purchases மற்றும் transactions ஆகிய இரண்டிலும் உள்ள அதிகபட்ச GP எண்ணைக் கண்டறியும்.
-    3. வரிசையாக AVL/GP/001, AVL/GP/002 என 3 இலக்க வடிவில் உருவாக்கும்.
-    4. தேதி-நேர எண்களை ஒருபோதும் காட்டாது.
+    1. gold_purchases அட்டவணையில் உள்ள 'purchase_bill_no' பத்தியைத் தேடும்.
+    2. AVL/GP/001 அல்லது AVL/GP/001 / 145 என எப்படி இருந்தாலும் GP எண்ணைத் துல்லியமாகப் பிரிக்கும்.
+    3. கார்ட்டில் உள்ள GP எண்ணிக்கையையும் சேர்த்து அடுத்த எண்ணை (002, 003...) உருவாக்கும்.
     """
     try:
         # 1. கிளையின் பிரபிக்ஸை (Prefix - எ.கா: AVL) எடுத்தல்
         prefix = "AVL"
-        b_id = None
+        b_id = branch_identifier or st.session_state.get("branch_id")
         
-        if isinstance(branch_identifier, int) or (isinstance(branch_identifier, str) and str(branch_identifier).isdigit()):
-            b_id = int(branch_identifier)
-        else:
-            b_id = st.session_state.get("branch_id")
-            
         if b_id:
             try:
                 seq_res = supabase.table("branch_loan_sequences").select("prefix").eq("branch_id", int(b_id)).execute()
@@ -619,56 +618,56 @@ def generate_gp_number(branch_identifier=None) -> str:
         elif isinstance(branch_identifier, str) and branch_identifier.strip():
             prefix = branch_identifier.strip().upper().rstrip("/-")
 
-        # 2. ஏற்கனவே உள்ள GP எண்களில் அதிகபட்ச எண்ணைக் கண்டறிதல்
         max_num = 0
-        
-        # அ. gold_purchases அட்டவணையில் தேடுதல்
+
+        # 2. 🌟 gold_purchases அட்டவணையில் 'purchase_bill_no' பத்தியைத் தேடுதல்:
         try:
-            gp_res = supabase.table("gold_purchases").select("gp_number").ilike("gp_number", f"{prefix}/GP/%").execute()
+            gp_res = (
+                supabase.table("gold_purchases")
+                .select("purchase_bill_no")
+                .ilike("purchase_bill_no", f"%{prefix}/GP/%")
+                .execute()
+            )
             if gp_res.data:
                 for row in gp_res.data:
-                    val = str(row.get("gp_number") or "")
-                    parts = val.split("/")
-                    if len(parts) >= 3 and parts[-1].isdigit():
-                        max_num = max(max_num, int(parts[-1]))
-                    else:
-                        digits = "".join(filter(str.isdigit, val.replace(prefix, "")))
-                        if digits:
-                            max_num = max(max_num, int(digits))
+                    val = str(row.get("purchase_bill_no") or "")
+                    # Regex மூலம் GP/ க்குப் பின் வரும் எண்களை மட்டும் பிரித்தெடுத்தல்:
+                    m = re.search(r"GP/(\d+)", val, re.IGNORECASE)
+                    if m:
+                        max_num = max(max_num, int(m.group(1)))
         except Exception:
             pass
 
-        # ஆ. transactions அட்டவணையிலும் தேடுதல்
+        # 3. transactions அட்டவணையிலும் ஒருமுறை சரிபார்த்தல்:
         try:
-            tx_res = supabase.table("transactions").select("gp_number").ilike("gp_number", f"{prefix}/GP/%").execute()
+            tx_res = (
+                supabase.table("transactions")
+                .select("gp_number, loan_number, remarks")
+                .or_(f"gp_number.ilike.%{prefix}/GP/%,loan_number.ilike.%{prefix}/GP/%,remarks.ilike.%{prefix}/GP/%")
+                .execute()
+            )
             if tx_res.data:
                 for row in tx_res.data:
-                    val = str(row.get("gp_number") or "")
-                    parts = val.split("/")
-                    if len(parts) >= 3 and parts[-1].isdigit():
-                        max_num = max(max_num, int(parts[-1]))
-                    else:
-                        digits = "".join(filter(str.isdigit, val.replace(prefix, "")))
-                        if digits:
-                            max_num = max(max_num, int(digits))
+                    val = f"{row.get('gp_number', '')} {row.get('loan_number', '')} {row.get('remarks', '')}"
+                    m = re.search(r"GP/(\d+)", val, re.IGNORECASE)
+                    if m:
+                        max_num = max(max_num, int(m.group(1)))
         except Exception:
             pass
 
-        # 3. கார்ட்டில் (Cart) ஏற்கனவே சேர்க்கப்பட்டுள்ள GP எண்ணிக்கையைக் கூட்டுதல்
+        # 4. கார்ட்டில் (Cart) ஏற்கனவே சேர்க்கப்பட்டுள்ள GP எண்ணிக்கையைக் கூட்டுதல்:
         cart = st.session_state.get("transactions_cart", [])
         gp_in_cart = sum(1 for itm in cart if "GP" in str(itm.get("transaction_type", "")))
 
-        # 4. அடுத்த எண் கணக்கீடு (0 + 1 = 1)
+        # 5. அடுத்த எண்ணைக் கணக்கிடுதல் (1 + 1 = 2):
         next_gp_no = max_num + gp_in_cart + 1
         
-        # 🌟 3 இலக்க வடிவம்: AVL/GP/001 (1000-க்கு மேல் போனால் AVL/GP/1000)
+        # 3 இலக்க வடிவம்: AVL/GP/002
         formatted_no = f"{next_gp_no:03d}" if next_gp_no < 1000 else f"{next_gp_no}"
         return f"{prefix}/GP/{formatted_no}"
 
     except Exception:
-        # ஏதேனும் பிழை ஏற்பட்டாலும் தேதி நேரம் வராமல் ஒழுங்கான ஆரம்ப எண்ணைத் தருதல்
         return "AVL/GP/001"
-
 # -------------------------------------------------------------------------------------------------
 # 📜 சட்டபூர்வ தங்கக் கொள்முதல் உறுதிமொழிப் படிவம் (Legal GP Declaration & Indemnity Bond Generator)
 # -------------------------------------------------------------------------------------------------
@@ -3916,7 +3915,8 @@ else:
                         gp_number = st.text_input(
                             "1) ஜீபி எண் (Auto-generated):", 
                             value=auto_gp_no, 
-                            disabled=True
+                            disabled=True,
+                            key=f"gp_disp_{auto_gp_no}"  # 👈 புதிய எண் வரும்போது விட்ஜெட் உடனே புதுப்பிக்கப்பட இது உதவும்
                         )
                     with gp_col2:
                         voucher_no = st.text_input("2) வவுச்சர் எண் *:", placeholder="எ.கா: VCH-1002", key=f"gp_vch_{fc}")
