@@ -4696,7 +4696,7 @@ else:
                                             st.error(f"கோரிக்கை அனுப்புவதில் பிழை: {e}")
 
                             # -------------------------------------------------------------------------
-                            # 🌟 5. வருகையை நிறைவு செய்யும் பட்டன் (பிழைகளைக் கண்காணிக்கும் முழுமையான முறை)
+                            # 🌟 5. வருகையை நிறைவு செய்யும் பட்டன் (பிழையற்ற முழுமையான முறை)
                             # -------------------------------------------------------------------------
                             if st.button("✅ வருகையை நிறைவு செய்க", type="primary", use_container_width=True, key="btn_complete_visit_final"):
                                 if not is_ready:
@@ -4730,8 +4730,6 @@ else:
 
                                                 # 🪙 GP தங்கம் வாங்குதல் சேமிப்பு
                                                 if any(k in t_type for k in ["GP", "Purchase", "வாங்க", "கொள்முதல்"]):
-                                                    
-                                                    # விவரக் குறிப்பு தயாரித்தல்
                                                     details_list = [
                                                         f"வகை: {item.get('gp_mode', 'Direct')}",
                                                         f"வவுச்சர் எண்: {item.get('voucher_no', '-')}",
@@ -4762,42 +4760,56 @@ else:
                                                         "purchase_amount": float(item.get("total_value") or item.get("amount") or 0.0),
                                                         "staff_name": s_name
                                                     }
-                                                    
-                                                    # Supabase-ல் சேமித்தல்
                                                     supabase.table("gold_purchases").insert(purchase_payload).execute()
 
-                                        # ✅ எந்தப் பிழையுமின்றி வெற்றிகரமாக முடிந்தால் மட்டுமே அடுத்த வருகைக்கு மாறும்:
-                                        st.session_state["last_saved_visit"] = {
-                                            "visit_no": v_no,
-                                            "customer_name": visit_data.get("customer_name", "-"),
-                                            "txn_count": len(st.session_state.transactions_cart),
-                                            "total_paid": sum(float(x.get("paid_amount", 0.0) or 0.0) for x in st.session_state.transactions_cart),
-                                            "total_received": sum(float(x.get("received_amount", 0.0) or 0.0) for x in st.session_state.transactions_cart)
-                                        }
-                                        st.session_state.transactions_cart = []
-                                        st.session_state.current_visit = None
-                                        if "form_reset_counter" in st.session_state:
-                                            st.session_state.form_reset_counter += 1
-                                        st.rerun()
+                                            # 3. புதிய அடமான எண்களை அதிகரித்தல் (கார்ட் காலியாவதற்கு முன் கணக்கிடுதல்)
+                                            cart = st.session_state.transactions_cart
+                                            pledge_items = [i for i in cart if "Pledge" in str(i.get("transaction_type", ""))]
+                                            if pledge_items:
+                                                try:
+                                                    final_b_id = int(st.session_state.branch_id)
+                                                    res = supabase.table("branch_loan_sequences").select("last_number").eq("branch_id", final_b_id).execute()
+                                                    current_db_last = int(res.data[0]["last_number"]) if res.data else 0
+                                                    new_db_last = current_db_last + len(pledge_items)
+                                                    supabase.table("branch_loan_sequences").update({"last_number": new_db_last}).eq("branch_id", final_b_id).execute()
+                                                except Exception:
+                                                    pass
+
+                                            # 🌟 4. பயன்படுத்தப்பட்ட OTP பைபாஸை 'Used' என மாற்றி முடித்தல்
+                                            try:
+                                                supabase.table("otp_bypass_requests").update({"status": "Used"}).eq("customer_id", c_id).eq("status", "Approved").execute()
+                                            except Exception:
+                                                pass
+
+                                            # 5. சேமிப்பு வெற்றி விவரங்களை நினைவகத்தில் சேமித்தல்
+                                            st.session_state["last_saved_visit"] = {
+                                                "visit_no": v_no,
+                                                "customer_name": visit_data.get("customer_name", "-"),
+                                                "txn_count": len(st.session_state.transactions_cart),
+                                                "total_paid": sum(float(x.get("paid_amount", 0.0) or 0.0) for x in st.session_state.transactions_cart),
+                                                "total_received": sum(float(x.get("received_amount", 0.0) or 0.0) for x in st.session_state.transactions_cart)
+                                            }
+
+                                            # 6. கார்ட் & OTP நினைவகங்களை முழுமையாக ரீசெட் செய்தல்
+                                            st.session_state.transactions_cart = []
+                                            st.session_state.current_visit = None
+                                            st.session_state.otp_cleared = False
+                                            st.session_state.otp_already_sent = False
+                                            st.session_state.generated_otp = None
+                                            st.session_state.current_declaration = None
+                                            st.session_state.declaration_gl_no = None
+                                            if "otp_bypass_requested" in st.session_state:
+                                                st.session_state.otp_bypass_requested = False
+                                            if "form_reset_counter" in st.session_state:
+                                                st.session_state.form_reset_counter += 1
+
+                                            # 7. இறுதியாகப் பக்கத்தை ரீபிரஷ் செய்தல்
+                                            st.rerun()
 
                                     except Exception as save_err:
-                                        # 🚨 எரர் வந்தால் கார்ட் அழியாது; எரர் திரையிலேயே சிவப்பு நிறத்தில் நிற்கும்:
+                                        # 🚨 எரர் வந்தால் கார்ட் அழியாது; எரர் திரையிலேயே நிற்கும்:
                                         st.error(f"❌ வருகையைச் சேமிப்பதில் பிழை ஏற்பட்டது: {save_err}")
                                         st.warning("⚠️ மேலே உள்ள எரரைச் சரிபார்க்கவும். உங்கள் கார்ட்டில் உள்ள தரவுகள் அழியாமல் அப்படியே உள்ளன.")
-
-                                    # 2. புதிய அடமான எண்களை அதிகரித்தல்
-                                    cart = st.session_state.transactions_cart
-                                    pledge_items = [i for i in cart if "Pledge" in str(i.get("transaction_type", ""))]
-                                    if pledge_items:
-                                        try:
-                                            final_b_id = int(st.session_state.branch_id)
-                                            res = supabase.table("branch_loan_sequences").select("last_number").eq("branch_id", final_b_id).execute()
-                                            current_db_last = int(res.data[0]["last_number"]) if res.data else 0
-                                            new_db_last = current_db_last + len(pledge_items)
-                                            supabase.table("branch_loan_sequences").update({"last_number": new_db_last}).eq("branch_id", final_b_id).execute()
-                                        except Exception:
-                                            pass
-
                                     # ✅ 1. தனித்துவமான வருகை எண் உருவாக்கம்
                                     current_v_no = visit.get("visit_no")
                                     chk_exist = supabase.table("customer_visits").select("id").eq("visit_no", current_v_no).execute()
