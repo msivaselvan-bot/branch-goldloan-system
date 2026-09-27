@@ -4765,7 +4765,7 @@ else:
 
                             cart_entry = {
                                 "transaction_type": txn_category,
-                                "staff_name": staff,
+                                "staff_name": staff if 'staff' in locals() else "",
                                 "paid_amount": float(actual_paid_amt),
                                 "received_amount": float(chk_received),
                                 "amount": float(actual_paid_amt if actual_paid_amt > 0 else chk_received),
@@ -4790,8 +4790,15 @@ else:
                                 "scheme_name": selected_scheme if 'selected_scheme' in locals() else (scheme_name if 'scheme_name' in locals() else ""),
                                 "interest_rate": float(cur_roi) if 'cur_roi' in locals() else 18.0,
                                 "tenure_months": int(cur_tenure) if 'cur_tenure' in locals() else 12,
-                                "market_rate": float(cur_rpg) if 'cur_rpg' in locals() else 0.0
+                                "market_rate": float(cur_rpg) if 'cur_rpg' in locals() else 0.0,
+
+                                # 🌟 RD / FD கணக்கு எண் & கூடுதல் மெட்டாடேட்டா:
+                                "account_no": acc_no if 'acc_no' in locals() else None,
+                                "extra_meta_data": extra_meta_data if 'extra_meta_data' in locals() else {}
                             }
+
+                            st.session_state.transactions_cart.append(cart_entry)
+                            st.rerun()
 
                             # 🌟 அடமானம் மீட்டல் (Release) என்றால் Closed செய்யக் குறித்தல்:
                             if "மீட்டல்" in txn_category or "Release" in txn_category:
@@ -5460,45 +5467,71 @@ else:
                                             except Exception as gp_err:
                                                 st.error(f"⚠️ gold_purchases அட்டவணையில் சேமிப்பதில் பிழை: {gp_err}")
 
+                                        # =============================================================
                                         # 3.5 புதிய நிலையான வைப்பு நிதி (Fixed Deposits - FD)
+                                        # =============================================================
                                         elif "FD Open" in t_type or ("FD" in t_type and "Open" in t_type):
                                             try:
                                                 fd_meta = item.get("extra_meta_data", {}) or item
-                                                dep_amt = float(fd_meta.get("deposit_amount") or item.get("received_amount") or 0.0)
+                                                dep_amt = float(fd_meta.get("deposit_amount") or item.get("received_amount") or item.get("amount") or 0.0)
+                                                
+                                                # 🌟 1. எண்களை எடுக்கும் பல அடுக்கு பாதுகாப்பு:
+                                                final_fd_no = fd_meta.get("account_no") or item.get("account_no") or item.get("acc_no")
+                                                if not final_fd_no:
+                                                    # remarks-ல் இருந்து Regex மூலம் தேடுதல் (எ.கா: FD No: AVL/FD/0021)
+                                                    m_fd = re.search(r'([A-Za-z0-9]+/[Ff][Dd]/\d+)', str(item.get("remarks", "")))
+                                                    if m_fd:
+                                                        final_fd_no = m_fd.group(1)
+                                                    else:
+                                                        final_fd_no = generate_fd_account_no(b_id)
+
                                                 fd_insert_data = {
                                                     "visit_id": new_visit_id,
                                                     "branch_id": b_id,
                                                     "customer_id": c_id,
-                                                    "fd_account_no": fd_meta.get("account_no") or item.get("account_no"),
+                                                    "fd_account_no": final_fd_no,  # 👈 எந்த நிலையிலும் NULL ஆகாது!
                                                     "deposit_amount": dep_amt,
                                                     "tenure_months": int(fd_meta.get("tenure_months", 12)),
                                                     "interest_rate": float(fd_meta.get("interest_rate", 12.0)),
                                                     "maturity_amount": dep_amt * 1.12,
-                                                    "nominee_name": fd_meta.get("nominee", "-"),
-                                                    "nominee_relation": fd_meta.get("relation", "-"),
+                                                    "nominee_name": fd_meta.get("nominee") or fd_meta.get("nominee_name", "-"),
+                                                    "nominee_relation": fd_meta.get("relation") or fd_meta.get("nominee_relation", "-"),
                                                     "status": "Active"
                                                 }
                                                 supabase.table("fixed_deposits").insert(fd_insert_data).execute()
                                             except Exception as fd_err:
                                                 st.error(f"⚠️ fixed_deposits அட்டவணையில் சேமிப்பதில் பிழை: {fd_err}")
 
+                                        # =============================================================
                                         # 3.6 புதிய தொடர் வைப்பு நிதி (Recurring Deposits - RD)
+                                        # =============================================================
                                         elif "RD Open" in t_type or ("RD" in t_type and "Open" in t_type):
                                             try:
                                                 rd_meta = item.get("extra_meta_data", {}) or item
-                                                inst_amt = float(rd_meta.get("installment_amount") or item.get("received_amount") or 0.0)
+                                                inst_amt = float(rd_meta.get("installment_amount") or item.get("received_amount") or item.get("amount") or 0.0)
+                                                
+                                                # 🌟 1. எண்களை எடுக்கும் பல அடுக்கு பாதுகாப்பு:
+                                                final_rd_no = rd_meta.get("account_no") or item.get("account_no") or item.get("acc_no")
+                                                if not final_rd_no:
+                                                    # remarks-ல் இருந்து Regex மூலம் தேடுதல் (எ.கா: RD No: AVL/RD/0016)
+                                                    m_rd = re.search(r'([A-Za-z0-9]+/[Rr][Dd]/\d+)', str(item.get("remarks", "")))
+                                                    if m_rd:
+                                                        final_rd_no = m_rd.group(1)
+                                                    else:
+                                                        final_rd_no = generate_rd_account_no(b_id)
+
                                                 rd_insert_data = {
                                                     "visit_id": new_visit_id,
                                                     "branch_id": b_id,
                                                     "customer_id": c_id,
-                                                    "rd_account_no": rd_meta.get("account_no") or item.get("account_no"),
+                                                    "rd_account_no": final_rd_no,  # 👈 எந்த நிலையிலும் NULL ஆகாது!
                                                     "monthly_installment": inst_amt,
                                                     "tenure_months": int(rd_meta.get("tenure_months", 12)),
                                                     "interest_rate": float(rd_meta.get("interest_rate", 12.0)),
                                                     "total_target_amount": inst_amt * 12,
                                                     "current_installment_no": 1,
-                                                    "nominee_name": rd_meta.get("nominee", "-"),
-                                                    "nominee_relation": rd_meta.get("relation", "-"),
+                                                    "nominee_name": rd_meta.get("nominee") or rd_meta.get("nominee_name", "-"),
+                                                    "nominee_relation": rd_meta.get("relation") or rd_meta.get("nominee_relation", "-"),
                                                     "status": "Active"
                                                 }
                                                 supabase.table("recurring_deposits").insert(rd_insert_data).execute()
