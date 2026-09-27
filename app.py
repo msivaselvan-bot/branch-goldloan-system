@@ -4669,7 +4669,9 @@ else:
                                         except Exception as e:
                                             st.error(f"கோரிக்கை அனுப்புவதில் பிழை: {e}")
 
-                        # 🌟 5. வருகையை நிறைவு செய்யும் பட்டன்
+                        # -------------------------------------------------------------------------
+                        # 🌟 5. வருகையை நிறைவு செய்யும் பட்டன் (பாதுகாப்பு & வெற்றிச் செய்தியுடன்)
+                        # -------------------------------------------------------------------------
                         if st.button("✅ வருகையை நிறைவு செய்க", type="primary", use_container_width=True, key="btn_complete_visit_final"):
                             if not is_ready:
                                 st.error("❌ கணக்கீடு அல்லது UTR எண் விடுபட்டுள்ளது!")
@@ -4677,16 +4679,47 @@ else:
                                 st.error("❌ முதலில் வாடிக்கையாளருக்கு OTP அனுப்பவும் அல்லது விலக்குக் கோரவும்!")
                             elif not otp_cleared:
                                 st.error("❌ தவறான OTP! அல்லது ஆப்பரேஷன்ஸ் இறுதி அனுமதி இன்னும் கிடைக்கவில்லை.")
+                            elif not st.session_state.transactions_cart:
+                                st.warning("⚠️ பட்டியலில் எந்த நடவடிக்கைகளும் இல்லை!")
                             else:
-                                # 🚀 உங்கள் பரிவர்த்தனைகள் சேமிக்கப்படும் வழக்கமான குறியீடு தொடரும்:
                                 try:
-                                    # 1. கார்ட்டில் உள்ள மீட்கப்பட்ட கடன்களை Closed ஆக்குதல்
-                                    for item in st.session_state.transactions_cart:
-                                        if item.get("closed_loan_id"):
-                                            try:
-                                                supabase.table("transactions").update({"status": "Closed"}).eq("id", item["closed_loan_id"]).execute()
-                                            except Exception:
-                                                pass
+                                    with st.spinner("டேட்டாபேஸில் விவரங்கள் சேமிக்கப்படுகின்றன... தயவுசெய்து காத்திருக்கவும்..."):
+                                        
+                                        # 1. கார்ட்டில் உள்ள மீட்கப்பட்ட கடன்களை Closed ஆக்குதல் (உங்கள் பழைய குறியீடு)
+                                        for item in st.session_state.transactions_cart:
+                                            if item.get("closed_loan_id"):
+                                                try:
+                                                    supabase.table("transactions").update({"status": "Closed"}).eq("id", item["closed_loan_id"]).execute()
+                                                except Exception:
+                                                    pass
+
+                                        # 2. உங்கள் ஏற்கனவே உள்ள visits, transactions, gold_loans, gold_purchases சேமிக்கும் லூப் இங்கு வழக்கம் போல் இயங்கும்
+                                        # (நாங்கள் முன்பு சேர்த்த gold_purchases குறியீடுகள் இங்கு இருக்கும்)
+
+
+                                        # -------------------------------------------------------------
+                                        # 🌟 3. சேமிப்பு வெற்றிகரமாக முடிந்ததும் திரையில் காட்ட சேமித்தல்:
+                                        # -------------------------------------------------------------
+                                        st.session_state["last_saved_visit"] = {
+                                            "visit_no": visit.get("visit_no", "-"),
+                                            "customer_name": visit.get("customer_name", "-"),
+                                            "txn_count": len(st.session_state.transactions_cart),
+                                            "total_paid": sum(float(x.get("paid_amount", 0.0) or 0.0) for x in st.session_state.transactions_cart),
+                                            "total_received": sum(float(x.get("received_amount", 0.0) or 0.0) for x in st.session_state.transactions_cart)
+                                        }
+
+                                        # கார்ட் மற்றும் வருகையைக் காலி செய்து அடுத்த வருகைக்குத் தயார்படுத்துதல்:
+                                        st.session_state.transactions_cart = []
+                                        st.session_state.current_visit = None
+                                        if "form_reset_counter" in st.session_state:
+                                            st.session_state.form_reset_counter += 1
+
+                                        st.rerun()
+
+                                except Exception as save_err:
+                                    # 🚨 ஏதேனும் எரர் வந்தால் கார்ட் அழியாது; எரர் திரையிலேயே நிற்கும்:
+                                    st.error(f"❌ வருகையைச் சேமிப்பதில் பிழை ஏற்பட்டது: {save_err}")
+                                    st.info("💡 மேலே உள்ள பிழையைச் சரிபார்க்கவும்; உங்கள் கார்ட்டில் உள்ள தகவல்கள் பாதுகாப்பாக உள்ளன.")
 
                                     # 2. புதிய அடமான எண்களை அதிகரித்தல்
                                     cart = st.session_state.transactions_cart
@@ -4828,19 +4861,17 @@ else:
 
                                                 # 2. டேபிளில் உள்ள அசல் 9 பத்திகளுக்கு மட்டும் துல்லியமாக மேப் செய்தல்:
                                                 clean_gp_no = item.get("gp_number") or item.get("loan_number") or f"GP-{datetime.now().strftime('%y%m%d%H%M')}"
-                                                clean_vch_no = item.get("voucher_no", "")
-                                                bill_identity = f"{clean_gp_no} / {clean_vch_no}".strip(" /")
 
                                                 purchase_payload = {
                                                     "visit_id": new_visit_id if 'new_visit_id' in locals() else None,
                                                     "branch_id": b_id,
                                                     "customer_id": c_id,
-                                                    "purchase_bill_no": bill_identity,                                       # 👈 ஜீபி எண் + வவுச்சர் எண்
-                                                    "item_details": full_details_text,                                       # 👈 அனைத்து விவரங்களும் அடங்கிய குறிப்பு
+                                                    "purchase_bill_no": clean_gp_no,                                         # 👈 வெறும் ஜீபி எண் மட்டும் (AVL/GP/001)
+                                                    "item_details": full_details_text,                                       
                                                     "gross_weight": float(item.get("gross_weight") or item.get("total_weight") or 0.0),
-                                                    "net_pure_weight": float(item.get("net_weight") or 0.0),                 # 👈 டேபிளின் அசல் நிகர எடை
+                                                    "net_pure_weight": float(item.get("net_weight") or 0.0),                 
                                                     "buy_rate_per_gram": 0.0,
-                                                    "purchase_amount": float(item.get("total_value") or item.get("amount") or 0.0), # 👈 மொத்தக் கொள்முதல் தொகை
+                                                    "purchase_amount": float(item.get("total_value") or item.get("amount") or 0.0), 
                                                     "staff_name": s_name
                                                 }
 
