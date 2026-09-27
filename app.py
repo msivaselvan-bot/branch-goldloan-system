@@ -908,7 +908,68 @@ def generate_rd_account_no(branch_id: int) -> str:
                     
         return f"{b_code}/RD/{max_seq + 1:04d}"
     except Exception:
-        return f"{b_code}/RD/{datetime.now().strftime('%y%m%d%H%M')}"        
+        return f"{b_code}/RD/{datetime.now().strftime('%y%m%d%H%M')}"
+# -------------------------------------------------------------------------
+# 🔍 வாடிக்கையாளரின் ஆக்டிவ் RD கணக்குகளை எடுக்கும் ஃபங்க்ஷன்
+# -------------------------------------------------------------------------
+def get_customer_rd_accounts(customer_id: int):
+    """வாடிக்கையாளரின் முடிவடையாத (Active) RD கணக்குகளை எடுத்தல்"""
+    try:
+        v_res = supabase.table("customer_visits").select("id").eq("customer_id", int(customer_id)).execute()
+        v_ids = [v["id"] for v in (v_res.data or [])]
+        if not v_ids:
+            return []
+
+        # RD Open பதிவுகள்
+        open_res = supabase.table("transactions").select("transaction_details").in_("visit_id", v_ids).ilike("transaction_type", "%RD Open%").execute()
+        # ஏற்கனவே மூடப்பட்ட RD Close பதிவுகள்
+        close_res = supabase.table("transactions").select("transaction_details").in_("visit_id", v_ids).ilike("transaction_type", "%RD Close%").execute()
+
+        closed_accs = {str((t.get("transaction_details") or {}).get("account_no", "")).strip() for t in (close_res.data or [])}
+
+        active_rds = []
+        for t in (open_res.data or []):
+            d = t.get("transaction_details") or {}
+            acc = str(d.get("account_no", "")).strip()
+            if acc and acc not in closed_accs and acc not in [x["acc_no"] for x in active_rds]:
+                active_rds.append({
+                    "acc_no": acc,
+                    "installment_amount": float(d.get("installment_amount", 0.0) or 0.0)
+                })
+        return active_rds
+    except Exception:
+        return []
+
+# -------------------------------------------------------------------------
+# 🔍 வாடிக்கையாளரின் ஆக்டிவ் FD கணக்குகளை எடுக்கும் ஃபங்க்ஷன்
+# -------------------------------------------------------------------------
+def get_customer_fd_accounts(customer_id: int):
+    """வாடிக்கையாளரின் முடிவடையாத (Active) FD கணக்குகளை எடுத்தல்"""
+    try:
+        v_res = supabase.table("customer_visits").select("id").eq("customer_id", int(customer_id)).execute()
+        v_ids = [v["id"] for v in (v_res.data or [])]
+        if not v_ids:
+            return []
+
+        # FD Open பதிவுகள்
+        open_res = supabase.table("transactions").select("transaction_details").in_("visit_id", v_ids).ilike("transaction_type", "%FD Open%").execute()
+        # ஏற்கனவே மூடப்பட்ட FD Close பதிவுகள்
+        close_res = supabase.table("transactions").select("transaction_details").in_("visit_id", v_ids).ilike("transaction_type", "%FD Close%").execute()
+
+        closed_accs = {str((t.get("transaction_details") or {}).get("account_no", "")).strip() for t in (close_res.data or [])}
+
+        active_fds = []
+        for t in (open_res.data or []):
+            d = t.get("transaction_details") or {}
+            acc = str(d.get("account_no", "")).strip()
+            if acc and acc not in closed_accs and acc not in [x["acc_no"] for x in active_fds]:
+                active_fds.append({
+                    "acc_no": acc,
+                    "deposit_amount": float(d.get("deposit_amount", 0.0) or 0.0)
+                })
+        return active_fds
+    except Exception:
+        return []        
 
 def send_fast2sms_otp(mobile_no: str, otp_code: str):
     try:
@@ -4209,6 +4270,104 @@ else:
                         "age": rd_age,
                         "address": rd_address
                     }
+                
+                elif "RD தவணை" in txn_category or "RD Due" in txn_category:
+                    st.markdown("##### 📈 RD தவணை செலுத்துதல்")
+                    c_id = visit.get("customer_id")
+                    cust_rds = get_customer_rd_accounts(c_id) if c_id else []
+
+                    c1, c2 = st.columns(2)
+                    with c1:
+                        if cust_rds:
+                            rd_options = [r["acc_no"] for r in cust_rds] + ["கைமுறையாக உள்ளிட (Manual)"]
+                            sel_rd = st.selectbox("RD கணக்கு எண் தேர்ந்தெடுக்கவும் *", rd_options)
+                            if sel_rd == "கைமுறையாக உள்ளிட (Manual)":
+                                acc_no = st.text_input("RD கணக்கு எண் உள்ளிடவும் *")
+                                default_inst = 500.0
+                            else:
+                                acc_no = sel_rd
+                                # தேர்ந்தெடுக்கப்பட்ட RD-ன் தவணைத் தொகையை தானாக எடுத்தல்:
+                                matched = next((r for r in cust_rds if r["acc_no"] == sel_rd), None)
+                                default_inst = float(matched["installment_amount"]) if matched else 500.0
+                        else:
+                            st.info("💡 இந்த வாடிக்கையாளருக்கு முந்தைய RD கணக்குகள் கண்டறியப்படவில்லை.")
+                            acc_no = st.text_input("RD கணக்கு எண் உள்ளிடவும் *")
+                            default_inst = 500.0
+
+                    with c2:
+                        received_amt = st.number_input("தவணைத் தொகை (₹) *", min_value=0.0, value=default_inst, step=100.0)
+
+                    detail_summary = [f"RD No: {acc_no}", f"Due Amount: ₹{received_amt:,.2f}"]
+                    extra_meta_data = {"account_no": acc_no, "installment_amount": received_amt}
+
+                elif "RD முடித்தல்" in txn_category or "RD Close" in txn_category:
+                    st.markdown("##### 📉 RD கணக்கு முடித்தல் / பட்டுவாடா")
+                    c_id = visit.get("customer_id")
+                    cust_rds = get_customer_rd_accounts(c_id) if c_id else []
+
+                    c1, c2 = st.columns(2)
+                    with c1:
+                        if cust_rds:
+                            rd_options = [r["acc_no"] for r in cust_rds] + ["கைமுறையாக உள்ளிட (Manual)"]
+                            sel_rd = st.selectbox("முடிக்க வேண்டிய RD கணக்கு எண் *", rd_options)
+                            acc_no = st.text_input("RD கணக்கு எண் *", value="" if sel_rd == "கைமுறையாக உள்ளிட (Manual)" else sel_rd)
+                        else:
+                            acc_no = st.text_input("முடிக்க வேண்டிய RD கணக்கு எண் *")
+
+                    with c2:
+                        # RD முதிர்வுத் தொகை வாடிக்கையாளருக்கு கிளை வழங்குவது (paid_amount)
+                        paid_amt = st.number_input("முதிர்வு / திருப்பியளிக்கும் தொகை (Payout ₹) *", min_value=0.0, step=500.0)
+
+                    detail_summary = [f"Closed RD: {acc_no}", f"Payout: ₹{paid_amt:,.2f}"]
+                    extra_meta_data = {"account_no": acc_no, "closed_amount": paid_amt}
+                
+                elif "FD வட்டி" in txn_category or "FD Interest" in txn_category:
+                    st.markdown("##### 💵 FD வட்டி வழங்குதல்")
+                    c_id = visit.get("customer_id")
+                    cust_fds = get_customer_fd_accounts(c_id) if c_id else []
+
+                    c1, c2 = st.columns(2)
+                    with c1:
+                        if cust_fds:
+                            fd_options = [f["acc_no"] for f in cust_fds] + ["கைமுறையாக உள்ளிட (Manual)"]
+                            sel_fd = st.selectbox("FD கணக்கு எண் தேர்ந்தெடுக்கவும் *", fd_options)
+                            acc_no = st.text_input("FD கணக்கு எண் *", value="" if sel_fd == "கைமுறையாக உள்ளிட (Manual)" else sel_fd)
+                        else:
+                            acc_no = st.text_input("FD கணக்கு எண் உள்ளிடவும் *")
+
+                    with c2:
+                        # வட்டி வாடிக்கையாளருக்கு கிளை வழங்குவது (paid_amount)
+                        paid_amt = st.number_input("வட்டித் தொகை (Interest ₹) *", min_value=0.0, step=100.0)
+
+                    detail_summary = [f"FD No: {acc_no}", f"Interest Paid: ₹{paid_amt:,.2f}"]
+                    extra_meta_data = {"account_no": acc_no, "interest_amount": paid_amt}
+
+                elif "FD முடித்தல்" in txn_category or "FD Close" in txn_category:
+                    st.markdown("##### 📑 FD கணக்கு முடித்தல் / அசல் திரும்பப் பெறுதல்")
+                    c_id = visit.get("customer_id")
+                    cust_fds = get_customer_fd_accounts(c_id) if c_id else []
+
+                    c1, c2 = st.columns(2)
+                    with c1:
+                        if cust_fds:
+                            fd_options = [f["acc_no"] for f in cust_fds] + ["கைமுறையாக உள்ளிட (Manual)"]
+                            sel_fd = st.selectbox("முடிக்க வேண்டிய FD கணக்கு எண் *", fd_options)
+                            if sel_fd == "கைமுறையாக உள்ளிட (Manual)":
+                                acc_no = st.text_input("FD கணக்கு எண் *")
+                                default_dep = 0.0
+                            else:
+                                acc_no = sel_fd
+                                matched_fd = next((f for f in cust_fds if f["acc_no"] == sel_fd), None)
+                                default_dep = float(matched_fd["deposit_amount"]) if matched_fd else 0.0
+                        else:
+                            acc_no = st.text_input("முடிக்க வேண்டிய FD கணக்கு எண் *")
+                            default_dep = 0.0
+
+                    with c2:
+                        paid_amt = st.number_input("திரும்ப வழங்கும் தொகை (அசல் + வட்டி ₹) *", min_value=0.0, value=default_dep, step=1000.0)
+
+                    detail_summary = [f"Closed FD: {acc_no}", f"Principal Payout: ₹{paid_amt:,.2f}"]
+                    extra_meta_data = {"account_no": acc_no, "settled_amount": paid_amt}
 
                 # 6. RD & FD முதிர்வு / தவணைகள்
                 elif "RD" in txn_category or "FD" in txn_category:
