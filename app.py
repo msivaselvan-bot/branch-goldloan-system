@@ -4831,13 +4831,10 @@ else:
                                     # -------------------------------------------------------------------------
                                     for item in st.session_state.transactions_cart:
                                         t_type = str(item.get("transaction_type", ""))
-                                        b_id = st.session_state.branch_id
-                                        c_id = visit.get("customer_id")
                                         s_name = item.get("staff_name", "")
 
                                         # அ. நகைக்கடன் (Gold Loans)
                                         if any(k in t_type for k in ["Pledge", "Loan", "நகைக்கடன்"]):
-                                            # கார்ட்டில் உள்ள கடன் எண்ணை (GL No) துல்லியமாக எடுத்தல்
                                             actual_gl_no = item.get("loan_no") or item.get("gp_number") or f"GL-{datetime.now().strftime('%y%m%d%H%M%S')}"
 
                                             loan_payload = {
@@ -4851,20 +4848,15 @@ else:
                                                 "net_weight": float(item.get("net_weight", 0.0) or 0.0),
                                                 "purity": item.get("purity", "916 KDM"),
                                                 "sanctioned_amount": float(item.get("paid_amount", 0.0) or item.get("amount", 0.0)),
-                                                
-                                                # 🌟 ஸ்கீம் மாஸ்டர் விபரங்கள் (Scheme Details):
                                                 "scheme_name": item.get("scheme_name", "Regular"),
                                                 "interest_rate": float(item.get("interest_rate", 18.0) or 18.0),
                                                 "market_rate_per_gram": float(item.get("market_rate", 0.0) or 0.0),
-                                                
                                                 "staff_name": s_name,
                                                 "status": "Active"
                                             }
                                             supabase.table("gold_loans").insert(loan_payload).execute()
 
-                                        # =============================================================
                                         # ஆ. நகை விற்பனை (Gold Sales)
-                                        # =============================================================
                                         elif any(k in t_type for k in ["Sale", "விற்பனை"]):
                                             sale_payload = {
                                                 "visit_id": new_visit_id,
@@ -4874,29 +4866,23 @@ else:
                                                 "item_name": item.get("ornament_details", "Gold Jewellery"),
                                                 "gross_weight": float(item.get("total_weight", 0.0) or 0.0),
                                                 "net_weight": float(item.get("net_weight", 0.0) or 0.0),
-                                                
-                                                # 👈 1. இங்கே மாற்றப்பட்டுள்ளது:
                                                 "gold_rate_per_gram": float(item.get("rate_per_gram") or item.get("gold_rate_per_gram") or item.get("market_rate") or 0.0),
-                                                
                                                 "total_sale_amount": float(item.get("received_amount", 0.0) or item.get("amount", 0.0)),
                                                 "staff_name": s_name
                                             }
                                             supabase.table("gold_sales").insert(sale_payload).execute()
 
-                                        # =============================================================
                                         # இ. தங்கம் வாங்குதல் (Gold Purchase / GP) - 100% பிழையற்ற முறை
-                                        # =============================================================
                                         elif any(k in t_type for k in ["GP", "Purchase", "வாங்க", "கொள்முதல்"]):
                                             try:
-                                                # 1. நகைகள், Takeover மற்றும் சாட்சி விவரங்களை ஒரே முழுமையான விவரக் குறிப்பாக மாற்றுதல்:
+                                                # நகைகள் மற்றும் டேக்ஓவர் குறிப்பு தயாரித்தல்:
                                                 details_list = [
                                                     f"வகை: {item.get('gp_mode', 'Direct')}",
                                                     f"வவுச்சர் எண்: {item.get('voucher_no', '-')}",
                                                     f"நகைகள் விவரம்:\n{item.get('ornament_details', 'Gold Jewellery')}"
                                                 ]
                                                 
-                                                # Takeover ஆக இருந்தால் வங்கி விபரங்களை இணைத்தல்:
-                                                if item.get("is_takeover"):
+                                                if item.get("is_takeover") or item.get("bank_source"):
                                                     details_list.append(
                                                         f"\n[Takeover விவரங்கள்]\n"
                                                         f"முந்தைய நிறுவனம்: {item.get('bank_source', '-')}\n"
@@ -4905,7 +4891,6 @@ else:
                                                         f"மீதி வழங்கியது: ₹{float(item.get('balance_payable', 0.0)):,.2f}"
                                                     )
                                                     
-                                                # சாட்சிகள் விவரம்:
                                                 if item.get("ref1_name"):
                                                     details_list.append(f"சாட்சி 1: {item.get('ref1_name')} ({item.get('ref1_phone')})")
                                                 if item.get("ref2_name"):
@@ -4914,25 +4899,22 @@ else:
                                                     details_list.append(f"குறிப்பு: {item.get('remarks')}")
 
                                                 full_details_text = "\n".join(details_list)
-
-                                                # 2. டேபிளில் உள்ள அசல் 9 பத்திகளுக்கு மட்டும் துல்லியமாக மேப் செய்தல்:
                                                 clean_gp_no = item.get("gp_number") or item.get("loan_number") or f"GP-{datetime.now().strftime('%y%m%d%H%M')}"
 
                                                 purchase_payload = {
-                                                    "visit_id": new_visit_id if 'new_visit_id' in locals() else None,
+                                                    "visit_id": new_visit_id,
                                                     "branch_id": b_id,
                                                     "customer_id": c_id,
-                                                    "purchase_bill_no": clean_gp_no,                                         # 👈 வெறும் ஜீபி எண் மட்டும் (AVL/GP/001)
-                                                    "item_details": full_details_text,                                       
+                                                    "purchase_bill_no": clean_gp_no,
+                                                    "item_details": full_details_text,
                                                     "gross_weight": float(item.get("gross_weight") or item.get("total_weight") or 0.0),
-                                                    "net_pure_weight": float(item.get("net_weight") or 0.0),                 
+                                                    "net_pure_weight": float(item.get("net_weight") or 0.0),
                                                     "buy_rate_per_gram": 0.0,
-                                                    "purchase_amount": float(item.get("total_value") or item.get("amount") or 0.0), 
+                                                    "purchase_amount": float(item.get("total_value") or item.get("amount") or 0.0),
                                                     "staff_name": s_name
                                                 }
 
                                                 supabase.table("gold_purchases").insert(purchase_payload).execute()
-
                                             except Exception as gp_err:
                                                 st.error(f"⚠️ gold_purchases அட்டவணையில் சேமிப்பதில் பிழை: {gp_err}")
 
@@ -4968,7 +4950,7 @@ else:
                                             }
                                             supabase.table("recurring_deposits").insert(rd_payload).execute()
 
-                                        # ஊ. தலைமை அலுவலக தணிக்கை & அழைப்புச் சரிபார்ப்புக்காக transactions அட்டவணையில் பதிவு:
+                                        # ஊ. transactions அட்டவணையில் பதிவு:
                                         general_txn = {
                                             "visit_id": new_visit_id,
                                             "branch_id": b_id,
@@ -4988,16 +4970,24 @@ else:
                                         }
                                         supabase.table("transactions").insert(general_txn).execute()
 
-                                    # 4. நினைவகத்தை முழுமையாக ரீசெட் செய்தல்
-                                    st.success(f"🎉 வருகை {current_v_no} வெற்றிகரமாக நிறைவுபெற்றது! (ஆப்பரேஷன்ஸ் அழைப்பு ஒப்புதலுக்கு அனுப்பப்பட்டது)")
-                                    st.session_state.current_visit = None
-                                    st.session_state.transactions_cart = []
-                                    st.session_state.generated_otp = None
-                                    st.session_state.current_declaration = None
-                                    st.session_state.declaration_gl_no = None
-                                    st.rerun()
-                                except Exception as e:
-                                    st.error(f"நிறைவு செய்வதில் பிழை: {e}")
+                                        # 4. சேமிப்பு வெற்றி விவரங்களை நினைவகத்தில் சேமித்தல் & ரீசெட் செய்தல்
+                                        st.session_state["last_saved_visit"] = {
+                                            "visit_no": current_v_no,
+                                            "customer_name": visit.get("customer_name", "-"),
+                                            "txn_count": len(st.session_state.transactions_cart),
+                                            "total_paid": sum(float(x.get("paid_amount", 0.0) or 0.0) for x in st.session_state.transactions_cart),
+                                            "total_received": sum(float(x.get("received_amount", 0.0) or 0.0) for x in st.session_state.transactions_cart)
+                                        }
+
+                                        st.session_state.current_visit = None
+                                        st.session_state.transactions_cart = []
+                                        st.session_state.generated_otp = None
+                                        st.session_state.current_declaration = None
+                                        st.session_state.declaration_gl_no = None
+                                        if "form_reset_counter" in st.session_state:
+                                            st.session_state.form_reset_counter += 1
+                                        st.rerun()
+
         # =========================================================================
         # 2-வது டேப்: கிளை ஆவணங்கள் பதிவேற்றம் (Upload Docs Desk)
         # =========================================================================
