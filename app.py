@@ -5209,7 +5209,7 @@ else:
 
                         # 🌟 1. வருகை எண் மற்றும் வாடிக்கையாளர் ஐடி எடுத்தல்
                         current_v_no = visit.get("visit_no", "-")
-                        v_id = current_v_no  # 👈👈👈 இந்தப் புதிய வரியைச் சேர்க்கவும் (Line 4726-ல் உள்ள எரரைத் தீர்க்க)
+                        v_id = current_v_no  # Line 4726-ல் எரர் வராமல் பாதுகாக்க இது கட்டாயம் தேவை
                         c_id = visit.get("customer_id")
                         current_status = None
 
@@ -5220,6 +5220,7 @@ else:
                                     .select("status")
                                     .eq("customer_id", c_id)
                                     .eq("visit_no", current_v_no)
+                                    .neq("status", "Used")  # 👈🌟 இந்த ஒரு வரியை மட்டும் இணைத்துக் கொள்ளுங்கள்!
                                     .order("id", desc=True)
                                     .limit(1)
                                     .execute()
