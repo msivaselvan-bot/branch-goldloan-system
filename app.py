@@ -4220,7 +4220,6 @@ else:
                     st.markdown("##### 📑 புதிய FD கணக்கு விவரங்கள் & நாமினி")
                     fd_c1, fd_c2 = st.columns(2)
                     with fd_c1:
-                        # 🌟 கைமுறையாக உள்ளிடுவதற்குப் பதிலாக தானாகவே எண் வரும் (disabled=True):
                         auto_fd_no = generate_fd_account_no(st.session_state.branch_id)
                         fd_acc_no = st.text_input("FD கணக்கு எண்:", value=auto_fd_no, disabled=True)
                         fd_sel_scheme = st.selectbox("அட்மின் FD திட்டம் (Scheme) *", fd_scheme_options)
@@ -4231,8 +4230,8 @@ else:
                         fd_age = st.number_input("வயது *", min_value=1, max_value=120, value=30)
                         fd_address = st.text_area("நாமினி முகவரி *", height=82)
                     
-                    acc_no = fd_acc_no  # பழைய கார்ட் வேரியபிள்களுக்குப் பாதுகாப்பு
-                    detail_summary = [f"FD No: {fd_acc_no}", f"Scheme: {fd_sel_scheme}", f"Dep: ₹{received_amt}", f"Nominee: {fd_nominee}"]
+                    acc_no = fd_acc_no
+                    detail_summary = [f"FD No: {fd_acc_no}", f"Scheme: {fd_sel_scheme}", f"Dep: ₹{received_amt:,.2f}", f"Nominee: {fd_nominee}"]
                     extra_meta_data = {
                         "account_no": fd_acc_no,
                         "deposit_amount": received_amt,
@@ -4249,7 +4248,6 @@ else:
                     st.markdown("##### 📈 புதிய RD கணக்கு விவரங்கள் & நாமினி")
                     rd_c1, rd_c2 = st.columns(2)
                     with rd_c1:
-                        # 🌟 கைமுறையாக உள்ளிடுவதற்குப் பதிலாக தானாகவே எண் வரும் (disabled=True):
                         auto_rd_no = generate_rd_account_no(st.session_state.branch_id)
                         rd_acc_no = st.text_input("RD கணக்கு எண்:", value=auto_rd_no, disabled=True)
                         rd_sel_scheme = st.selectbox("அட்மின் RD திட்டம் (Scheme) *", rd_scheme_options)
@@ -4260,8 +4258,8 @@ else:
                         rd_age = st.number_input("வயது *", min_value=1, max_value=120, value=30, key="rd_age_in")
                         rd_address = st.text_area("நாமினி முகவரி *", height=82, key="rd_addr_in")
                     
-                    acc_no = rd_acc_no  # பழைய கார்ட் வேரியபிள்களுக்குப் பாதுகாப்பு
-                    detail_summary = [f"RD No: {rd_acc_no}", f"Scheme: {rd_sel_scheme}", f"Inst: ₹{received_amt}", f"Nominee: {rd_nominee}"]
+                    acc_no = rd_acc_no
+                    detail_summary = [f"RD No: {rd_acc_no}", f"Scheme: {rd_sel_scheme}", f"Inst: ₹{received_amt:,.2f}", f"Nominee: {rd_nominee}"]
                     extra_meta_data = {
                         "account_no": rd_acc_no,
                         "installment_amount": received_amt,
@@ -4270,8 +4268,11 @@ else:
                         "age": rd_age,
                         "address": rd_address
                     }
-                
-                elif "RD தவணை" in txn_category or "RD Due" in txn_category:
+
+                # -------------------------------------------------------------
+                # 7. RD தவணை செலுத்துதல் (RD Due - Auto Account Fetch)
+                # -------------------------------------------------------------
+                elif "RD" in txn_category and ("தவணை" in txn_category or "Due" in txn_category):
                     st.markdown("##### 📈 RD தவணை செலுத்துதல்")
                     c_id = visit.get("customer_id")
                     cust_rds = get_customer_rd_accounts(c_id) if c_id else []
@@ -4280,28 +4281,30 @@ else:
                     with c1:
                         if cust_rds:
                             rd_options = [r["acc_no"] for r in cust_rds] + ["கைமுறையாக உள்ளிட (Manual)"]
-                            sel_rd = st.selectbox("RD கணக்கு எண் தேர்ந்தெடுக்கவும் *", rd_options)
+                            sel_rd = st.selectbox("RD கணக்கு எண் தேர்ந்தெடுக்கவும் *", rd_options, key="rd_due_sel")
                             if sel_rd == "கைமுறையாக உள்ளிட (Manual)":
-                                acc_no = st.text_input("RD கணக்கு எண் உள்ளிடவும் *")
+                                acc_no = st.text_input("RD கணக்கு எண் உள்ளிடவும் *", key="rd_due_man_acc")
                                 default_inst = 500.0
                             else:
                                 acc_no = sel_rd
-                                # தேர்ந்தெடுக்கப்பட்ட RD-ன் தவணைத் தொகையை தானாக எடுத்தல்:
                                 matched = next((r for r in cust_rds if r["acc_no"] == sel_rd), None)
                                 default_inst = float(matched["installment_amount"]) if matched else 500.0
                         else:
                             st.info("💡 இந்த வாடிக்கையாளருக்கு முந்தைய RD கணக்குகள் கண்டறியப்படவில்லை.")
-                            acc_no = st.text_input("RD கணக்கு எண் உள்ளிடவும் *")
+                            acc_no = st.text_input("RD கணக்கு எண் உள்ளிடவும் *", key="rd_due_empty_acc")
                             default_inst = 500.0
 
                     with c2:
-                        received_amt = st.number_input("தவணைத் தொகை (₹) *", min_value=0.0, value=default_inst, step=100.0)
+                        received_amt = st.number_input("பெற்ற தவணைத் தொகை (₹) *", min_value=0.0, value=default_inst, step=100.0, key="rd_due_amt")
 
                     detail_summary = [f"RD No: {acc_no}", f"Due Amount: ₹{received_amt:,.2f}"]
                     extra_meta_data = {"account_no": acc_no, "installment_amount": received_amt}
 
-                elif "RD முடித்தல்" in txn_category or "RD Close" in txn_category:
-                    st.markdown("##### 📉 RD கணக்கு முடித்தல் / பட்டுவாடா")
+                # -------------------------------------------------------------
+                # 8. RD முதிர்வு / முடித்தல் (RD Closure - Auto Account Fetch)
+                # -------------------------------------------------------------
+                elif "RD" in txn_category and ("Closure" in txn_category or "முதிர்வு" in txn_category or "முடித்தல்" in txn_category):
+                    st.markdown("##### 📉 RD முதிர்வு / கணக்கு முடித்தல்")
                     c_id = visit.get("customer_id")
                     cust_rds = get_customer_rd_accounts(c_id) if c_id else []
 
@@ -4309,19 +4312,32 @@ else:
                     with c1:
                         if cust_rds:
                             rd_options = [r["acc_no"] for r in cust_rds] + ["கைமுறையாக உள்ளிட (Manual)"]
-                            sel_rd = st.selectbox("முடிக்க வேண்டிய RD கணக்கு எண் *", rd_options)
-                            acc_no = st.text_input("RD கணக்கு எண் *", value="" if sel_rd == "கைமுறையாக உள்ளிட (Manual)" else sel_rd)
+                            sel_rd = st.selectbox("கணக்கு எண் (தேர்ந்தெடுக்கவும்) *", rd_options, key="rd_cls_sel")
+                            if sel_rd == "கைமுறையாக உள்ளிட (Manual)":
+                                acc_no = st.text_input("கணக்கு எண் உள்ளிடவும் *", key="rd_cls_man_acc")
+                                default_dep = 0.0
+                            else:
+                                acc_no = sel_rd
+                                matched_rd = next((r for r in cust_rds if r["acc_no"] == sel_rd), None)
+                                default_dep = float(matched_rd.get("installment_amount", 0.0)) if matched_rd else 0.0
                         else:
-                            acc_no = st.text_input("முடிக்க வேண்டிய RD கணக்கு எண் *")
+                            st.info("💡 இந்த வாடிக்கையாளருக்கு ஆக்டிவ் RD கணக்குகள் எதுவும் கண்டறியப்படவில்லை.")
+                            acc_no = st.text_input("கணக்கு எண் உள்ளிடவும் *", key="rd_cls_empty_acc")
+                            default_dep = 0.0
 
                     with c2:
-                        # RD முதிர்வுத் தொகை வாடிக்கையாளருக்கு கிளை வழங்குவது (paid_amount)
-                        paid_amt = st.number_input("முதிர்வு / திருப்பியளிக்கும் தொகை (Payout ₹) *", min_value=0.0, step=500.0)
+                        principal_amount = st.number_input("முதலீடு செய்த/கட்டிய தொகை (₹) *", min_value=0.0, value=default_dep, step=500.0, key="rd_cls_prin")
+                        interest_amount = st.number_input("வட்டி தொகை (₹) *", min_value=0.0, step=50.0, key="rd_cls_int")
+                        paid_amt = principal_amount + interest_amount
+                        st.info(f"💰 **மொத்த முதிர்வுத் தொகை: ₹{paid_amt:,.2f}**")
 
-                    detail_summary = [f"Closed RD: {acc_no}", f"Payout: ₹{paid_amt:,.2f}"]
-                    extra_meta_data = {"account_no": acc_no, "closed_amount": paid_amt}
-                
-                elif "FD வட்டி" in txn_category or "FD Interest" in txn_category:
+                    detail_summary = [f"RD No: {acc_no}", f"முதலீடு: ₹{principal_amount:,.2f}", f"வட்டி: ₹{interest_amount:,.2f}", f"மொத்தம்: ₹{paid_amt:,.2f}"]
+                    extra_meta_data = {"account_no": acc_no, "deposit_amount": principal_amount, "interest_amount": interest_amount, "closed_amount": paid_amt}
+
+                # -------------------------------------------------------------
+                # 9. FD வட்டி வழங்குதல் (FD Interest - Auto Account Fetch)
+                # -------------------------------------------------------------
+                elif "FD" in txn_category and ("வட்டி" in txn_category or "Interest" in txn_category):
                     st.markdown("##### 💵 FD வட்டி வழங்குதல்")
                     c_id = visit.get("customer_id")
                     cust_fds = get_customer_fd_accounts(c_id) if c_id else []
@@ -4330,20 +4346,25 @@ else:
                     with c1:
                         if cust_fds:
                             fd_options = [f["acc_no"] for f in cust_fds] + ["கைமுறையாக உள்ளிட (Manual)"]
-                            sel_fd = st.selectbox("FD கணக்கு எண் தேர்ந்தெடுக்கவும் *", fd_options)
-                            acc_no = st.text_input("FD கணக்கு எண் *", value="" if sel_fd == "கைமுறையாக உள்ளிட (Manual)" else sel_fd)
+                            sel_fd = st.selectbox("FD கணக்கு எண் தேர்ந்தெடுக்கவும் *", fd_options, key="fd_int_sel")
+                            if sel_fd == "கைமுறையாக உள்ளிட (Manual)":
+                                acc_no = st.text_input("FD கணக்கு எண் உள்ளிடவும் *", key="fd_int_man_acc")
+                            else:
+                                acc_no = sel_fd
                         else:
-                            acc_no = st.text_input("FD கணக்கு எண் உள்ளிடவும் *")
+                            acc_no = st.text_input("FD கணக்கு எண் உள்ளிடவும் *", key="fd_int_empty_acc")
 
                     with c2:
-                        # வட்டி வாடிக்கையாளருக்கு கிளை வழங்குவது (paid_amount)
-                        paid_amt = st.number_input("வட்டித் தொகை (Interest ₹) *", min_value=0.0, step=100.0)
+                        paid_amt = st.number_input("வழங்கிய வட்டித் தொகை (₹) *", min_value=0.0, step=100.0, key="fd_int_amt")
 
                     detail_summary = [f"FD No: {acc_no}", f"Interest Paid: ₹{paid_amt:,.2f}"]
                     extra_meta_data = {"account_no": acc_no, "interest_amount": paid_amt}
 
-                elif "FD முடித்தல்" in txn_category or "FD Close" in txn_category:
-                    st.markdown("##### 📑 FD கணக்கு முடித்தல் / அசல் திரும்பப் பெறுதல்")
+                # -------------------------------------------------------------
+                # 10. FD முதிர்வு / முடித்தல் (FD Closure - Auto Account Fetch)
+                # -------------------------------------------------------------
+                elif "FD" in txn_category and ("Closure" in txn_category or "முதிர்வு" in txn_category or "முடித்தல்" in txn_category):
+                    st.markdown("##### 📑 FD முதிர்வு / கணக்கு முடித்தல்")
                     c_id = visit.get("customer_id")
                     cust_fds = get_customer_fd_accounts(c_id) if c_id else []
 
@@ -4351,41 +4372,26 @@ else:
                     with c1:
                         if cust_fds:
                             fd_options = [f["acc_no"] for f in cust_fds] + ["கைமுறையாக உள்ளிட (Manual)"]
-                            sel_fd = st.selectbox("முடிக்க வேண்டிய FD கணக்கு எண் *", fd_options)
+                            sel_fd = st.selectbox("முடிக்க வேண்டிய FD கணக்கு எண் *", fd_options, key="fd_cls_sel")
                             if sel_fd == "கைமுறையாக உள்ளிட (Manual)":
-                                acc_no = st.text_input("FD கணக்கு எண் *")
+                                acc_no = st.text_input("FD கணக்கு எண் *", key="fd_cls_man_acc")
                                 default_dep = 0.0
                             else:
                                 acc_no = sel_fd
                                 matched_fd = next((f for f in cust_fds if f["acc_no"] == sel_fd), None)
                                 default_dep = float(matched_fd["deposit_amount"]) if matched_fd else 0.0
                         else:
-                            acc_no = st.text_input("முடிக்க வேண்டிய FD கணக்கு எண் *")
+                            acc_no = st.text_input("முடிக்க வேண்டிய FD கணக்கு எண் *", key="fd_cls_empty_acc")
                             default_dep = 0.0
 
                     with c2:
-                        paid_amt = st.number_input("திரும்ப வழங்கும் தொகை (அசல் + வட்டி ₹) *", min_value=0.0, value=default_dep, step=1000.0)
+                        principal_amount = st.number_input("முதலீடு செய்த அசல் தொகை (₹) *", min_value=0.0, value=default_dep, step=1000.0, key="fd_cls_prin")
+                        interest_amount = st.number_input("வட்டி தொகை (₹) *", min_value=0.0, step=100.0, key="fd_cls_int")
+                        paid_amt = principal_amount + interest_amount
+                        st.info(f"💰 **மொத்த முதிர்வுத் தொகை: ₹{paid_amt:,.2f}**")
 
-                    detail_summary = [f"Closed FD: {acc_no}", f"Principal Payout: ₹{paid_amt:,.2f}"]
-                    extra_meta_data = {"account_no": acc_no, "settled_amount": paid_amt}
-
-                # 6. RD & FD முதிர்வு / தவணைகள்
-                elif "RD" in txn_category or "FD" in txn_category:
-                    d_col1, d_col2 = st.columns(2)
-                    with d_col1:
-                        acc_no = st.text_input("கணக்கு எண் *")
-                    with d_col2:
-                        if "Closure" in txn_category:
-                            principal_amount = st.number_input("முதலீடு செய்த/கட்டிய தொகை (₹) *", min_value=0.0, step=100.0)
-                            interest_amount = st.number_input("வட்டி தொகை (₹) *", min_value=0.0, step=50.0)
-                            paid_amt = principal_amount + interest_amount
-                            st.info(f"மொத்த முதிர்வுத் தொகை: ₹{paid_amt:,.2f}")
-                        elif "Interest" in txn_category:
-                            paid_amt = st.number_input("வழங்கிய தொகை (₹) *", min_value=0.0, step=100.0)
-                        else:
-                            received_amt = st.number_input("பெற்ற தவணைத் தொகை (₹) *", min_value=0.0, step=100.0)
-                    detail_summary = [f"A/c: {acc_no}"]
-
+                    detail_summary = [f"Closed FD: {acc_no}", f"அசல்: ₹{principal_amount:,.2f}", f"வட்டி: ₹{interest_amount:,.2f}", f"மொத்தம்: ₹{paid_amt:,.2f}"]
+                    extra_meta_data = {"account_no": acc_no, "deposit_amount": principal_amount, "interest_amount": interest_amount, "closed_amount": paid_amt}
                 # -------------------------------------------------------------
                 # 7. GP (Gold Purchase) - முழுமையான திருத்தப்பட்ட பகுதி
                 # -------------------------------------------------------------
