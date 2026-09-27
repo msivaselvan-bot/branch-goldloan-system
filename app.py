@@ -3912,12 +3912,12 @@ else:
                     with gp_col1:
                         # 🌟 ஆட்டோ ஜீபி எண் (key நீக்கப்பட்டுள்ளதால் அடுத்தடுத்த எண்கள் உடனுக்குடன் மாறும்)
                         auto_gp_no = generate_gp_number(st.session_state.get("branch_id"))
-                        gp_number = st.text_input(
-                            "1) ஜீபி எண் (Auto-generated):", 
-                            value=auto_gp_no, 
-                            disabled=True,
-                            key=f"gp_disp_{auto_gp_no}"  # 👈 புதிய எண் வரும்போது விட்ஜெட் உடனே புதுப்பிக்கப்பட இது உதவும்
-                        )
+                    gp_number = st.text_input(
+                        "1) ஜீபி எண் (Auto-generated):", 
+                        value=auto_gp_no, 
+                        disabled=True,
+                        key=f"gp_disp_{auto_gp_no}"  # 👈 புதிய எண் வரும்போது விட்ஜெட் உடனே புதுப்பிக்கப்பட இது உதவும்
+                    )
                     with gp_col2:
                         voucher_no = st.text_input("2) வவுச்சர் எண் *:", placeholder="எ.கா: VCH-1002", key=f"gp_vch_{fc}")
 
@@ -4687,57 +4687,95 @@ else:
                                         except Exception as e:
                                             st.error(f"கோரிக்கை அனுப்புவதில் பிழை: {e}")
 
-                        # -------------------------------------------------------------------------
-                        # 🌟 5. வருகையை நிறைவு செய்யும் பட்டன் (பாதுகாப்பு & வெற்றிச் செய்தியுடன்)
-                        # -------------------------------------------------------------------------
-                        if st.button("✅ வருகையை நிறைவு செய்க", type="primary", use_container_width=True, key="btn_complete_visit_final"):
-                            if not is_ready:
-                                st.error("❌ கணக்கீடு அல்லது UTR எண் விடுபட்டுள்ளது!")
-                            elif not otp_cleared and not otp_already_sent:
-                                st.error("❌ முதலில் வாடிக்கையாளருக்கு OTP அனுப்பவும் அல்லது விலக்குக் கோரவும்!")
-                            elif not otp_cleared:
-                                st.error("❌ தவறான OTP! அல்லது ஆப்பரேஷன்ஸ் இறுதி அனுமதி இன்னும் கிடைக்கவில்லை.")
-                            elif not st.session_state.transactions_cart:
-                                st.warning("⚠️ பட்டியலில் எந்த நடவடிக்கைகளும் இல்லை!")
-                            else:
-                                try:
-                                    with st.spinner("டேட்டாபேஸில் விவரங்கள் சேமிக்கப்படுகின்றன... தயவுசெய்து காத்திருக்கவும்..."):
-                                        
-                                        # 1. கார்ட்டில் உள்ள மீட்கப்பட்ட கடன்களை Closed ஆக்குதல் (உங்கள் பழைய குறியீடு)
-                                        for item in st.session_state.transactions_cart:
-                                            if item.get("closed_loan_id"):
-                                                try:
-                                                    supabase.table("transactions").update({"status": "Closed"}).eq("id", item["closed_loan_id"]).execute()
-                                                except Exception:
-                                                    pass
+                            # -------------------------------------------------------------------------
+                            # 🌟 5. வருகையை நிறைவு செய்யும் பட்டன் (பிழைகளைக் கண்காணிக்கும் முழுமையான முறை)
+                            # -------------------------------------------------------------------------
+                            if st.button("✅ வருகையை நிறைவு செய்க", type="primary", use_container_width=True, key="btn_complete_visit_final"):
+                                if not is_ready:
+                                    st.error("❌ கணக்கீடு அல்லது UTR எண் விடுபட்டுள்ளது!")
+                                elif not otp_cleared and not otp_already_sent:
+                                    st.error("❌ முதலில் வாடிக்கையாளருக்கு OTP அனுப்பவும் அல்லது விலக்குக் கோரவும்!")
+                                elif not otp_cleared:
+                                    st.error("❌ தவறான OTP! அல்லது ஆப்பரேஷன்ஸ் இறுதி அனுமதி இன்னும் கிடைக்கவில்லை.")
+                                elif not st.session_state.get("transactions_cart"):
+                                    st.error("❌ பட்டியலில் (Cart) எந்த நடவடிக்கைகளும் சேர்க்கப்படவில்லை! முதலில் 'பட்டியலில் சேர்' பட்டனை அழுத்தவும்.")
+                                else:
+                                    try:
+                                        with st.spinner("டேட்டாபேஸில் விவரங்கள் சேமிக்கப்படுகின்றன... தயவுசெய்து காத்திருக்கவும்..."):
+                                            visit_data = st.session_state.get("current_visit") or {}
+                                            b_id = st.session_state.get("branch_id")
+                                            c_id = visit_data.get("customer_id")
+                                            v_no = visit_data.get("visit_no", "-")
 
-                                        # 2. உங்கள் ஏற்கனவே உள்ள visits, transactions, gold_loans, gold_purchases சேமிக்கும் லூப் இங்கு வழக்கம் போல் இயங்கும்
-                                        # (நாங்கள் முன்பு சேர்த்த gold_purchases குறியீடுகள் இங்கு இருக்கும்)
+                                            # 1. கார்ட்டில் உள்ள மீட்கப்பட்ட கடன்களை Closed ஆக்குதல்
+                                            for item in st.session_state.transactions_cart:
+                                                if item.get("closed_loan_id"):
+                                                    try:
+                                                        supabase.table("transactions").update({"status": "Closed"}).eq("id", item["closed_loan_id"]).execute()
+                                                    except Exception:
+                                                        pass
 
+                                            # 2. கார்ட்டில் உள்ள ஒவ்வொரு பரிவர்த்தனையாக எடுத்துச் சேமித்தல்
+                                            for item in st.session_state.transactions_cart:
+                                                t_type = str(item.get("transaction_type", ""))
+                                                s_name = item.get("staff_name", "")
 
-                                        # -------------------------------------------------------------
-                                        # 🌟 3. சேமிப்பு வெற்றிகரமாக முடிந்ததும் திரையில் காட்ட சேமித்தல்:
-                                        # -------------------------------------------------------------
+                                                # 🪙 GP தங்கம் வாங்குதல் சேமிப்பு
+                                                if any(k in t_type for k in ["GP", "Purchase", "வாங்க", "கொள்முதல்"]):
+                                                    
+                                                    # விவரக் குறிப்பு தயாரித்தல்
+                                                    details_list = [
+                                                        f"வகை: {item.get('gp_mode', 'Direct')}",
+                                                        f"வவுச்சர் எண்: {item.get('voucher_no', '-')}",
+                                                        f"நகைகள் விவரம்:\n{item.get('ornament_details', 'Gold Jewellery')}"
+                                                    ]
+                                                    if item.get("is_takeover") or item.get("bank_source"):
+                                                        details_list.append(
+                                                            f"\n[Takeover விவரங்கள்]\n"
+                                                            f"முந்தைய நிறுவனம்: {item.get('bank_source', '-')}\n"
+                                                            f"முந்தைய கடன் எண்: {item.get('prev_loan_no', '-')}\n"
+                                                            f"மீட்பு அட்வான்ஸ்: ₹{float(item.get('advance_paid', 0.0)):,.2f}\n"
+                                                            f"மீதி வழங்கியது: ₹{float(item.get('balance_payable', 0.0)):,.2f}"
+                                                        )
+                                                    if item.get("remarks"):
+                                                        details_list.append(f"குறிப்பு: {item.get('remarks')}")
+
+                                                    full_details_text = "\n".join(details_list)
+                                                    clean_gp_no = item.get("gp_number") or item.get("loan_number") or f"AVL/GP/{datetime.now().strftime('%y%m%d%H%M')}"
+
+                                                    purchase_payload = {
+                                                        "branch_id": b_id,
+                                                        "customer_id": c_id,
+                                                        "purchase_bill_no": clean_gp_no,
+                                                        "item_details": full_details_text,
+                                                        "gross_weight": float(item.get("gross_weight") or item.get("total_weight") or 0.0),
+                                                        "net_pure_weight": float(item.get("net_weight") or 0.0),
+                                                        "buy_rate_per_gram": 0.0,
+                                                        "purchase_amount": float(item.get("total_value") or item.get("amount") or 0.0),
+                                                        "staff_name": s_name
+                                                    }
+                                                    
+                                                    # Supabase-ல் சேமித்தல்
+                                                    supabase.table("gold_purchases").insert(purchase_payload).execute()
+
+                                        # ✅ எந்தப் பிழையுமின்றி வெற்றிகரமாக முடிந்தால் மட்டுமே அடுத்த வருகைக்கு மாறும்:
                                         st.session_state["last_saved_visit"] = {
-                                            "visit_no": visit.get("visit_no", "-"),
-                                            "customer_name": visit.get("customer_name", "-"),
+                                            "visit_no": v_no,
+                                            "customer_name": visit_data.get("customer_name", "-"),
                                             "txn_count": len(st.session_state.transactions_cart),
                                             "total_paid": sum(float(x.get("paid_amount", 0.0) or 0.0) for x in st.session_state.transactions_cart),
                                             "total_received": sum(float(x.get("received_amount", 0.0) or 0.0) for x in st.session_state.transactions_cart)
                                         }
-
-                                        # கார்ட் மற்றும் வருகையைக் காலி செய்து அடுத்த வருகைக்குத் தயார்படுத்துதல்:
                                         st.session_state.transactions_cart = []
                                         st.session_state.current_visit = None
                                         if "form_reset_counter" in st.session_state:
                                             st.session_state.form_reset_counter += 1
-
                                         st.rerun()
 
-                                except Exception as save_err:
-                                    # 🚨 ஏதேனும் எரர் வந்தால் கார்ட் அழியாது; எரர் திரையிலேயே நிற்கும்:
-                                    st.error(f"❌ வருகையைச் சேமிப்பதில் பிழை ஏற்பட்டது: {save_err}")
-                                    st.info("💡 மேலே உள்ள பிழையைச் சரிபார்க்கவும்; உங்கள் கார்ட்டில் உள்ள தகவல்கள் பாதுகாப்பாக உள்ளன.")
+                                    except Exception as save_err:
+                                        # 🚨 எரர் வந்தால் கார்ட் அழியாது; எரர் திரையிலேயே சிவப்பு நிறத்தில் நிற்கும்:
+                                        st.error(f"❌ வருகையைச் சேமிப்பதில் பிழை ஏற்பட்டது: {save_err}")
+                                        st.warning("⚠️ மேலே உள்ள எரரைச் சரிபார்க்கவும். உங்கள் கார்ட்டில் உள்ள தரவுகள் அழியாமல் அப்படியே உள்ளன.")
 
                                     # 2. புதிய அடமான எண்களை அதிகரித்தல்
                                     cart = st.session_state.transactions_cart
