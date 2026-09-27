@@ -4795,41 +4795,57 @@ else:
                                             supabase.table("gold_sales").insert(sale_payload).execute()
 
                                         # =============================================================
-                                        # இ. தங்கம் வாங்குதல் (Gold Purchase / GP)
+                                        # இ. தங்கம் வாங்குதல் (Gold Purchase / GP) - 100% பிழையற்ற முறை
                                         # =============================================================
                                         elif any(k in t_type for k in ["GP", "Purchase", "வாங்க", "கொள்முதல்"]):
                                             try:
-                                                # நகைகளின் பட்டியல் (JSON அல்லது உரை வடிவம்)
-                                                orn_data = item.get("ornaments") or item.get("ornament_details", "Gold Ornaments")
-                                                clean_net_wt = float(item.get("net_weight") or 0.0)
+                                                # 1. நகைகள், Takeover மற்றும் சாட்சி விவரங்களை ஒரே முழுமையான விவரக் குறிப்பாக மாற்றுதல்:
+                                                details_list = [
+                                                    f"வகை: {item.get('gp_mode', 'Direct')}",
+                                                    f"வவுச்சர் எண்: {item.get('voucher_no', '-')}",
+                                                    f"நகைகள் விவரம்:\n{item.get('ornament_details', 'Gold Jewellery')}"
+                                                ]
+                                                
+                                                # Takeover ஆக இருந்தால் வங்கி விபரங்களை இணைத்தல்:
+                                                if item.get("is_takeover"):
+                                                    details_list.append(
+                                                        f"\n[Takeover விவரங்கள்]\n"
+                                                        f"முந்தைய நிறுவனம்: {item.get('bank_source', '-')}\n"
+                                                        f"முந்தைய கடன் எண்: {item.get('prev_loan_no', '-')}\n"
+                                                        f"மீட்பு அட்வான்ஸ்: ₹{float(item.get('advance_paid', 0.0)):,.2f}\n"
+                                                        f"மீதி வழங்கியது: ₹{float(item.get('balance_payable', 0.0)):,.2f}"
+                                                    )
+                                                    
+                                                # சாட்சிகள் விவரம்:
+                                                if item.get("ref1_name"):
+                                                    details_list.append(f"சாட்சி 1: {item.get('ref1_name')} ({item.get('ref1_phone')})")
+                                                if item.get("ref2_name"):
+                                                    details_list.append(f"சாட்சி 2: {item.get('ref2_name')} ({item.get('ref2_phone')})")
+                                                if item.get("remarks"):
+                                                    details_list.append(f"குறிப்பு: {item.get('remarks')}")
+
+                                                full_details_text = "\n".join(details_list)
+
+                                                # 2. டேபிளில் உள்ள அசல் 9 பத்திகளுக்கு மட்டும் துல்லியமாக மேப் செய்தல்:
+                                                clean_gp_no = item.get("gp_number") or item.get("loan_number") or f"GP-{datetime.now().strftime('%y%m%d%H%M')}"
+                                                clean_vch_no = item.get("voucher_no", "")
+                                                bill_identity = f"{clean_gp_no} / {clean_vch_no}".strip(" /")
 
                                                 purchase_payload = {
                                                     "visit_id": new_visit_id if 'new_visit_id' in locals() else None,
                                                     "branch_id": b_id,
                                                     "customer_id": c_id,
-                                                    "gp_number": item.get("gp_number") or item.get("loan_number") or f"GP-{datetime.now().strftime('%y%m%d%H%M%S')}",
-                                                    "voucher_no": item.get("voucher_no", ""),
-                                                    "gp_mode": item.get("gp_mode", "Direct"),
+                                                    "purchase_bill_no": bill_identity,                                       # 👈 ஜீபி எண் + வவுச்சர் எண்
+                                                    "item_details": full_details_text,                                       # 👈 அனைத்து விவரங்களும் அடங்கிய குறிப்பு
                                                     "gross_weight": float(item.get("gross_weight") or item.get("total_weight") or 0.0),
-                                                    
-                                                    # 🌟 பிழை வராமல் இருக்க இரண்டு பத்திகளுக்கும் ஒரே எடையை ஒதுக்குதல்:
-                                                    "net_weight": clean_net_wt,
-                                                    "net_pure_weight": clean_net_wt,     # 👈 NOT NULL பிழையைத் தடுக்கும் முக்கிய வரி
-                                                    
-                                                    "total_value": float(item.get("total_value") or item.get("amount") or 0.0),
-                                                    "advance_paid": float(item.get("advance_paid") or 0.0),
-                                                    "balance_payable": float(item.get("balance_payable") or item.get("paid_amount") or 0.0),
-                                                    "bank_source": item.get("bank_source", ""),
-                                                    "prev_loan_no": item.get("prev_loan_no", ""),
-                                                    "ornaments_detail": orn_data,
-                                                    "staff_name": s_name,
-                                                    "remarks": item.get("remarks") or item.get("custom_remarks") or "",
-                                                    "ref1_name": item.get("ref1_name", ""),
-                                                    "ref1_phone": item.get("ref1_phone", ""),
-                                                    "ref2_name": item.get("ref2_name", ""),
-                                                    "ref2_phone": item.get("ref2_phone", "")
+                                                    "net_pure_weight": float(item.get("net_weight") or 0.0),                 # 👈 டேபிளின் அசல் நிகர எடை
+                                                    "buy_rate_per_gram": 0.0,
+                                                    "purchase_amount": float(item.get("total_value") or item.get("amount") or 0.0), # 👈 மொத்தக் கொள்முதல் தொகை
+                                                    "staff_name": s_name
                                                 }
+
                                                 supabase.table("gold_purchases").insert(purchase_payload).execute()
+
                                             except Exception as gp_err:
                                                 st.error(f"⚠️ gold_purchases அட்டவணையில் சேமிப்பதில் பிழை: {gp_err}")
 
