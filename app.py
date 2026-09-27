@@ -853,71 +853,114 @@ def get_branch_code_by_id(branch_id: int) -> str:
         pass
     return "BR"
 
-# -------------------------------------------------------------
-# 🌟 புதிய கணக்கு எண்கள் உருவாக்கும் ஃபங்க்ஷன்கள் (நேரடி டேபிள் வினவல்)
-# -------------------------------------------------------------
+import re
+import json
+
 def generate_fd_account_no(branch_id: int) -> str:
-    """fixed_deposits அட்டவணையில் உள்ள உச்சபட்ச எண்ணைப் பார்த்து அடுத்த எண்ணை உருவாக்குதல்"""
+    """fixed_deposits அட்டவணை மற்றும் கார்ட்டில் (transactions_cart) உள்ள உச்சபட்ச எண்ணைப் பார்த்து அடுத்த எண்ணை உருவாக்குதல்"""
     b_code = get_branch_code_by_id(branch_id)
+    max_seq = 0
+    pattern = re.compile(rf"{re.escape(b_code)}/FD/(\d+)", re.IGNORECASE)
+    
+    # 1. Supabase database-ல் உள்ள அதிகபட்ச எண்ணை எடுத்தல்
     try:
         res = supabase.table("fixed_deposits").select("fd_account_no").eq("branch_id", int(branch_id)).execute()
-        max_seq = 0
-        pattern = re.compile(rf"^{re.escape(b_code)}/FD/(\d+)$", re.IGNORECASE)
         for row in (res.data or []):
             acc = str(row.get("fd_account_no", "")).strip()
-            m = pattern.match(acc)
+            m = pattern.search(acc)
             if m:
                 max_seq = max(max_seq, int(m.group(1)))
-        return f"{b_code}/FD/{max_seq + 1:04d}"
+                
+        # transactions டேபிளிலும் சரிபார்த்தல் (பழைய பல்க் பதிவுகள்)
+        txns = (
+            supabase.table("transactions")
+            .select("transaction_details, remarks, customer_visits!inner(branch_id)")
+            .eq("customer_visits.branch_id", int(branch_id))
+            .ilike("transaction_type", "%FD%")
+            .execute()
+            .data or []
+        )
+        for t in txns:
+            m1 = pattern.search(str(t.get("transaction_details") or ""))
+            if m1:
+                max_seq = max(max_seq, int(m1.group(1)))
+            m2 = pattern.search(str(t.get("remarks") or ""))
+            if m2:
+                max_seq = max(max_seq, int(m2.group(1)))
     except Exception:
-        return f"{b_code}/FD/{datetime.now().strftime('%y%m%d%H%M')}"
+        pass
+
+    # 2. 🌟 தற்போதைய கார்ட்டில் (transactions_cart) உள்ள "FD Open" பதிவுகளைச் சரிபார்த்தல்
+    try:
+        cart_items = st.session_state.get("transactions_cart", [])
+        for item in cart_items:
+            t_type = str(item.get("transaction_type", ""))
+            if "FD Open" in t_type or ("FD" in t_type and "Open" in t_type) or ("FD" in t_type and "புதிய" in t_type):
+                item_acc = str(item.get("account_no") or (item.get("extra_meta_data") or {}).get("account_no") or "")
+                m_cart1 = pattern.search(item_acc)
+                if m_cart1:
+                    max_seq = max(max_seq, int(m_cart1.group(1)))
+                m_cart2 = pattern.search(str(item.get("remarks") or ""))
+                if m_cart2:
+                    max_seq = max(max_seq, int(m_cart2.group(1)))
+    except Exception:
+        pass
+
+    return f"{b_code}/FD/{max_seq + 1:04d}"
+
 
 def generate_rd_account_no(branch_id: int) -> str:
-    """recurring_deposits அட்டவணையில் உள்ள உச்சபட்ச எண்ணைப் பார்த்து அடுத்த எண்ணை உருவாக்குதல்"""
+    """recurring_deposits அட்டவணை மற்றும் கார்ட்டில் (transactions_cart) உள்ள உச்சபட்ச எண்ணைப் பார்த்து அடுத்த எண்ணை உருவாக்குதல்"""
     b_code = get_branch_code_by_id(branch_id)
+    max_seq = 0
+    pattern = re.compile(rf"{re.escape(b_code)}/RD/(\d+)", re.IGNORECASE)
+    
+    # 1. Supabase database-ல் உள்ள அதிகபட்ச எண்ணை எடுத்தல்
     try:
         res = supabase.table("recurring_deposits").select("rd_account_no").eq("branch_id", int(branch_id)).execute()
-        max_seq = 0
-        pattern = re.compile(rf"^{re.escape(b_code)}/RD/(\d+)$", re.IGNORECASE)
         for row in (res.data or []):
             acc = str(row.get("rd_account_no", "")).strip()
-            m = pattern.match(acc)
+            m = pattern.search(acc)
             if m:
                 max_seq = max(max_seq, int(m.group(1)))
-        return f"{b_code}/RD/{max_seq + 1:04d}"
-    except Exception:
-        return f"{b_code}/RD/{datetime.now().strftime('%y%m%d%H%M')}"
-
-# -------------------------------------------------------------
-# 🔍 கவுண்ட்டரில் வாடிக்கையாளரின் ஆக்டிவ் கணக்குகளை எடுக்கும் ஃபங்க்ஷன்கள்
-# -------------------------------------------------------------
-def get_customer_rd_accounts(customer_id: int):
-    """வாடிக்கையாளரின் ஆக்டிவ் RD கணக்குகளை எடுத்தல்"""
-    try:
-        res = (
-            supabase.table("recurring_deposits")
-            .select("rd_account_no, monthly_installment")
-            .eq("customer_id", int(customer_id))
-            .eq("status", "Active")
+                
+        # transactions டேபிளிலும் சரிபார்த்தல் (பழைய பல்க் பதிவுகள்)
+        txns = (
+            supabase.table("transactions")
+            .select("transaction_details, remarks, customer_visits!inner(branch_id)")
+            .eq("customer_visits.branch_id", int(branch_id))
+            .ilike("transaction_type", "%RD%")
             .execute()
+            .data or []
         )
-        return [{"acc_no": r["rd_account_no"], "installment_amount": float(r["monthly_installment"] or 0.0)} for r in (res.data or [])]
+        for t in txns:
+            m1 = pattern.search(str(t.get("transaction_details") or ""))
+            if m1:
+                max_seq = max(max_seq, int(m1.group(1)))
+            m2 = pattern.search(str(t.get("remarks") or ""))
+            if m2:
+                max_seq = max(max_seq, int(m2.group(1)))
     except Exception:
-        return []
+        pass
 
-def get_customer_fd_accounts(customer_id: int):
-    """வாடிக்கையாளரின் ஆக்டிவ் FD கணக்குகளை எடுத்தல்"""
+    # 2. 🌟 தற்போதைய கார்ட்டில் (transactions_cart) உள்ள "RD Open" பதிவுகளைச் சரிபார்த்தல்
     try:
-        res = (
-            supabase.table("fixed_deposits")
-            .select("fd_account_no, deposit_amount")
-            .eq("customer_id", int(customer_id))
-            .eq("status", "Active")
-            .execute()
-        )
-        return [{"acc_no": r["fd_account_no"], "deposit_amount": float(r["deposit_amount"] or 0.0)} for r in (res.data or [])]
+        cart_items = st.session_state.get("transactions_cart", [])
+        for item in cart_items:
+            t_type = str(item.get("transaction_type", ""))
+            # புதிய RD Open பதிவுகளுக்கு மட்டுமே வரிசை எண்ணைக் கணக்கிட வேண்டும்
+            if "RD Open" in t_type or ("RD" in t_type and "Open" in t_type) or ("RD" in t_type and "புதிய" in t_type):
+                item_acc = str(item.get("account_no") or (item.get("extra_meta_data") or {}).get("account_no") or "")
+                m_cart1 = pattern.search(item_acc)
+                if m_cart1:
+                    max_seq = max(max_seq, int(m_cart1.group(1)))
+                m_cart2 = pattern.search(str(item.get("remarks") or ""))
+                if m_cart2:
+                    max_seq = max(max_seq, int(m_cart2.group(1)))
     except Exception:
-        return []
+        pass
+
+    return f"{b_code}/RD/{max_seq + 1:04d}"
 
 def send_fast2sms_otp(mobile_no: str, otp_code: str):
     try:
@@ -4198,7 +4241,7 @@ else:
                     fd_c1, fd_c2 = st.columns(2)
                     with fd_c1:
                         auto_fd_no = generate_fd_account_no(st.session_state.branch_id)
-                        fd_acc_no = st.text_input("FD கணக்கு எண்:", value=auto_fd_no, disabled=True)
+                        fd_acc_no = st.text_input("FD கணக்கு எண்:", value=auto_fd_no, disabled=True, key=f"fd_acc_box_{auto_fd_no}")
                         fd_sel_scheme = st.selectbox("அட்மின் FD திட்டம் (Scheme) *", fd_scheme_options)
                         received_amt = st.number_input("வைப்புத் தொகை (Deposit ₹) *", min_value=0.0, step=1000.0)
                         fd_nominee = st.text_input("நாமினி பெயர் *")
@@ -4226,7 +4269,7 @@ else:
                     rd_c1, rd_c2 = st.columns(2)
                     with rd_c1:
                         auto_rd_no = generate_rd_account_no(st.session_state.branch_id)
-                        rd_acc_no = st.text_input("RD கணக்கு எண்:", value=auto_rd_no, disabled=True)
+                        rd_acc_no = st.text_input("RD கணக்கு எண்:", value=auto_rd_no, disabled=True, key=f"rd_acc_box_{auto_rd_no}")
                         rd_sel_scheme = st.selectbox("அட்மின் RD திட்டம் (Scheme) *", rd_scheme_options)
                         received_amt = st.number_input("முதல் தவணைத் தொகை (Installment ₹) *", min_value=0.0, step=500.0)
                         rd_nominee = st.text_input("நாமினி பெயர் *")
