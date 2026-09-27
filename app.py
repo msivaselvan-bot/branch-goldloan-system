@@ -5237,7 +5237,7 @@ else:
                             otp_cleared = True  # இது உங்களிடம் ஏற்கனவே உள்ள வரி
                         
                         # 👈🌟 இந்த ஒரு வரியை மட்டும் இங்கே புதிதாகச் சேர்க்கவும்:
-                        st.session_state.otp_verified = True
+                            st.session_state.otp_verified = True
                         elif current_status == "Pending Admin":
                             st.warning("⏳ **OTP விலக்குக் கோரிக்கை அட்மின் (Admin) ஒப்புதலுக்காக நிலுவையில் உள்ளது.**")
                         elif current_status == "Pending Operations":
