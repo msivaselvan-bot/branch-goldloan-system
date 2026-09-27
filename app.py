@@ -4663,8 +4663,9 @@ else:
                         st.write(f"வாடிக்கையாளர்: **{c_name}**")
                         st.write(f"மொபைல் எண்: `{c_mob}`")
 
-                        # 🌟 1. பாதுகாப்பாக visit_id எடுத்தல்
+                        # 🌟 1. வருகை எண் மற்றும் வாடிக்கையாளர் ஐடி எடுத்தல்
                         current_v_no = visit.get("visit_no", "-")
+                        v_id = current_v_no  # 👈👈👈 இந்தப் புதிய வரியைச் சேர்க்கவும் (Line 4726-ல் உள்ள எரரைத் தீர்க்க)
                         c_id = visit.get("customer_id")
                         current_status = None
 
