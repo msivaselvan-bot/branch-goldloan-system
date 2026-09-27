@@ -839,7 +839,76 @@ def generate_gp_declaration_html(gp_data):
     </body>
     </html>
     """
-    return html_content        
+    return html_content
+import re
+
+def get_branch_code_by_id(branch_id: int) -> str:
+    """கிளை ஐடியிலிருந்து கிளை குறியீட்டைப் (Branch Code) பெறுதல்"""
+    try:
+        b_res = supabase.table("branches").select("branch_code").eq("id", int(branch_id)).execute()
+        if b_res.data and b_res.data[0].get("branch_code"):
+            return str(b_res.data[0]["branch_code"]).strip().upper()
+    except Exception:
+        pass
+    return "BR"
+
+def generate_fd_account_no(branch_id: int) -> str:
+    """கிளை வாரியாக அடுத்தடுத்த FD கணக்கு எண்ணை தானாக உருவாக்குதல் (BRANCH/FD/0001)"""
+    b_code = get_branch_code_by_id(branch_id)
+    try:
+        txns = (
+            supabase.table("transactions")
+            .select("transaction_details, customer_visits!inner(branch_id)")
+            .eq("customer_visits.branch_id", int(branch_id))
+            .ilike("transaction_type", "%FD Open%")
+            .execute()
+            .data or []
+        )
+        
+        max_seq = 0
+        pattern = re.compile(rf"^{re.escape(b_code)}/FD/(\d+)$", re.IGNORECASE)
+        
+        for t in txns:
+            details = t.get("transaction_details") or {}
+            acc_no = str(details.get("account_no", "")).strip()
+            match = pattern.match(acc_no)
+            if match:
+                seq_num = int(match.group(1))
+                if seq_num > max_seq:
+                    max_seq = seq_num
+                    
+        return f"{b_code}/FD/{max_seq + 1:04d}"
+    except Exception:
+        return f"{b_code}/FD/{datetime.now().strftime('%y%m%d%H%M')}"
+
+def generate_rd_account_no(branch_id: int) -> str:
+    """கிளை வாரியாக அடுத்தடுத்த RD கணக்கு எண்ணை தானாக உருவாக்குதல் (BRANCH/RD/0001)"""
+    b_code = get_branch_code_by_id(branch_id)
+    try:
+        txns = (
+            supabase.table("transactions")
+            .select("transaction_details, customer_visits!inner(branch_id)")
+            .eq("customer_visits.branch_id", int(branch_id))
+            .ilike("transaction_type", "%RD Open%")
+            .execute()
+            .data or []
+        )
+        
+        max_seq = 0
+        pattern = re.compile(rf"^{re.escape(b_code)}/RD/(\d+)$", re.IGNORECASE)
+        
+        for t in txns:
+            details = t.get("transaction_details") or {}
+            acc_no = str(details.get("account_no", "")).strip()
+            match = pattern.match(acc_no)
+            if match:
+                seq_num = int(match.group(1))
+                if seq_num > max_seq:
+                    max_seq = seq_num
+                    
+        return f"{b_code}/RD/{max_seq + 1:04d}"
+    except Exception:
+        return f"{b_code}/RD/{datetime.now().strftime('%y%m%d%H%M')}"        
 
 def send_fast2sms_otp(mobile_no: str, otp_code: str):
     try:
@@ -2674,6 +2743,176 @@ else:
                                     st.rerun()
                                 except Exception as dex:
                                     st.error(f"நீக்குவதில் பிழை: {dex}")
+        # -----------------------------------------------------------------
+        # 🌟 பல்க் RD & FD பதிவேற்ற மேசை (Bulk Upload Desk)
+        # -----------------------------------------------------------------
+        with tab_bulk_rdfd:
+            st.subheader("📤 ஏற்கனவே உள்ள RD / FD கணக்குகளைப் பல்க்காக ஏற்றுதல்")
+            st.caption("கிளை வாரியாக எக்செல் / CSV கோப்பைப் பதிவேற்றி தானியங்கி கணக்கு எண்களுடன் டேட்டாபேஸில் சேர்க்கலாம்.")
+
+            # 1. கிளைத் தேர்வு
+            b_list = list(branch_options.keys()) if 'branch_options' in locals() and branch_options else []
+            sel_branch_name = st.selectbox("🎯 எந்தக் கிளைக்குப் பதிவேற்ற வேண்டும்?", b_list, key="sel_bulk_b")
+            target_b_id = branch_options.get(sel_branch_name) if b_list else st.session_state.get("branch_id", 1)
+            target_b_code = get_branch_code_by_id(target_b_id)
+
+            # 2. மாதிரி எக்செல் டெம்ப்ளேட் டவுன்லோட் வசதி
+            sample_csv = "Type,Name,Mobile,Amount,Scheme,Nominee,Relation,Age,Address\nRD,ரமேஷ்,9876543210,1000,Regular RD,சுதா,மனைவி,32,சென்னை\nFD,சுரேஷ்,9876543211,25000,Special FD,கார்த்திக்,மகன்,12,மதுரை"
+            st.download_button(
+                "📥 மாதிரி எக்செல் (Template CSV) பதிவிறக்குக",
+                data=sample_csv.encode("utf-8-sig"),
+                file_name="RD_FD_Upload_Template.csv",
+                mime="text/csv"
+            )
+
+            st.write("---")
+
+            # 3. கோப்புப் பதிவேற்றம் (CSV / Excel)
+            uploaded_file = st.file_uploader("📂 பூர்த்தி செய்யப்பட்ட கோப்பைத் தேர்ந்தெடுக்கவும் (CSV அல்லது Excel)", type=["csv", "xlsx", "xls"])
+
+            if uploaded_file is not None:
+                try:
+                    if uploaded_file.name.endswith(".csv"):
+                        df = pd.read_csv(uploaded_file)
+                    else:
+                        df = pd.read_excel(uploaded_file)
+
+                    # காலம்களின் பெயர்களைச் சீரமைத்தல்
+                    df.columns = [str(c).strip().lower() for c in df.columns]
+                    st.write(f"📊 கண்டறியப்பட்ட பதிவுகள்: **{len(df)}**")
+                    st.dataframe(df.head(5), use_container_width=True)
+
+                    # 4. பதிவேற்றும் பட்டன்
+                    if st.button("🚀 டேட்டாபேஸில் பல்க்காக ஏற்று (Start Bulk Import)", type="primary"):
+                        progress_bar = st.progress(0)
+                        status_text = st.empty()
+
+                        # இந்த கிளையின் முந்தைய அதிகபட்ச வரிசை எண்களைக் கண்டறிதல்
+                        def get_current_max_seq(acc_type):
+                            pattern = re.compile(rf"^{re.escape(target_b_code)}/{acc_type}/(\d+)$", re.IGNORECASE)
+                            txns = (
+                                supabase.table("transactions")
+                                .select("transaction_details, customer_visits!inner(branch_id)")
+                                .eq("customer_visits.branch_id", target_b_id)
+                                .ilike("transaction_type", f"%{acc_type} Open%")
+                                .execute()
+                                .data or []
+                            )
+                            max_val = 0
+                            for t in txns:
+                                a_no = str((t.get("transaction_details") or {}).get("account_no", "")).strip()
+                                m = pattern.match(a_no)
+                                if m:
+                                    max_val = max(max_val, int(m.group(1)))
+                            return max_val
+
+                        rd_counter = get_current_max_seq("RD")
+                        fd_counter = get_current_max_seq("FD")
+
+                        success_rd = 0
+                        success_fd = 0
+                        total_rows = len(df)
+
+                        for idx, row in df.iterrows():
+                            # காலம்களின் மதிப்புகளை எடுத்தல்
+                            row_type = str(row.get("type", "")).strip().upper()
+                            name = str(row.get("name", "")).strip()
+                            raw_mob = str(row.get("mobile", "")).strip()
+                            mobile = "".join(filter(str.isdigit, raw_mob))[-10:]
+                            amount = float(row.get("amount", 0.0) or 0.0)
+                            scheme = str(row.get("scheme", "Regular")).strip()
+                            nominee = str(row.get("nominee", "-")).strip()
+                            relation = str(row.get("relation", "-")).strip()
+                            age = int(row.get("age", 30) if str(row.get("age", "")).isdigit() else 30)
+                            address = str(row.get("address", target_b_name if 'target_b_name' in locals() else "-")).strip()
+
+                            if not name or len(mobile) != 10 or row_type not in ["RD", "FD"]:
+                                continue
+
+                            # 1. வாடிக்கையாளர் உள்ளாரா எனப் பார்த்து customer_id பெறுதல் (இல்லையெனில் சேர்த்தல்)
+                            cust_res = supabase.table("customers").select("id").eq("mobile", mobile).execute()
+                            if cust_res.data:
+                                c_id = cust_res.data[0]["id"]
+                            else:
+                                new_c_code = f"IMP-{datetime.now().strftime('%m%d')}-{idx+1:04d}"
+                                new_cust = supabase.table("customers").insert({
+                                    "branch_id": target_b_id,
+                                    "customer_code": new_c_code,
+                                    "name": name,
+                                    "mobile": mobile,
+                                    "address": address,
+                                    "kyc_status": "Approved",
+                                    "is_active": True
+                                }).execute()
+                                c_id = new_cust.data[0]["id"]
+
+                            # 2. ஒரு மைக்கிரேஷன் வருகைப் பதிவு (Migration Visit) உருவாக்குதல்
+                            v_no = f"MIG-{target_b_code}-{row_type}-{idx+1:04d}"
+                            visit_payload = {
+                                "visit_no": v_no,
+                                "customer_id": c_id,
+                                "branch_id": target_b_id,
+                                "total_paid": 0.0,
+                                "total_received": amount,
+                                "net_cash_amount": amount,
+                                "cash_amount": amount,
+                                "bank_amount": 0.0,
+                                "payment_mode": "Migration",
+                                "otp_verified": True,
+                                "status": "Completed"
+                            }
+                            v_insert = supabase.table("customer_visits").insert(visit_payload).execute()
+                            new_visit_id = v_insert.data[0]["id"]
+
+                            # 3. கணக்கு எண் தயாரித்து transactions-ல் சேர்த்தல்
+                            if row_type == "RD":
+                                rd_counter += 1
+                                acc_no = f"{target_b_code}/RD/{rd_counter:04d}"
+                                txn_type_label = "RD Open (புதிய RD சேமிப்பு)"
+                                extra_meta = {
+                                    "account_no": acc_no,
+                                    "installment_amount": amount,
+                                    "nominee": nominee,
+                                    "relation": relation,
+                                    "age": age,
+                                    "address": address
+                                }
+                                success_rd += 1
+                            else:
+                                fd_counter += 1
+                                acc_no = f"{target_b_code}/FD/{fd_counter:04d}"
+                                txn_type_label = "FD Open (புதிய வைப்பு நிதி)"
+                                extra_meta = {
+                                    "account_no": acc_no,
+                                    "deposit_amount": amount,
+                                    "nominee": nominee,
+                                    "relation": relation,
+                                    "age": age,
+                                    "address": address
+                                }
+                                success_fd += 1
+
+                            txn_payload = {
+                                "visit_id": new_visit_id,
+                                "transaction_type": txn_type_label,
+                                "paid_amount": 0.0,
+                                "received_amount": amount,
+                                "staff_name": "Migration Admin",
+                                "remarks": f"Old Migration | {acc_no} | Scheme: {scheme}",
+                                "transaction_details": extra_meta
+                            }
+                            supabase.table("transactions").insert(txn_payload).execute()
+
+                            # முன்னேற்றப் பட்டி (Progress update)
+                            progress_bar.progress((idx + 1) / total_rows)
+                            status_text.text(f"ஏற்றப்படுகிறது... ({idx+1}/{total_rows}) - {name} ({acc_no})")
+
+                        status_text.empty()
+                        st.success(f"🎉 **{sel_branch_name}** கிளைக்கு வெற்றிகரமாக **{success_rd} RD** கணக்குகளும், **{success_fd} FD** கணக்குகளும் வரிசை எண்களுடன் ஏற்றப்பட்டன!")
+                        st.balloons()
+
+                except Exception as upload_err:
+                    st.error(f"❌ கோப்பைப் பதிவேற்றுவதில் பிழை: {upload_err}")
 
     # ----------------------------------------------------
     # B. ஆப்பரேஷன்ஸ் திரை (OPERATIONS DESK)
@@ -3912,23 +4151,63 @@ else:
                         paid_amt = st.number_input("செலுத்திய தொகை (₹) *", min_value=0.0, step=500.0)
                     detail_summary = [f"வங்கி: {bank_source}", f"கடன் எண்: {prev_loan_no}"]
 
-                # 5. RD Open & FD Open
-                elif txn_category in ["RD Open (புதிய RD சேமிப்பு)", "FD Open (புதிய வைப்பு நிதி)"]:
-                    f_col1, f_col2 = st.columns(2)
-                    with f_col1:
-                        acc_no = st.text_input("புதிய கணக்கு எண் *")
-                        sel_scheme = st.selectbox("திட்டம் (Scheme) *", rd_scheme_options if "RD" in txn_category else fd_scheme_options)
-                    with f_col2:
-                        received_amt = st.number_input("வைப்பு / தவணைத் தொகை (₹) *", min_value=0.0, step=500.0)
+                # -------------------------------------------------------------
+                # 5. FD Open (புதிய வைப்பு நிதி - Auto Account No)
+                # -------------------------------------------------------------
+                elif txn_category == "FD Open (புதிய வைப்பு நிதி)":
+                    st.markdown("##### 📑 புதிய FD கணக்கு விவரங்கள் & நாமினி")
+                    fd_c1, fd_c2 = st.columns(2)
+                    with fd_c1:
+                        # 🌟 கைமுறையாக உள்ளிடுவதற்குப் பதிலாக தானாகவே எண் வரும் (disabled=True):
+                        auto_fd_no = generate_fd_account_no(st.session_state.branch_id)
+                        fd_acc_no = st.text_input("FD கணக்கு எண்:", value=auto_fd_no, disabled=True)
+                        fd_sel_scheme = st.selectbox("அட்மின் FD திட்டம் (Scheme) *", fd_scheme_options)
+                        received_amt = st.number_input("வைப்புத் தொகை (Deposit ₹) *", min_value=0.0, step=1000.0)
+                        fd_nominee = st.text_input("நாமினி பெயர் *")
+                    with fd_c2:
+                        fd_relation = st.text_input("உறவுமுறை *")
+                        fd_age = st.number_input("வயது *", min_value=1, max_value=120, value=30)
+                        fd_address = st.text_area("நாமினி முகவரி *", height=82)
                     
-                    st.markdown("##### 👤 நாமினி விவரங்கள் (Nominee Details)")
-                    nom_col1, nom_col2 = st.columns(2)
-                    with nom_col1:
-                        nominee_name = st.text_input("நாமினி பெயர்")
-                        nominee_relation = st.text_input("உறவுமுறை")
-                    with nom_col2:
-                        nominee_address = st.text_area("நாமினி முகவரி", height=68)
-                    detail_summary = [f"A/c: {acc_no}", f"Scheme: {sel_scheme}"]
+                    acc_no = fd_acc_no  # பழைய கார்ட் வேரியபிள்களுக்குப் பாதுகாப்பு
+                    detail_summary = [f"FD No: {fd_acc_no}", f"Scheme: {fd_sel_scheme}", f"Dep: ₹{received_amt}", f"Nominee: {fd_nominee}"]
+                    extra_meta_data = {
+                        "account_no": fd_acc_no,
+                        "deposit_amount": received_amt,
+                        "nominee": fd_nominee,
+                        "relation": fd_relation,
+                        "age": fd_age,
+                        "address": fd_address
+                    }
+
+                # -------------------------------------------------------------
+                # 6. RD Open (புதிய RD சேமிப்பு - Auto Account No)
+                # -------------------------------------------------------------
+                elif txn_category == "RD Open (புதிய RD சேமிப்பு)":
+                    st.markdown("##### 📈 புதிய RD கணக்கு விவரங்கள் & நாமினி")
+                    rd_c1, rd_c2 = st.columns(2)
+                    with rd_c1:
+                        # 🌟 கைமுறையாக உள்ளிடுவதற்குப் பதிலாக தானாகவே எண் வரும் (disabled=True):
+                        auto_rd_no = generate_rd_account_no(st.session_state.branch_id)
+                        rd_acc_no = st.text_input("RD கணக்கு எண்:", value=auto_rd_no, disabled=True)
+                        rd_sel_scheme = st.selectbox("அட்மின் RD திட்டம் (Scheme) *", rd_scheme_options)
+                        received_amt = st.number_input("முதல் தவணைத் தொகை (Installment ₹) *", min_value=0.0, step=500.0)
+                        rd_nominee = st.text_input("நாமினி பெயர் *")
+                    with rd_c2:
+                        rd_relation = st.text_input("உறவுமுறை *")
+                        rd_age = st.number_input("வயது *", min_value=1, max_value=120, value=30, key="rd_age_in")
+                        rd_address = st.text_area("நாமினி முகவரி *", height=82, key="rd_addr_in")
+                    
+                    acc_no = rd_acc_no  # பழைய கார்ட் வேரியபிள்களுக்குப் பாதுகாப்பு
+                    detail_summary = [f"RD No: {rd_acc_no}", f"Scheme: {rd_sel_scheme}", f"Inst: ₹{received_amt}", f"Nominee: {rd_nominee}"]
+                    extra_meta_data = {
+                        "account_no": rd_acc_no,
+                        "installment_amount": received_amt,
+                        "nominee": rd_nominee,
+                        "relation": rd_relation,
+                        "age": rd_age,
+                        "address": rd_address
+                    }
 
                 # 6. RD & FD முதிர்வு / தவணைகள்
                 elif "RD" in txn_category or "FD" in txn_category:
