@@ -3537,6 +3537,14 @@ else:
                                         }
                                         st.session_state.transactions_cart = []
                                         st.session_state.gp_ornament_rows = [{"item": "", "count": 1, "gross_wt": 0.0, "net_wt": 0.0, "purity": "916 KDM"}]
+
+                                        # 👈👈👈 🌟 புதிய வருகைக்காக OTP நிலைகளை முழுமையாக ரீசெட் செய்தல்:
+                                        st.session_state.otp_cleared = False
+                                        st.session_state.otp_already_sent = False
+                                        st.session_state.generated_otp = None
+                                        if "otp_bypass_requested" in st.session_state:
+                                            st.session_state.otp_bypass_requested = False
+
                                         st.rerun()
 
                             with st.expander(f"✏️ {selected_cust['name']} விவரங்களில் மாற்றம் செய்ய கோரிக்கை அனுப்புக"):
@@ -4996,7 +5004,12 @@ else:
                                     st.session_state.current_declaration = None
                                     st.session_state.declaration_gl_no = None
                                     st.rerun()
-                                    
+                                    # 🌟 OTP அனுமதியை ரீசெட் செய்யும் கூடுதல் வரிகள்:
+                                    st.session_state.otp_cleared = False
+                                    st.session_state.otp_already_sent = False
+                                    if "otp_bypass_requested" in st.session_state:
+                                        st.session_state.otp_bypass_requested = False
+
         # =========================================================================
         # 2-வது டேப்: கிளை ஆவணங்கள் பதிவேற்றம் (Upload Docs Desk)
         # =========================================================================
