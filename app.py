@@ -852,65 +852,99 @@ def get_branch_code_by_id(branch_id: int) -> str:
         pass
     return "BR"
 
+import re
+import json
+
 def generate_fd_account_no(branch_id: int) -> str:
-    """கிளை வாரியாக அடுத்தடுத்த FD கணக்கு எண்ணை தானாக உருவாக்குதல் (BRANCH/FD/0001)"""
+    """கிளை வாரியாக அதிகபட்ச FD எண்ணைத் துல்லியமாகக் கண்டறிந்து அடுத்த எண்ணை உருவாக்குதல்"""
     b_code = get_branch_code_by_id(branch_id)
     try:
+        # இந்த கிளையின் அனைத்து FD பதிவுகளையும் எடுத்தல்
         txns = (
             supabase.table("transactions")
-            .select("transaction_details, customer_visits!inner(branch_id)")
+            .select("transaction_details, remarks, customer_visits!inner(branch_id)")
             .eq("customer_visits.branch_id", int(branch_id))
-            .ilike("transaction_type", "%FD Open%")
+            .ilike("transaction_type", "%FD%")
             .execute()
             .data or []
         )
         
         max_seq = 0
-        pattern = re.compile(rf"^{re.escape(b_code)}/FD/(\d+)$", re.IGNORECASE)
+        pattern = re.compile(rf"{re.escape(b_code)}/FD/(\d+)", re.IGNORECASE)
         
         for t in txns:
+            # 1. transaction_details-ல் தேடுதல்
             details = t.get("transaction_details") or {}
-            acc_no = str(details.get("account_no", "")).strip()
-            match = pattern.match(acc_no)
-            if match:
-                seq_num = int(match.group(1))
-                if seq_num > max_seq:
-                    max_seq = seq_num
-                    
+            if isinstance(details, str):
+                try:
+                    details = json.loads(details)
+                except Exception:
+                    details = {}
+            
+            acc_val = str(details.get("account_no") or details.get("acc_no") or details.get("fd_no") or "")
+            m1 = pattern.search(acc_val)
+            if m1:
+                max_seq = max(max_seq, int(m1.group(1)))
+                
+            # 2. remarks-ல் தேடுதல் (பழைய பல்க் பதிவேற்றக் குறிப்புகள்)
+            rem_val = str(t.get("remarks") or "")
+            m2 = pattern.search(rem_val)
+            if m2:
+                max_seq = max(max_seq, int(m2.group(1)))
+                
+            # 3. details முழு உரையிலும் தேடுதல்
+            m3 = pattern.search(str(details))
+            if m3:
+                max_seq = max(max_seq, int(m3.group(1)))
+
         return f"{b_code}/FD/{max_seq + 1:04d}"
     except Exception:
         return f"{b_code}/FD/{datetime.now().strftime('%y%m%d%H%M')}"
 
 def generate_rd_account_no(branch_id: int) -> str:
-    """கிளை வாரியாக அடுத்தடுத்த RD கணக்கு எண்ணை தானாக உருவாக்குதல் (BRANCH/RD/0001)"""
+    """கிளை வாரியாக அதிகபட்ச RD எண்ணைத் துல்லியமாகக் கண்டறிந்து அடுத்த எண்ணை உருவாக்குதல்"""
     b_code = get_branch_code_by_id(branch_id)
     try:
         txns = (
             supabase.table("transactions")
-            .select("transaction_details, customer_visits!inner(branch_id)")
+            .select("transaction_details, remarks, customer_visits!inner(branch_id)")
             .eq("customer_visits.branch_id", int(branch_id))
-            .ilike("transaction_type", "%RD Open%")
+            .ilike("transaction_type", "%RD%")
             .execute()
             .data or []
         )
         
         max_seq = 0
-        pattern = re.compile(rf"^{re.escape(b_code)}/RD/(\d+)$", re.IGNORECASE)
+        pattern = re.compile(rf"{re.escape(b_code)}/RD/(\d+)", re.IGNORECASE)
         
         for t in txns:
             details = t.get("transaction_details") or {}
-            acc_no = str(details.get("account_no", "")).strip()
-            match = pattern.match(acc_no)
-            if match:
-                seq_num = int(match.group(1))
-                if seq_num > max_seq:
-                    max_seq = seq_num
-                    
+            if isinstance(details, str):
+                try:
+                    details = json.loads(details)
+                except Exception:
+                    details = {}
+            
+            acc_val = str(details.get("account_no") or details.get("acc_no") or details.get("rd_no") or "")
+            m1 = pattern.search(acc_val)
+            if m1:
+                max_seq = max(max_seq, int(m1.group(1)))
+                
+            rem_val = str(t.get("remarks") or "")
+            m2 = pattern.search(rem_val)
+            if m2:
+                max_seq = max(max_seq, int(m2.group(1)))
+                
+            m3 = pattern.search(str(details))
+            if m3:
+                max_seq = max(max_seq, int(m3.group(1)))
+
         return f"{b_code}/RD/{max_seq + 1:04d}"
     except Exception:
         return f"{b_code}/RD/{datetime.now().strftime('%y%m%d%H%M')}"
+
 # -------------------------------------------------------------------------
-# 🔍 வாடிக்கையாளரின் ஆக்டிவ் RD கணக்குகளை எடுக்கும் ஃபங்க்ஷன்
+# 🔍 வாடிக்கையாளரின் ஆக்டிவ் RD கணக்குகளை எடுக்கும்  ஃபங்க்ஷன்
 # -------------------------------------------------------------------------
 def get_customer_rd_accounts(customer_id: int):
     """வாடிக்கையாளரின் முடிவடையாத (Active) RD கணக்குகளை எடுத்தல்"""
