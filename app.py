@@ -4695,9 +4695,9 @@ else:
                                         except Exception as e:
                                             st.error(f"கோரிக்கை அனுப்புவதில் பிழை: {e}")
 
-                            # -------------------------------------------------------------------------
-                            # 🌟 5. வருகையை நிறைவு செய்யும் பட்டன் (பிழையற்ற முழுமையான முறை)
-                            # -------------------------------------------------------------------------
+                            st.markdown("---")
+
+                            # 🌟 5. வருகையை நிறைவு செய்யும் பட்டன் (காலம்களுக்கு வெளியே, இடதுபுறம் தள்ளி)
                             if st.button("✅ வருகையை நிறைவு செய்க", type="primary", use_container_width=True, key="btn_complete_visit_final"):
                                 if not is_ready:
                                     st.error("❌ கணக்கீடு அல்லது UTR எண் விடுபட்டுள்ளது!")
@@ -4762,7 +4762,7 @@ else:
                                                     }
                                                     supabase.table("gold_purchases").insert(purchase_payload).execute()
 
-                                            # 3. புதிய அடமான எண்களை அதிகரித்தல் (கார்ட் காலியாவதற்கு முன் கணக்கிடுதல்)
+                                            # 3. புதிய அடமான எண்களை அதிகரித்தல் (கார்ட் காலியாவதற்கு முன்)
                                             cart = st.session_state.transactions_cart
                                             pledge_items = [i for i in cart if "Pledge" in str(i.get("transaction_type", ""))]
                                             if pledge_items:
@@ -4807,9 +4807,9 @@ else:
                                             st.rerun()
 
                                     except Exception as save_err:
-                                        # 🚨 எரர் வந்தால் கார்ட் அழியாது; எரர் திரையிலேயே நிற்கும்:
                                         st.error(f"❌ வருகையைச் சேமிப்பதில் பிழை ஏற்பட்டது: {save_err}")
                                         st.warning("⚠️ மேலே உள்ள எரரைச் சரிபார்க்கவும். உங்கள் கார்ட்டில் உள்ள தரவுகள் அழியாமல் அப்படியே உள்ளன.")
+
                                     # ✅ 1. தனித்துவமான வருகை எண் உருவாக்கம்
                                     current_v_no = visit.get("visit_no")
                                     chk_exist = supabase.table("customer_visits").select("id").eq("visit_no", current_v_no).execute()
