@@ -961,6 +961,85 @@ def generate_rd_account_no(branch_id: int) -> str:
         pass
 
     return f"{b_code}/RD/{max_seq + 1:04d}"
+# =========================================================================
+# 🔍 வாடிக்கையாளரின் ஆக்டிவ் RD கணக்குகளை எடுக்கும் ஃபங்க்ஷன் (Hybrid Mode)
+# =========================================================================
+def get_customer_rd_accounts(customer_id: int):
+    """வாடிக்கையாளரின் முடிவடையாத (Active) RD கணக்குகளை எடுத்தல்"""
+    try:
+        # 1. recurring_deposits அட்டவணையில் முதலில் தேடுதல்
+        res = (
+            supabase.table("recurring_deposits")
+            .select("rd_account_no, monthly_installment")
+            .eq("customer_id", int(customer_id))
+            .eq("status", "Active")
+            .execute()
+        )
+        if res.data:
+            return [{"acc_no": r["rd_account_no"], "installment_amount": float(r["monthly_installment"] or 0.0)} for r in res.data]
+
+        # 2. அட்டவணையில் இல்லை எனில் transactions பதிவுகளில் தேடுதல் (Fallback)
+        v_res = supabase.table("customer_visits").select("id").eq("customer_id", int(customer_id)).execute()
+        v_ids = [v["id"] for v in (v_res.data or [])]
+        if not v_ids:
+            return []
+
+        open_res = supabase.table("transactions").select("transaction_details").in_("visit_id", v_ids).ilike("transaction_type", "%RD Open%").execute()
+        close_res = supabase.table("transactions").select("transaction_details").in_("visit_id", v_ids).ilike("transaction_type", "%RD Close%").execute()
+        closed_accs = {str((t.get("transaction_details") or {}).get("account_no", "")).strip() for t in (close_res.data or [])}
+
+        active_rds = []
+        for t in (open_res.data or []):
+            d = t.get("transaction_details") or {}
+            acc = str(d.get("account_no", "")).strip()
+            if acc and acc not in closed_accs and acc not in [x["acc_no"] for x in active_rds]:
+                active_rds.append({
+                    "acc_no": acc,
+                    "installment_amount": float(d.get("installment_amount", 0.0) or 0.0)
+                })
+        return active_rds
+    except Exception:
+        return []
+
+# =========================================================================
+# 🔍 வாடிக்கையாளரின் ஆக்டிவ் FD கணக்குகளை எடுக்கும் ஃபங்க்ஷன் (Hybrid Mode)
+# =========================================================================
+def get_customer_fd_accounts(customer_id: int):
+    """வாடிக்கையாளரின் முடிவடையாத (Active) FD கணக்குகளை எடுத்தல்"""
+    try:
+        # 1. fixed_deposits அட்டவணையில் முதலில் தேடுதல்
+        res = (
+            supabase.table("fixed_deposits")
+            .select("fd_account_no, deposit_amount")
+            .eq("customer_id", int(customer_id))
+            .eq("status", "Active")
+            .execute()
+        )
+        if res.data:
+            return [{"acc_no": r["fd_account_no"], "deposit_amount": float(r["deposit_amount"] or 0.0)} for r in res.data]
+
+        # 2. அட்டவணையில் இல்லை எனில் transactions பதிவுகளில் தேடுதல் (Fallback)
+        v_res = supabase.table("customer_visits").select("id").eq("customer_id", int(customer_id)).execute()
+        v_ids = [v["id"] for v in (v_res.data or [])]
+        if not v_ids:
+            return []
+
+        open_res = supabase.table("transactions").select("transaction_details").in_("visit_id", v_ids).ilike("transaction_type", "%FD Open%").execute()
+        close_res = supabase.table("transactions").select("transaction_details").in_("visit_id", v_ids).ilike("transaction_type", "%FD Close%").execute()
+        closed_accs = {str((t.get("transaction_details") or {}).get("account_no", "")).strip() for t in (close_res.data or [])}
+
+        active_fds = []
+        for t in (open_res.data or []):
+            d = t.get("transaction_details") or {}
+            acc = str(d.get("account_no", "")).strip()
+            if acc and acc not in closed_accs and acc not in [x["acc_no"] for x in active_fds]:
+                active_fds.append({
+                    "acc_no": acc,
+                    "deposit_amount": float(d.get("deposit_amount", 0.0) or 0.0)
+                })
+        return active_fds
+    except Exception:
+        return []
 
 def send_fast2sms_otp(mobile_no: str, otp_code: str):
     try:
