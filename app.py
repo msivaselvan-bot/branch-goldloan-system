@@ -3445,13 +3445,34 @@ else:
                     "பதிவு செய்தவர்": e.get("created_by", "-")
                 } for e in b_exp_logs]), use_container_width=True)
                 
-# =========================================================================
+        # =========================================================================
         # 1-வது டேப்: கவுண்ட்டர் வருகை & OTP (Counter Visit & Flow)
         # =========================================================================
         with branch_tab1:
             staff_res = supabase.table("users").select("name").eq("branch_id", st.session_state.branch_id).eq("is_active", True).execute()
             current_staff_list = ["Walk-in (நேரடி வருகை)"] + [s["name"] for s in staff_res.data] if staff_res.data else ["Walk-in (நேரடி வருகை)"]
+            # ---------------------------------------------------------------------
+            # 🎉 முந்தைய வருகை வெற்றிகரமாக முடிந்ததற்கான செய்திப் பலகை (Success Card)
+            # ---------------------------------------------------------------------
+            if st.session_state.get("last_saved_visit"):
+                saved = st.session_state["last_saved_visit"]
+                
+                st.success(
+                    f"### 🎉 வருகை வெற்றிகரமாகச் சேமிக்கப்பட்டது!\n\n"
+                    f"**வருகை எண்:** `{saved['visit_no']}` &nbsp;|&nbsp; "
+                    f"**வாடிக்கையாளர்:** `{saved['customer_name']}` &nbsp;|&nbsp; "
+                    f"**நடவடிக்கைகள்:** `{saved['txn_count']} எண்ணம்`\n\n"
+                    f"💰 **செலுத்திய தொகை:** ₹{saved['total_paid']:,.2f} &nbsp;|&nbsp; "
+                    f"💰 **பெற்ற தொகை:** ₹{saved['total_received']:,.2f}"
+                )
+                st.balloons()  # வெற்றிகரமான சேமிப்பிற்கான அனிமேஷன்
+                
+                # அறிவிப்பை மூட:
+                if st.button("✖ இந்த அறிவிப்பை மூடு (Close Alert)", key="btn_close_succ_alert"):
+                    st.session_state["last_saved_visit"] = None
+                    st.rerun()
 
+                st.markdown("---")
             # ---------------------------------------------------------------------
             # படி 1: வாடிக்கையாளர் வருகைப் பதிவு (Visit Token)
             # ---------------------------------------------------------------------
@@ -3515,9 +3536,6 @@ else:
                                             "address": selected_cust.get("address", ""),
                                             "step": "TRANSACTIONS"
                                         }
-                                        st.session_state.transactions_cart = []
-                                        st.session_state.gp_ornament_rows = [{"item": "", "count": 1, "gross_wt": 0.0, "net_wt": 0.0, "purity": "916 KDM"}]
-                                        st.rerun()
                                         st.session_state.transactions_cart = []
                                         st.session_state.gp_ornament_rows = [{"item": "", "count": 1, "gross_wt": 0.0, "net_wt": 0.0, "purity": "916 KDM"}]
                                         st.rerun()
