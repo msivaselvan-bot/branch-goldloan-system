@@ -2229,6 +2229,49 @@ else:
 
             st.divider()
 
+            with st.expander("📜 முந்தைய OTP விலக்கு முடிவுகள் & வரலாறு (Audit Log)"):
+                try:
+                    history_res = (
+                        supabase.table("otp_bypass_requests")
+                        .select("id, created_at, branch_id, customer_name, mobile, reason, status, admin_approved_by, ops_cleared_by")
+                        .in_("status", ["Approved", "Used", "Rejected", "Pending Operations"])
+                        .order("id", desc=True)
+                        .limit(20)
+                        .execute()
+                    )
+                    history_data = history_res.data or []
+                    
+                    if not history_data:
+                        st.caption("முந்தைய பதிவுகள் எதுவும் இல்லை.")
+                    else:
+                        for h_item in history_data:
+                            h_status = h_item.get("status")
+                            # நிலைக்கு ஏற்ப பேட்ஜ் நிறம்
+                            if h_status == "Used":
+                                s_badge = "🟣 பயன்படுத்தப்பட்டது (Used)"
+                            elif h_status == "Approved":
+                                s_badge = "🟢 அனுமதி வழங்கப்பட்டது (Active)"
+                            elif h_status == "Rejected":
+                                s_badge = "🔴 நிராகரிக்கப்பட்டது (Rejected)"
+                            else:
+                                s_badge = "🟡 ஆப்பரேஷன்ஸ் வசம் (Pending Ops)"
+
+                            h_c1, h_c2 = st.columns([3, 1])
+                            with h_c1:
+                                st.write(f"👤 **{h_item.get('customer_name')}** ({h_item.get('mobile')}) | நிலை: `{s_badge}`")
+                                st.caption(f"காரணம்: {h_item.get('reason')} | கிளை ID: {h_item.get('branch_id')} | அட்மின்: {h_item.get('admin_approved_by', '-')}")
+                            with h_c2:
+                                # தேங்கி நிற்கும் Approved அனுமதியை அட்மினே ரத்து செய்யும் வசதி:
+                                if h_status == "Approved":
+                                    if st.button("ரத்து செய் (Expire)", key=f"exp_{h_item['id']}"):
+                                        supabase.table("otp_bypass_requests").update({"status": "Used"}).eq("id", h_item["id"]).execute()
+                                        st.success("அனுமதி ரத்து செய்யப்பட்டது.")
+                                        st.rerun()
+                            st.write("---")
+
+                except Exception as hist_err:
+                    st.caption(f"வரலாற்றைப் பெறுவதில் பிழை: {hist_err}")
+
             st.subheader("📊 வருகை & பரிவர்த்தனை மேலாண்மை")
             v_records = supabase.table("customer_visits").select("*, customers(name, mobile), transactions(*)").order("id", desc=True).limit(20).execute().data or []
             for vr in v_records:
@@ -4621,12 +4664,21 @@ else:
                         st.write(f"மொபைல் எண்: `{c_mob}`")
 
                         # 🌟 1. பாதுகாப்பாக visit_id எடுத்தல்
-                        v_id = visit.get("id") or visit.get("visit_id") or visit.get("visit_no")
+                        current_v_no = visit.get("visit_no", "-")
+                        c_id = visit.get("customer_id")
                         current_status = None
 
-                        if v_id:
+                        if current_v_no and current_v_no != "-":
                             try:
-                                req_res = supabase.table("otp_bypass_requests").select("status").eq("visit_id", v_id).order("id", desc=True).limit(1).execute()
+                                req_res = (
+                                    supabase.table("otp_bypass_requests")
+                                    .select("status")
+                                    .eq("customer_id", c_id)
+                                    .eq("visit_no", current_v_no)
+                                    .order("id", desc=True)
+                                    .limit(1)
+                                    .execute()
+                                )
                                 if req_res.data:
                                     current_status = req_res.data[0].get("status")
                             except Exception:
@@ -4681,13 +4733,14 @@ else:
                                             u_name = st.session_state.get("username") or "Branch Manager"
                                             
                                             req_payload = {
-                                                "visit_id": v_id,
-                                                "branch_id": int(b_id),
-                                                "requested_by": str(u_name),
-                                                "customer_name": str(c_name),
-                                                "mobile": str(c_mob),
-                                                "reason": str(bypass_reason.strip()),
-                                                "status": "Pending Admin"
+                                                "branch_id": st.session_state.branch_id,
+                                                "customer_id": c_id,
+                                                "visit_no": visit.get("visit_no"),  # 👈 இந்த வருகை எண்ணை இணைக்கவும்
+                                                "customer_name": visit.get("customer_name"),
+                                                "mobile": visit.get("mobile"),
+                                                "reason": bypass_reason,
+                                                "status": "Pending Admin",
+                                                "requested_by": st.session_state.username
                                             }
                                             supabase.table("otp_bypass_requests").insert(req_payload).execute()
                                             st.success("✅ கோரிக்கை அனுப்பப்பட்டது! அட்மின் ஒப்புதலுக்காகக் காத்திருக்கவும்.")
