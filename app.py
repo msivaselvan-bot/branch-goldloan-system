@@ -9,6 +9,7 @@ import uuid
 import os
 import pytz
 import time  # 👈 இணைப்பு துண்டிப்பைச் சரிசெய்ய சேர்க்கப்பட்டுள்ளது
+import re
 
 # 1. பக்க வடிவமைப்பு
 st.set_page_config(page_title="Branch Operations System", layout="wide")
@@ -852,158 +853,71 @@ def get_branch_code_by_id(branch_id: int) -> str:
         pass
     return "BR"
 
-import re
-import json
-
+# -------------------------------------------------------------
+# 🌟 புதிய கணக்கு எண்கள் உருவாக்கும் ஃபங்க்ஷன்கள் (நேரடி டேபிள் வினவல்)
+# -------------------------------------------------------------
 def generate_fd_account_no(branch_id: int) -> str:
-    """கிளை வாரியாக அதிகபட்ச FD எண்ணைத் துல்லியமாகக் கண்டறிந்து அடுத்த எண்ணை உருவாக்குதல்"""
+    """fixed_deposits அட்டவணையில் உள்ள உச்சபட்ச எண்ணைப் பார்த்து அடுத்த எண்ணை உருவாக்குதல்"""
     b_code = get_branch_code_by_id(branch_id)
     try:
-        # இந்த கிளையின் அனைத்து FD பதிவுகளையும் எடுத்தல்
-        txns = (
-            supabase.table("transactions")
-            .select("transaction_details, remarks, customer_visits!inner(branch_id)")
-            .eq("customer_visits.branch_id", int(branch_id))
-            .ilike("transaction_type", "%FD%")
-            .execute()
-            .data or []
-        )
-        
+        res = supabase.table("fixed_deposits").select("fd_account_no").eq("branch_id", int(branch_id)).execute()
         max_seq = 0
-        pattern = re.compile(rf"{re.escape(b_code)}/FD/(\d+)", re.IGNORECASE)
-        
-        for t in txns:
-            # 1. transaction_details-ல் தேடுதல்
-            details = t.get("transaction_details") or {}
-            if isinstance(details, str):
-                try:
-                    details = json.loads(details)
-                except Exception:
-                    details = {}
-            
-            acc_val = str(details.get("account_no") or details.get("acc_no") or details.get("fd_no") or "")
-            m1 = pattern.search(acc_val)
-            if m1:
-                max_seq = max(max_seq, int(m1.group(1)))
-                
-            # 2. remarks-ல் தேடுதல் (பழைய பல்க் பதிவேற்றக் குறிப்புகள்)
-            rem_val = str(t.get("remarks") or "")
-            m2 = pattern.search(rem_val)
-            if m2:
-                max_seq = max(max_seq, int(m2.group(1)))
-                
-            # 3. details முழு உரையிலும் தேடுதல்
-            m3 = pattern.search(str(details))
-            if m3:
-                max_seq = max(max_seq, int(m3.group(1)))
-
+        pattern = re.compile(rf"^{re.escape(b_code)}/FD/(\d+)$", re.IGNORECASE)
+        for row in (res.data or []):
+            acc = str(row.get("fd_account_no", "")).strip()
+            m = pattern.match(acc)
+            if m:
+                max_seq = max(max_seq, int(m.group(1)))
         return f"{b_code}/FD/{max_seq + 1:04d}"
     except Exception:
         return f"{b_code}/FD/{datetime.now().strftime('%y%m%d%H%M')}"
 
 def generate_rd_account_no(branch_id: int) -> str:
-    """கிளை வாரியாக அதிகபட்ச RD எண்ணைத் துல்லியமாகக் கண்டறிந்து அடுத்த எண்ணை உருவாக்குதல்"""
+    """recurring_deposits அட்டவணையில் உள்ள உச்சபட்ச எண்ணைப் பார்த்து அடுத்த எண்ணை உருவாக்குதல்"""
     b_code = get_branch_code_by_id(branch_id)
     try:
-        txns = (
-            supabase.table("transactions")
-            .select("transaction_details, remarks, customer_visits!inner(branch_id)")
-            .eq("customer_visits.branch_id", int(branch_id))
-            .ilike("transaction_type", "%RD%")
-            .execute()
-            .data or []
-        )
-        
+        res = supabase.table("recurring_deposits").select("rd_account_no").eq("branch_id", int(branch_id)).execute()
         max_seq = 0
-        pattern = re.compile(rf"{re.escape(b_code)}/RD/(\d+)", re.IGNORECASE)
-        
-        for t in txns:
-            details = t.get("transaction_details") or {}
-            if isinstance(details, str):
-                try:
-                    details = json.loads(details)
-                except Exception:
-                    details = {}
-            
-            acc_val = str(details.get("account_no") or details.get("acc_no") or details.get("rd_no") or "")
-            m1 = pattern.search(acc_val)
-            if m1:
-                max_seq = max(max_seq, int(m1.group(1)))
-                
-            rem_val = str(t.get("remarks") or "")
-            m2 = pattern.search(rem_val)
-            if m2:
-                max_seq = max(max_seq, int(m2.group(1)))
-                
-            m3 = pattern.search(str(details))
-            if m3:
-                max_seq = max(max_seq, int(m3.group(1)))
-
+        pattern = re.compile(rf"^{re.escape(b_code)}/RD/(\d+)$", re.IGNORECASE)
+        for row in (res.data or []):
+            acc = str(row.get("rd_account_no", "")).strip()
+            m = pattern.match(acc)
+            if m:
+                max_seq = max(max_seq, int(m.group(1)))
         return f"{b_code}/RD/{max_seq + 1:04d}"
     except Exception:
         return f"{b_code}/RD/{datetime.now().strftime('%y%m%d%H%M')}"
 
-# -------------------------------------------------------------------------
-# 🔍 வாடிக்கையாளரின் ஆக்டிவ் RD கணக்குகளை எடுக்கும்  ஃபங்க்ஷன்
-# -------------------------------------------------------------------------
+# -------------------------------------------------------------
+# 🔍 கவுண்ட்டரில் வாடிக்கையாளரின் ஆக்டிவ் கணக்குகளை எடுக்கும் ஃபங்க்ஷன்கள்
+# -------------------------------------------------------------
 def get_customer_rd_accounts(customer_id: int):
-    """வாடிக்கையாளரின் முடிவடையாத (Active) RD கணக்குகளை எடுத்தல்"""
+    """வாடிக்கையாளரின் ஆக்டிவ் RD கணக்குகளை எடுத்தல்"""
     try:
-        v_res = supabase.table("customer_visits").select("id").eq("customer_id", int(customer_id)).execute()
-        v_ids = [v["id"] for v in (v_res.data or [])]
-        if not v_ids:
-            return []
-
-        # RD Open பதிவுகள்
-        open_res = supabase.table("transactions").select("transaction_details").in_("visit_id", v_ids).ilike("transaction_type", "%RD Open%").execute()
-        # ஏற்கனவே மூடப்பட்ட RD Close பதிவுகள்
-        close_res = supabase.table("transactions").select("transaction_details").in_("visit_id", v_ids).ilike("transaction_type", "%RD Close%").execute()
-
-        closed_accs = {str((t.get("transaction_details") or {}).get("account_no", "")).strip() for t in (close_res.data or [])}
-
-        active_rds = []
-        for t in (open_res.data or []):
-            d = t.get("transaction_details") or {}
-            acc = str(d.get("account_no", "")).strip()
-            if acc and acc not in closed_accs and acc not in [x["acc_no"] for x in active_rds]:
-                active_rds.append({
-                    "acc_no": acc,
-                    "installment_amount": float(d.get("installment_amount", 0.0) or 0.0)
-                })
-        return active_rds
+        res = (
+            supabase.table("recurring_deposits")
+            .select("rd_account_no, monthly_installment")
+            .eq("customer_id", int(customer_id))
+            .eq("status", "Active")
+            .execute()
+        )
+        return [{"acc_no": r["rd_account_no"], "installment_amount": float(r["monthly_installment"] or 0.0)} for r in (res.data or [])]
     except Exception:
         return []
 
-# -------------------------------------------------------------------------
-# 🔍 வாடிக்கையாளரின் ஆக்டிவ் FD கணக்குகளை எடுக்கும் ஃபங்க்ஷன்
-# -------------------------------------------------------------------------
 def get_customer_fd_accounts(customer_id: int):
-    """வாடிக்கையாளரின் முடிவடையாத (Active) FD கணக்குகளை எடுத்தல்"""
+    """வாடிக்கையாளரின் ஆக்டிவ் FD கணக்குகளை எடுத்தல்"""
     try:
-        v_res = supabase.table("customer_visits").select("id").eq("customer_id", int(customer_id)).execute()
-        v_ids = [v["id"] for v in (v_res.data or [])]
-        if not v_ids:
-            return []
-
-        # FD Open பதிவுகள்
-        open_res = supabase.table("transactions").select("transaction_details").in_("visit_id", v_ids).ilike("transaction_type", "%FD Open%").execute()
-        # ஏற்கனவே மூடப்பட்ட FD Close பதிவுகள்
-        close_res = supabase.table("transactions").select("transaction_details").in_("visit_id", v_ids).ilike("transaction_type", "%FD Close%").execute()
-
-        closed_accs = {str((t.get("transaction_details") or {}).get("account_no", "")).strip() for t in (close_res.data or [])}
-
-        active_fds = []
-        for t in (open_res.data or []):
-            d = t.get("transaction_details") or {}
-            acc = str(d.get("account_no", "")).strip()
-            if acc and acc not in closed_accs and acc not in [x["acc_no"] for x in active_fds]:
-                active_fds.append({
-                    "acc_no": acc,
-                    "deposit_amount": float(d.get("deposit_amount", 0.0) or 0.0)
-                })
-        return active_fds
+        res = (
+            supabase.table("fixed_deposits")
+            .select("fd_account_no, deposit_amount")
+            .eq("customer_id", int(customer_id))
+            .eq("status", "Active")
+            .execute()
+        )
+        return [{"acc_no": r["fd_account_no"], "deposit_amount": float(r["deposit_amount"] or 0.0)} for r in (res.data or [])]
     except Exception:
-        return []        
+        return []
 
 def send_fast2sms_otp(mobile_no: str, otp_code: str):
     try:
@@ -2883,20 +2797,16 @@ else:
                         progress_bar = st.progress(0)
                         status_text = st.empty()
 
-                        # இந்த கிளையின் முந்தைய அதிகபட்ச வரிசை எண்களைக் கண்டறிதல்
+                        # இந்த கிளையின் முந்தைய அதிகபட்ச வரிசை எண்களைக் கண்டறிதல் (நேரடி பிரத்யேக டேபிள்களில் இருந்து)
                         def get_current_max_seq(acc_type):
                             pattern = re.compile(rf"^{re.escape(target_b_code)}/{acc_type}/(\d+)$", re.IGNORECASE)
-                            txns = (
-                                supabase.table("transactions")
-                                .select("transaction_details, customer_visits!inner(branch_id)")
-                                .eq("customer_visits.branch_id", target_b_id)
-                                .ilike("transaction_type", f"%{acc_type} Open%")
-                                .execute()
-                                .data or []
-                            )
+                            table_name = "recurring_deposits" if acc_type == "RD" else "fixed_deposits"
+                            col_name = "rd_account_no" if acc_type == "RD" else "fd_account_no"
+                            
+                            res = supabase.table(table_name).select(col_name).eq("branch_id", target_b_id).execute()
                             max_val = 0
-                            for t in txns:
-                                a_no = str((t.get("transaction_details") or {}).get("account_no", "")).strip()
+                            for row in (res.data or []):
+                                a_no = str(row.get(col_name, "")).strip()
                                 m = pattern.match(a_no)
                                 if m:
                                     max_val = max(max_val, int(m.group(1)))
@@ -2910,7 +2820,6 @@ else:
                         total_rows = len(df)
 
                         for idx, row in df.iterrows():
-                            # காலம்களின் மதிப்புகளை எடுத்தல்
                             row_type = str(row.get("type", "")).strip().upper()
                             name = str(row.get("name", "")).strip()
                             raw_mob = str(row.get("mobile", "")).strip()
@@ -2960,11 +2869,12 @@ else:
                             v_insert = supabase.table("customer_visits").insert(visit_payload).execute()
                             new_visit_id = v_insert.data[0]["id"]
 
-                            # 3. கணக்கு எண் தயாரித்து transactions-ல் சேர்த்தல்
+                            # 3. கணக்கு எண் தயாரித்து உங்கள் பிரத்யேக டேபிள்களிலும், transactions-லும் சேர்த்தல்:
                             if row_type == "RD":
                                 rd_counter += 1
                                 acc_no = f"{target_b_code}/RD/{rd_counter:04d}"
                                 txn_type_label = "RD Open (புதிய RD சேமிப்பு)"
+                                
                                 extra_meta = {
                                     "account_no": acc_no,
                                     "installment_amount": amount,
@@ -2973,11 +2883,29 @@ else:
                                     "age": age,
                                     "address": address
                                 }
+                                
+                                rd_payload = {
+                                    "visit_id": new_visit_id,
+                                    "branch_id": target_b_id,
+                                    "customer_id": c_id,
+                                    "rd_account_no": acc_no,
+                                    "monthly_installment": amount,
+                                    "tenure_months": 12,
+                                    "interest_rate": 12.0,
+                                    "total_target_amount": amount * 12,
+                                    "current_installment_no": 1,
+                                    "nominee_name": nominee,
+                                    "nominee_relation": relation,
+                                    "status": "Active"
+                                }
+                                supabase.table("recurring_deposits").insert(rd_payload).execute()
                                 success_rd += 1
+
                             else:
                                 fd_counter += 1
                                 acc_no = f"{target_b_code}/FD/{fd_counter:04d}"
                                 txn_type_label = "FD Open (புதிய வைப்பு நிதி)"
+                                
                                 extra_meta = {
                                     "account_no": acc_no,
                                     "deposit_amount": amount,
@@ -2986,6 +2914,21 @@ else:
                                     "age": age,
                                     "address": address
                                 }
+                                
+                                fd_payload = {
+                                    "visit_id": new_visit_id,
+                                    "branch_id": target_b_id,
+                                    "customer_id": c_id,
+                                    "fd_account_no": acc_no,
+                                    "deposit_amount": amount,
+                                    "tenure_months": 12,
+                                    "interest_rate": 12.0,
+                                    "maturity_amount": amount * 1.12,
+                                    "nominee_name": nominee,
+                                    "nominee_relation": relation,
+                                    "status": "Active"
+                                }
+                                supabase.table("fixed_deposits").insert(fd_payload).execute()
                                 success_fd += 1
 
                             txn_payload = {
@@ -3004,7 +2947,7 @@ else:
                             status_text.text(f"ஏற்றப்படுகிறது... ({idx+1}/{total_rows}) - {name} ({acc_no})")
 
                         status_text.empty()
-                        st.success(f"🎉 **{sel_branch_name}** கிளைக்கு வெற்றிகரமாக **{success_rd} RD** கணக்குகளும், **{success_fd} FD** கணக்குகளும் வரிசை எண்களுடன் ஏற்றப்பட்டன!")
+                        st.success(f"🎉 **{sel_branch_name}** கிளைக்கு வெற்றிகரமாக **{success_rd} RD** கணக்குகளும், **{success_fd} FD** கணக்குகளும் உங்கள் டேபிள்களில் வரிசை எண்களுடன் ஏற்றப்பட்டன!")
                         st.balloons()
 
                 except Exception as upload_err:
@@ -5390,9 +5333,7 @@ else:
 
                                         # அ. நகைக்கடன் (Gold Loans)
                                         if any(k in t_type for k in ["Pledge", "Loan", "நகைக்கடன்"]):
-                                            # கார்ட்டில் உள்ள கடன் எண்ணை (GL No) துல்லியமாக எடுத்தல்
                                             actual_gl_no = item.get("loan_no") or item.get("gp_number") or f"GL-{datetime.now().strftime('%y%m%d%H%M%S')}"
-
                                             loan_payload = {
                                                 "visit_id": new_visit_id,
                                                 "branch_id": b_id,
@@ -5404,20 +5345,15 @@ else:
                                                 "net_weight": float(item.get("net_weight", 0.0) or 0.0),
                                                 "purity": item.get("purity", "916 KDM"),
                                                 "sanctioned_amount": float(item.get("paid_amount", 0.0) or item.get("amount", 0.0)),
-                                                
-                                                # 🌟 ஸ்கீம் மாஸ்டர் விபரங்கள் (Scheme Details):
                                                 "scheme_name": item.get("scheme_name", "Regular"),
                                                 "interest_rate": float(item.get("interest_rate", 18.0) or 18.0),
                                                 "market_rate_per_gram": float(item.get("market_rate", 0.0) or 0.0),
-                                                
                                                 "staff_name": s_name,
                                                 "status": "Active"
                                             }
                                             supabase.table("gold_loans").insert(loan_payload).execute()
 
-                                        # =============================================================
                                         # ஆ. நகை விற்பனை (Gold Sales)
-                                        # =============================================================
                                         elif any(k in t_type for k in ["Sale", "விற்பனை"]):
                                             sale_payload = {
                                                 "visit_id": new_visit_id,
@@ -5427,28 +5363,20 @@ else:
                                                 "item_name": item.get("ornament_details", "Gold Jewellery"),
                                                 "gross_weight": float(item.get("total_weight", 0.0) or 0.0),
                                                 "net_weight": float(item.get("net_weight", 0.0) or 0.0),
-                                                
-                                                # 👈 1. இங்கே மாற்றப்பட்டுள்ளது:
                                                 "gold_rate_per_gram": float(item.get("rate_per_gram") or item.get("gold_rate_per_gram") or item.get("market_rate") or 0.0),
-                                                
                                                 "total_sale_amount": float(item.get("received_amount", 0.0) or item.get("amount", 0.0)),
                                                 "staff_name": s_name
                                             }
                                             supabase.table("gold_sales").insert(sale_payload).execute()
 
-                                        # =============================================================
-                                        # இ. தங்கம் வாங்குதல் (Gold Purchase / GP) - 100% பிழையற்ற முறை
-                                        # =============================================================
+                                        # இ. தங்கம் வாங்குதல் (Gold Purchase / GP)
                                         elif any(k in t_type for k in ["GP", "Purchase", "வாங்க", "கொள்முதல்"]):
                                             try:
-                                                # 1. நகைகள், Takeover மற்றும் சாட்சி விவரங்களை ஒரே முழுமையான விவரக் குறிப்பாக மாற்றுதல்:
                                                 details_list = [
                                                     f"வகை: {item.get('gp_mode', 'Direct')}",
                                                     f"வவுச்சர் எண்: {item.get('voucher_no', '-')}",
                                                     f"நகைகள் விவரம்:\n{item.get('ornament_details', 'Gold Jewellery')}"
                                                 ]
-                                                
-                                                # Takeover ஆக இருந்தால் வங்கி விபரங்களை இணைத்தல்:
                                                 if item.get("is_takeover"):
                                                     details_list.append(
                                                         f"\n[Takeover விவரங்கள்]\n"
@@ -5457,8 +5385,6 @@ else:
                                                         f"மீட்பு அட்வான்ஸ்: ₹{float(item.get('advance_paid', 0.0)):,.2f}\n"
                                                         f"மீதி வழங்கியது: ₹{float(item.get('balance_payable', 0.0)):,.2f}"
                                                     )
-                                                    
-                                                # சாட்சிகள் விவரம்:
                                                 if item.get("ref1_name"):
                                                     details_list.append(f"சாட்சி 1: {item.get('ref1_name')} ({item.get('ref1_phone')})")
                                                 if item.get("ref2_name"):
@@ -5467,59 +5393,60 @@ else:
                                                     details_list.append(f"குறிப்பு: {item.get('remarks')}")
 
                                                 full_details_text = "\n".join(details_list)
-
-                                                # 2. டேபிளில் உள்ள அசல் 9 பத்திகளுக்கு மட்டும் துல்லியமாக மேப் செய்தல்:
                                                 clean_gp_no = item.get("gp_number") or item.get("loan_number") or f"GP-{datetime.now().strftime('%y%m%d%H%M')}"
 
                                                 purchase_payload = {
                                                     "visit_id": new_visit_id if 'new_visit_id' in locals() else None,
                                                     "branch_id": b_id,
                                                     "customer_id": c_id,
-                                                    "purchase_bill_no": clean_gp_no,                                         # 👈 வெறும் ஜீபி எண் மட்டும் (AVL/GP/001)
-                                                    "item_details": full_details_text,                                       
+                                                    "purchase_bill_no": clean_gp_no,
+                                                    "item_details": full_details_text,
                                                     "gross_weight": float(item.get("gross_weight") or item.get("total_weight") or 0.0),
-                                                    "net_pure_weight": float(item.get("net_weight") or 0.0),                 
+                                                    "net_pure_weight": float(item.get("net_weight") or 0.0),
                                                     "buy_rate_per_gram": 0.0,
-                                                    "purchase_amount": float(item.get("total_value") or item.get("amount") or 0.0), 
+                                                    "purchase_amount": float(item.get("total_value") or item.get("amount") or 0.0),
                                                     "staff_name": s_name
                                                 }
-
                                                 supabase.table("gold_purchases").insert(purchase_payload).execute()
-
                                             except Exception as gp_err:
                                                 st.error(f"⚠️ gold_purchases அட்டவணையில் சேமிப்பதில் பிழை: {gp_err}")
 
-                                        # ஈ. நிலையான வைப்பு நிதி (Fixed Deposit - FD)
-                                        elif any(k in t_type for k in ["FD", "Fixed Deposit"]):
-                                            fd_payload = {
+                                        # ஈ. புதிய FD வைப்பு நிதி (Fixed Deposits)
+                                        elif "FD Open" in t_type or ("FD" in t_type and "Open" in t_type):
+                                            fd_meta = item.get("extra_meta_data", {}) or item
+                                            fd_insert_data = {
                                                 "visit_id": new_visit_id,
                                                 "branch_id": b_id,
                                                 "customer_id": c_id,
-                                                "fd_account_no": f"FD-{datetime.now().strftime('%y%m%d%H%M%S')}",
-                                                "deposit_amount": float(item.get("received_amount", 0.0) or item.get("amount", 0.0)),
-                                                "tenure_months": int(item.get("tenure_months", 12)),
-                                                "interest_rate": float(item.get("interest_rate", 10.0)),
-                                                "maturity_amount": float(item.get("maturity_amount", 0.0)),
-                                                "nominee_name": item.get("nominee_name", ""),
+                                                "fd_account_no": fd_meta.get("account_no") or item.get("account_no"),
+                                                "deposit_amount": float(fd_meta.get("deposit_amount") or item.get("received_amount") or 0.0),
+                                                "tenure_months": 12,
+                                                "interest_rate": 12.0,
+                                                "maturity_amount": float(fd_meta.get("deposit_amount") or item.get("received_amount") or 0.0) * 1.12,
+                                                "nominee_name": fd_meta.get("nominee", "-"),
+                                                "nominee_relation": fd_meta.get("relation", "-"),
                                                 "status": "Active"
                                             }
-                                            supabase.table("fixed_deposits").insert(fd_payload).execute()
+                                            supabase.table("fixed_deposits").insert(fd_insert_data).execute()
 
-                                        # உ. தொடர் வைப்பு நிதி (Recurring Deposit - RD)
-                                        elif any(k in t_type for k in ["RD", "Recurring Deposit"]):
-                                            rd_payload = {
+                                        # உ. புதிய RD சேமிப்பு (Recurring Deposits)
+                                        elif "RD Open" in t_type or ("RD" in t_type and "Open" in t_type):
+                                            rd_meta = item.get("extra_meta_data", {}) or item
+                                            rd_insert_data = {
                                                 "visit_id": new_visit_id,
                                                 "branch_id": b_id,
                                                 "customer_id": c_id,
-                                                "rd_account_no": f"RD-{datetime.now().strftime('%y%m%d%H%M%S')}",
-                                                "monthly_installment": float(item.get("received_amount", 0.0) or item.get("amount", 0.0)),
-                                                "tenure_months": int(item.get("tenure_months", 12)),
-                                                "interest_rate": float(item.get("interest_rate", 8.0)),
-                                                "total_target_amount": float(item.get("target_amount", 0.0)),
-                                                "nominee_name": item.get("nominee_name", ""),
+                                                "rd_account_no": rd_meta.get("account_no") or item.get("account_no"),
+                                                "monthly_installment": float(rd_meta.get("installment_amount") or item.get("received_amount") or 0.0),
+                                                "tenure_months": 12,
+                                                "interest_rate": 12.0,
+                                                "total_target_amount": float(rd_meta.get("installment_amount") or item.get("received_amount") or 0.0) * 12,
+                                                "current_installment_no": 1,
+                                                "nominee_name": rd_meta.get("nominee", "-"),
+                                                "nominee_relation": rd_meta.get("relation", "-"),
                                                 "status": "Active"
                                             }
-                                            supabase.table("recurring_deposits").insert(rd_payload).execute()
+                                            supabase.table("recurring_deposits").insert(rd_insert_data).execute()
 
                                         # ஊ. தலைமை அலுவலக தணிக்கை & அழைப்புச் சரிபார்ப்புக்காக transactions அட்டவணையில் பதிவு:
                                         general_txn = {
