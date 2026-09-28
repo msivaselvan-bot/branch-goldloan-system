@@ -3109,197 +3109,249 @@ else:
         # 🌟 பல்க் RD & FD பதிவேற்ற மேசை (Bulk Upload Desk)
         # -----------------------------------------------------------------
         with tab_bulk_rdfd:
-            st.subheader("📤 ஏற்கனவே உள்ள RD / FD கணக்குகளைப் பல்க்காக ஏற்றுதல்")
-            st.caption("கிளை வாரியாக எக்செல் / CSV கோப்பைப் பதிவேற்றி தானியங்கி கணக்கு எண்களுடன் டேட்டாபேஸில் சேர்க்கலாம்.")
+            st.subheader("📤 அனைத்துக் கிளைகளுக்குமான RD / FD கணக்குகளைப் பல்க்காக ஏற்றுதல் (Multi-Branch Bulk Import)")
+            st.caption("ஒரே எக்செல் கோப்பில் அனைத்துக் கிளைகளின் தரவுகளையும் பதிவேற்றி தானியங்கி கிளைக் குறியீட்டுடன் கணக்கு எண்களை உருவாக்கலாம்.")
 
-            # 1. கிளைத் தேர்வு
-            b_list = list(branch_options.keys()) if 'branch_options' in locals() and branch_options else []
-            sel_branch_name = st.selectbox("🎯 எந்தக் கிளைக்குப் பதிவேற்ற வேண்டும்?", b_list, key="sel_bulk_b")
-            target_b_id = branch_options.get(sel_branch_name) if b_list else st.session_state.get("branch_id", 1)
-            target_b_code = get_branch_code_by_id(target_b_id)
+            # 1. கிளைகள் மாஸ்டர் விவரங்களை எடுத்தல்
+            branches_res = supabase.table("branches").select("id, branch_name, branch_code").execute()
+            all_branches = branches_res.data or []
+            
+            # கிளை பெயர் & குறியீட்டு மேப்பிங்
+            branch_lookup = {}
+            branch_code_map = {}
+            for b in all_branches:
+                bid = b["id"]
+                bname = str(b.get("branch_name", "")).strip().lower()
+                bcode = str(b.get("branch_code", "BR")).strip().upper()
+                
+                branch_lookup[bname] = bid
+                branch_lookup[bcode.lower()] = bid
+                branch_code_map[bid] = bcode
 
-            # 2. மாதிரி எக்செல் டெம்ப்ளேட் டவுன்லோட் வசதி
-            sample_csv = "Type,Name,Mobile,Amount,Scheme,Nominee,Relation,Age,Address\nRD,ரமேஷ்,9876543210,1000,Regular RD,சுதா,மனைவி,32,சென்னை\nFD,சுரேஷ்,9876543211,25000,Special FD,கார்த்திக்,மகன்,12,மதுரை"
+            # 2. அனைத்துக் கிளைகளுக்கான மாதிரி எக்செல் டெம்ப்ளேட் டவுன்லோட்
+            sample_csv = "Type,Branch,Name,Mobile,Amount,Scheme,Nominee,Relation,Age,Address\nRD,Aundivilai,ரமேஷ்,9876543210,1000,Regular RD,சுதா,மனைவி,32,ஆவுடையாள்புரம்\nFD,Thingalnagar,சுரேஷ்,9876543211,25000,Special FD,கார்த்திக்,மகன்,12,திங்கள்நகர்\nRD,KMK,முருகன்,9876543212,2000,Regular RD,வள்ளி,மனைவி,28,கீழமணக்குடி"
             st.download_button(
-                "📥 மாதிரி எக்செல் (Template CSV) பதிவிறக்குக",
+                "📥 அனைத்துக் கிளை மாதிரி எக்செல் (Multi-Branch Template) பதிவிறக்குக",
                 data=sample_csv.encode("utf-8-sig"),
-                file_name="RD_FD_Upload_Template.csv",
+                file_name="All_Branches_RD_FD_Template.csv",
                 mime="text/csv"
             )
 
             st.write("---")
 
             # 3. கோப்புப் பதிவேற்றம் (CSV / Excel)
-            uploaded_file = st.file_uploader("📂 பூர்த்தி செய்யப்பட்ட கோப்பைத் தேர்ந்தெடுக்கவும் (CSV அல்லது Excel)", type=["csv", "xlsx", "xls"])
+            uploaded_file = st.file_uploader("📂 பூர்த்தி செய்யப்பட்ட கோப்பைத் தேர்ந்தெடுக்கவும் (CSV அல்லது Excel)", type=["csv", "xlsx", "xls"], key="multi_branch_bulk_uploader")
 
             if uploaded_file is not None:
                 try:
                     if uploaded_file.name.endswith(".csv"):
-                        df = pd.read_csv(uploaded_file)
+                        df = pd.read_csv(uploaded_file, dtype=str)
                     else:
-                        df = pd.read_excel(uploaded_file)
+                        df = pd.read_excel(uploaded_file, dtype=str)
 
                     # காலம்களின் பெயர்களைச் சீரமைத்தல்
                     df.columns = [str(c).strip().lower() for c in df.columns]
-                    st.write(f"📊 கண்டறியப்பட்ட பதிவுகள்: **{len(df)}**")
+                    st.write(f"📊 கண்டறியப்பட்ட மொத்தப் பதிவுகள்: **{len(df)}**")
                     st.dataframe(df.head(5), use_container_width=True)
 
                     # 4. பதிவேற்றும் பட்டன்
-                    if st.button("🚀 டேட்டாபேஸில் பல்க்காக ஏற்று (Start Bulk Import)", type="primary"):
+                    if st.button("🚀 அனைத்துக் கிளைகளுக்கும் டேட்டாபேஸில் ஏற்று (Start Multi-Branch Import)", type="primary"):
                         progress_bar = st.progress(0)
                         status_text = st.empty()
 
-                        # இந்த கிளையின் முந்தைய அதிகபட்ச வரிசை எண்களைக் கண்டறிதல் (நேரடி பிரத்யேக டேபிள்களில் இருந்து)
-                        def get_current_max_seq(acc_type):
-                            pattern = re.compile(rf"^{re.escape(target_b_code)}/{acc_type}/(\d+)$", re.IGNORECASE)
+                        # கிளை வாரியாக நடப்பு அதிகபட்ச எண்களை எடுக்கும் ஃபங்க்ஷன்
+                        def fetch_max_seq(b_id, b_code, acc_type):
                             table_name = "recurring_deposits" if acc_type == "RD" else "fixed_deposits"
                             col_name = "rd_account_no" if acc_type == "RD" else "fd_account_no"
+                            pattern = re.compile(rf"^{re.escape(b_code)}/{acc_type}/(\d+)$", re.IGNORECASE)
                             
-                            res = supabase.table(table_name).select(col_name).eq("branch_id", target_b_id).execute()
-                            max_val = 0
-                            for row in (res.data or []):
-                                a_no = str(row.get(col_name, "")).strip()
-                                m = pattern.match(a_no)
-                                if m:
-                                    max_val = max(max_val, int(m.group(1)))
-                            return max_val
+                            try:
+                                res = supabase.table(table_name).select(col_name).eq("branch_id", b_id).execute()
+                                max_val = 0
+                                for r in (res.data or []):
+                                    m = pattern.match(str(r.get(col_name, "")).strip())
+                                    if m:
+                                        max_val = max(max_val, int(m.group(1)))
+                                return max_val
+                            except Exception:
+                                return 0
 
-                        rd_counter = get_current_max_seq("RD")
-                        fd_counter = get_current_max_seq("FD")
+                        # ஒவ்வொரு கிளைக்கும் தனித்தனி கவுண்ட்டர் டிக்ஷனரி
+                        rd_counters = {}
+                        fd_counters = {}
+
+                        # ஏற்கனவே உள்ள வாடிக்கையாளர்கள் (Mobile -> Customer ID Map)
+                        cust_res = supabase.table("customers").select("id, mobile, branch_id").execute()
+                        cust_cache = {str(c["mobile"]).strip()[-10:]: c["id"] for c in (cust_res.data or []) if c.get("mobile")}
 
                         success_rd = 0
                         success_fd = 0
+                        skipped_rows = 0
                         total_rows = len(df)
+                        error_list = []
 
                         for idx, row in df.iterrows():
                             row_type = str(row.get("type", "")).strip().upper()
+                            branch_input = str(row.get("branch", "")).strip().lower()
                             name = str(row.get("name", "")).strip()
-                            raw_mob = str(row.get("mobile", "")).strip()
+                            raw_mob = str(row.get("mobile", "")).strip().split(".")[0]
                             mobile = "".join(filter(str.isdigit, raw_mob))[-10:]
-                            amount = float(row.get("amount", 0.0) or 0.0)
+                            
+                            try:
+                                amount = float(str(row.get("amount", 0)).replace(",", "").strip() or 0.0)
+                            except Exception:
+                                amount = 0.0
+
                             scheme = str(row.get("scheme", "Regular")).strip()
                             nominee = str(row.get("nominee", "-")).strip()
                             relation = str(row.get("relation", "-")).strip()
-                            age = int(row.get("age", 30) if str(row.get("age", "")).isdigit() else 30)
-                            address = str(row.get("address", target_b_name if 'target_b_name' in locals() else "-")).strip()
+                            
+                            try:
+                                age = int(str(row.get("age", 30)).strip())
+                            except Exception:
+                                age = 30
+                                
+                            address = str(row.get("address", "")).strip()
 
+                            # செல்லுபடியாகாத வரிகளைத் தவிர்த்தல்
                             if not name or len(mobile) != 10 or row_type not in ["RD", "FD"]:
+                                skipped_rows += 1
                                 continue
 
-                            # 1. வாடிக்கையாளர் உள்ளாரா எனப் பார்த்து customer_id பெறுதல் (இல்லையெனில் சேர்த்தல்)
-                            cust_res = supabase.table("customers").select("id").eq("mobile", mobile).execute()
-                            if cust_res.data:
-                                c_id = cust_res.data[0]["id"]
-                            else:
-                                new_c_code = f"IMP-{datetime.now().strftime('%m%d')}-{idx+1:04d}"
-                                new_cust = supabase.table("customers").insert({
+                            # கிளை அடையாளம் காணுதல்
+                            target_b_id = branch_lookup.get(branch_input)
+                            if not target_b_id:
+                                error_list.append(f"வரிசை {idx+1}: '{branch_input}' என்ற கிளை கண்டறியப்படவில்லை!")
+                                skipped_rows += 1
+                                continue
+
+                            target_b_code = branch_code_map.get(target_b_id, "BR")[:3].upper()
+                            if not address or address.lower() == 'nan':
+                                address = f"Branch {target_b_code}"
+
+                            try:
+                                # 1. வாடிக்கையாளர் உள்ளாரா எனப் பார்த்தல் (இல்லையெனில் உடனே உருவாக்குதல்)
+                                c_id = cust_cache.get(mobile)
+                                if not c_id:
+                                    new_c_code = f"{target_b_code}-{(idx + 1):03d}"
+                                    new_cust = supabase.table("customers").insert({
+                                        "branch_id": target_b_id,
+                                        "customer_code": new_c_code,
+                                        "name": name,
+                                        "mobile": mobile,
+                                        "address": address,
+                                        "nominee_name": nominee if nominee != "-" else None,
+                                        "nominee_relation": relation if relation != "-" else None,
+                                        "kyc_status": "Approved",
+                                        "is_active": True
+                                    }).execute()
+                                    if new_cust.data:
+                                        c_id = new_cust.data[0]["id"]
+                                        cust_cache[mobile] = c_id
+
+                                # 2. மைக்ரேஷன் வருகைப் பதிவு உருவாக்குதல்
+                                v_no = f"MIG-{target_b_code}-{row_type}-{idx+1:04d}"
+                                visit_payload = {
+                                    "visit_no": v_no,
+                                    "customer_id": c_id,
                                     "branch_id": target_b_id,
-                                    "customer_code": new_c_code,
-                                    "name": name,
-                                    "mobile": mobile,
-                                    "address": address,
-                                    "kyc_status": "Approved",
-                                    "is_active": True
-                                }).execute()
-                                c_id = new_cust.data[0]["id"]
-
-                            # 2. ஒரு மைக்கிரேஷன் வருகைப் பதிவு (Migration Visit) உருவாக்குதல்
-                            v_no = f"MIG-{target_b_code}-{row_type}-{idx+1:04d}"
-                            visit_payload = {
-                                "visit_no": v_no,
-                                "customer_id": c_id,
-                                "branch_id": target_b_id,
-                                "total_paid": 0.0,
-                                "total_received": amount,
-                                "net_cash_amount": amount,
-                                "cash_amount": amount,
-                                "bank_amount": 0.0,
-                                "payment_mode": "Migration",
-                                "otp_verified": True,
-                                "status": "Completed"
-                            }
-                            v_insert = supabase.table("customer_visits").insert(visit_payload).execute()
-                            new_visit_id = v_insert.data[0]["id"]
-
-                            # 3. கணக்கு எண் தயாரித்து உங்கள் பிரத்யேக டேபிள்களிலும், transactions-லும் சேர்த்தல்:
-                            if row_type == "RD":
-                                rd_counter += 1
-                                acc_no = f"{target_b_code}/RD/{rd_counter:04d}"
-                                txn_type_label = "RD Open (புதிய RD சேமிப்பு)"
-                                
-                                extra_meta = {
-                                    "account_no": acc_no,
-                                    "installment_amount": amount,
-                                    "nominee": nominee,
-                                    "relation": relation,
-                                    "age": age,
-                                    "address": address
+                                    "total_paid": 0.0,
+                                    "total_received": amount,
+                                    "net_cash_amount": amount,
+                                    "cash_amount": amount,
+                                    "bank_amount": 0.0,
+                                    "payment_mode": "Migration",
+                                    "otp_verified": True,
+                                    "status": "Completed"
                                 }
-                                
-                                rd_payload = {
+                                v_insert = supabase.table("customer_visits").insert(visit_payload).execute()
+                                new_visit_id = v_insert.data[0]["id"]
+
+                                # 3. கணக்கு எண் தயாரித்துச் சேமித்தல்
+                                if row_type == "RD":
+                                    if target_b_id not in rd_counters:
+                                        rd_counters[target_b_id] = fetch_max_seq(target_b_id, target_b_code, "RD")
+                                    
+                                    rd_counters[target_b_id] += 1
+                                    acc_no = f"{target_b_code}/RD/{rd_counters[target_b_id]:04d}"
+                                    txn_type_label = "RD Open (புதிய RD சேமிப்பு)"
+
+                                    rd_payload = {
+                                        "visit_id": new_visit_id,
+                                        "branch_id": target_b_id,
+                                        "customer_id": c_id,
+                                        "rd_account_no": acc_no,
+                                        "monthly_installment": amount,
+                                        "tenure_months": 12,
+                                        "interest_rate": 12.0,
+                                        "total_target_amount": amount * 12,
+                                        "current_installment_no": 1,
+                                        "nominee_name": nominee,
+                                        "nominee_relation": relation,
+                                        "status": "Active"
+                                    }
+                                    supabase.table("recurring_deposits").insert(rd_payload).execute()
+                                    success_rd += 1
+
+                                else:  # FD கணக்கு
+                                    if target_b_id not in fd_counters:
+                                        fd_counters[target_b_id] = fetch_max_seq(target_b_id, target_b_code, "FD")
+                                    
+                                    fd_counters[target_b_id] += 1
+                                    acc_no = f"{target_b_code}/FD/{fd_counters[target_b_id]:04d}"
+                                    txn_type_label = "FD Open (புதிய வைப்பு நிதி)"
+
+                                    fd_payload = {
+                                        "visit_id": new_visit_id,
+                                        "branch_id": target_b_id,
+                                        "customer_id": c_id,
+                                        "fd_account_no": acc_no,
+                                        "deposit_amount": amount,
+                                        "tenure_months": 12,
+                                        "interest_rate": 12.0,
+                                        "maturity_amount": amount * 1.12,
+                                        "nominee_name": nominee,
+                                        "nominee_relation": relation,
+                                        "status": "Active"
+                                    }
+                                    supabase.table("fixed_deposits").insert(fd_payload).execute()
+                                    success_fd += 1
+
+                                # 4. transactions அட்டவணையில் பதிவு
+                                txn_payload = {
                                     "visit_id": new_visit_id,
                                     "branch_id": target_b_id,
-                                    "customer_id": c_id,
-                                    "rd_account_no": acc_no,
-                                    "monthly_installment": amount,
-                                    "tenure_months": 12,
-                                    "interest_rate": 12.0,
-                                    "total_target_amount": amount * 12,
-                                    "current_installment_no": 1,
-                                    "nominee_name": nominee,
-                                    "nominee_relation": relation,
-                                    "status": "Active"
+                                    "transaction_type": txn_type_label,
+                                    "paid_amount": 0.0,
+                                    "received_amount": amount,
+                                    "staff_name": "Migration Admin",
+                                    "remarks": f"Old Migration | {acc_no} | Scheme: {scheme}",
+                                    "transaction_details": {
+                                        "account_no": acc_no,
+                                        "amount": amount,
+                                        "nominee": nominee,
+                                        "relation": relation,
+                                        "age": age,
+                                        "address": address
+                                    }
                                 }
-                                supabase.table("recurring_deposits").insert(rd_payload).execute()
-                                success_rd += 1
+                                supabase.table("transactions").insert(txn_payload).execute()
 
-                            else:
-                                fd_counter += 1
-                                acc_no = f"{target_b_code}/FD/{fd_counter:04d}"
-                                txn_type_label = "FD Open (புதிய வைப்பு நிதி)"
-                                
-                                extra_meta = {
-                                    "account_no": acc_no,
-                                    "deposit_amount": amount,
-                                    "nominee": nominee,
-                                    "relation": relation,
-                                    "age": age,
-                                    "address": address
-                                }
-                                
-                                fd_payload = {
-                                    "visit_id": new_visit_id,
-                                    "branch_id": target_b_id,
-                                    "customer_id": c_id,
-                                    "fd_account_no": acc_no,
-                                    "deposit_amount": amount,
-                                    "tenure_months": 12,
-                                    "interest_rate": 12.0,
-                                    "maturity_amount": amount * 1.12,
-                                    "nominee_name": nominee,
-                                    "nominee_relation": relation,
-                                    "status": "Active"
-                                }
-                                supabase.table("fixed_deposits").insert(fd_payload).execute()
-                                success_fd += 1
+                            except Exception as row_e:
+                                error_list.append(f"வரிசை {idx+1} ({name}) பிழை: {row_e}")
 
-                            txn_payload = {
-                                "visit_id": new_visit_id,
-                                "transaction_type": txn_type_label,
-                                "paid_amount": 0.0,
-                                "received_amount": amount,
-                                "staff_name": "Migration Admin",
-                                "remarks": f"Old Migration | {acc_no} | Scheme: {scheme}",
-                                "transaction_details": extra_meta
-                            }
-                            supabase.table("transactions").insert(txn_payload).execute()
-
-                            # முன்னேற்றப் பட்டி (Progress update)
+                            # முன்னேற்றப் பட்டி (Progress)
                             progress_bar.progress((idx + 1) / total_rows)
-                            status_text.text(f"ஏற்றப்படுகிறது... ({idx+1}/{total_rows}) - {name} ({acc_no})")
+                            status_text.text(f"ஏற்றப்படுகிறது... ({idx+1}/{total_rows}) - {name} ({target_b_code})")
 
                         status_text.empty()
-                        st.success(f"🎉 **{sel_branch_name}** கிளைக்கு வெற்றிகரமாக **{success_rd} RD** கணக்குகளும், **{success_fd} FD** கணக்குகளும் உங்கள் டேபிள்களில் வரிசை எண்களுடன் ஏற்றப்பட்டன!")
+                        st.success(f"🎉 அனைத்துக் கிளைகளுக்கும் சேர்த்து வெற்றிகரமாக **{success_rd} RD** மற்றும் **{success_fd} FD** கணக்குகள் ஏற்றப்பட்டன!")
+                        if skipped_rows > 0:
+                            st.info(f"ℹ️ தவிர்க்கப்பட்ட வரிசைகள்: **{skipped_rows}**")
+                        if error_list:
+                            with st.expander("⚠️ பிழை விவரங்களைக் காண்க"):
+                                for err in error_list[:15]:
+                                    st.write(err)
                         st.balloons()
 
                 except Exception as upload_err:
