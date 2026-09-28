@@ -2890,7 +2890,7 @@ else:
                 branches_res = supabase.table("branches").select("id, branch_name").order("id").execute()
                 b_list = branches_res.data or []
                 b_dict = {b["branch_name"]: b["id"] for b in b_list}
-                b_name_map = {b["id"]: b["branch_name"] for b in b_list}  # 👈 ID-யில் இருந்து பெயரை எடுக்கும் மேப்
+                b_name_map = {b["id"]: b["branch_name"] for b in b_list}
                 b_opts = ["அனைத்து கிளைகள்"] + list(b_dict.keys())
             except Exception as e:
                 st.error(f"கிளைகளை எடுப்பதில் பிழை: {e}")
@@ -2903,11 +2903,15 @@ else:
             with f_col1:
                 sel_b = st.selectbox("🏢 கிளையைத் தேர்ந்தெடுக்கவும்:", b_opts, key="adm_gl_branch_filter")
             with f_col2:
-                sel_stat_filter = st.selectbox("📌 கடன் நிலை (Status):", ["அனைத்தும்", "Approved", "Closed", "Overdue", "Auctioned", "Cancelled"], key="adm_gl_stat_filter")
+                sel_stat_filter = st.selectbox(
+                    "📌 கடன் நிலை (Status):", 
+                    ["அனைத்தும்", "Active", "Approved", "Closed", "Overdue", "Auctioned", "Cancelled", "Pending"], 
+                    key="adm_gl_stat_filter"
+                )
             with f_col3:
                 gl_search = st.text_input("🔍 தேடல் (கடன் எண் / வாடிக்கையாளர் / மொபைல் / நகை):", key="adm_gl_search_box")
 
-            # அ. கிளையின் தற்போதைய கடன் எண் வரிசை நிலை (Sequence Control)
+            # அ. கிளையின் தற்போதைய கடன் எண் வரிசை நிலை & திருத்தும் கட்டுப்பாடு (Sequence Control)
             if sel_b != "அனைத்து கிளைகள்" and sel_b in b_dict:
                 active_bid = b_dict[sel_b]
                 try:
@@ -2916,15 +2920,33 @@ else:
                         seq_data = seq_res.data[0]
                         p_fix = seq_data.get("prefix", "GL")
                         l_num = seq_data.get("last_number", 0)
-                        st.info(f"🔢 **{sel_b}** Prefix: `{p_fix}` | கடைசி எண்: `{l_num}` | அடுத்த கடன் எண்: **`{p_fix}-{str(l_num + 1).zfill(4)}`**")
+                        st.info(f"🔢 **{sel_b}** Prefix: `{p_fix}` | கடைசி எண்: `{l_num}` | அடுத்த கடன் எண்: **`{p_fix}/{str(l_num + 1).zfill(4)}`**")
+                        
+                        # 🌟 வரிசை எண்ணைத் திரையிலேயே நேரடியாக மாற்றும் வசதி:
+                        with st.expander("⚙️ கடன் வரிசை எண்ணை மாற்றியமைக்க (Update Sequence Number)"):
+                            sc1, sc2, sc3 = st.columns([2, 2, 2])
+                            with sc1:
+                                new_pfx = st.text_input("Prefix (எ.கா: KMK, AVL):", value=p_fix, key=f"seq_pfx_{active_bid}")
+                            with sc2:
+                                new_lno = st.number_input("கடைசி கடன் எண் (Last Used No):", value=int(l_num), step=1, key=f"seq_lno_{active_bid}")
+                            with sc3:
+                                st.write("")
+                                st.write("")
+                                if st.button("💾 வரிசை எண்ணைச் சேமி", key=f"save_seq_btn_{active_bid}", type="primary"):
+                                    supabase.table("branch_loan_sequences").update({
+                                        "prefix": new_pfx.strip(),
+                                        "last_number": int(new_lno)
+                                    }).eq("branch_id", active_bid).execute()
+                                    st.success("✅ வரிசை எண் வெற்றிகரமாகப் புதுப்பிக்கப்பட்டது!")
+                                    st.rerun()
                 except Exception:
                     pass
 
             st.markdown("---")
 
-            # ஆ. Transactions அட்டவணையில் இருந்து கடன்களை எடுத்தல் (நேரடி Select - Foreign Key தேவையில்லை)
+            # ஆ. gold_loans அட்டவணையில் இருந்து கடன்களை எடுத்தல்
             try:
-                q = supabase.table("transactions").select("*").ilike("transaction_type", "%Pledge%")
+                q = supabase.table("gold_loans").select("*")
 
                 if sel_b != "அனைத்து கிளைகள்" and sel_b in b_dict:
                     q = q.eq("branch_id", b_dict[sel_b])
@@ -2932,90 +2954,154 @@ else:
                 if sel_stat_filter != "அனைத்தும்":
                     q = q.eq("status", sel_stat_filter)
 
-                gl_data = q.order("id", desc=True).limit(100).execute().data or []
+                gl_data = q.order("id", desc=True).limit(300).execute().data or []
             except Exception as e:
                 st.error(f"கடன்களை எடுப்பதில் பிழை: {e}")
                 gl_data = []
 
-            # உரைத் தேடல் (Search)
+            # இ. வாடிக்கையாளர் விவரங்களை எடுத்தல் (Customer Data Mapping)
+            cust_map = {}
+            c_ids = list({r["customer_id"] for r in gl_data if r.get("customer_id")})
+            if c_ids:
+                try:
+                    c_res = supabase.table("customers").select("id, name, mobile, customer_code").in_("id", c_ids).execute()
+                    cust_map = {c["id"]: c for c in (c_res.data or [])}
+                except Exception:
+                    cust_map = {}
+
+            # ஈ. உரைத் தேடல் (Search Filter)
             if gl_search.strip():
                 s_val = gl_search.strip().lower()
-                gl_data = [
-                    r for r in gl_data
-                    if s_val in str(r.get("customer_name", "")).lower()
-                    or s_val in str(r.get("mobile", "")).lower()
-                    or s_val in str(r.get("remarks", "")).lower()
-                    or s_val in str(r.get("item_details", "")).lower()
-                ]
+                filtered_gl = []
+                for r in gl_data:
+                    c_info = cust_map.get(r.get("customer_id"), {})
+                    c_n = str(c_info.get("name", "")).lower()
+                    c_m = str(c_info.get("mobile", "")).lower()
+                    c_cd = str(c_info.get("customer_code", "")).lower()
+                    l_no = str(r.get("loan_no", "")).lower()
+                    orn = str(r.get("ornament_details", "")).lower()
+                    sch = str(r.get("scheme_name", "")).lower()
 
+                    if (s_val in l_no or s_val in c_n or s_val in c_m or s_val in c_cd or s_val in orn or s_val in sch):
+                        filtered_gl.append(r)
+                gl_data = filtered_gl
+
+            # உ. கடன்களைத் திரையில் காட்டுதல்
             if not gl_data:
                 st.warning("⚠️ கடன்கள் எதுவும் கண்டறியப்படவில்லை.")
             else:
                 st.write(f"📊 மொத்தம் கண்டறியப்பட்ட கடன்கள்: **{len(gl_data)}**")
 
                 for row in gl_data:
-                    t_id = row["id"]
-                    c_name = row.get("customer_name", "-") or "-"
-                    c_mob = row.get("mobile", "-") or "-"
-                    # கிளை ID-யை வைத்து பெயரை நேரடியாக எடுத்தல்:
+                    gl_id = row["id"]
+                    c_id = row.get("customer_id")
+                    c_info = cust_map.get(c_id, {})
+                    
+                    c_name = c_info.get("name") or row.get("customer_name") or "-"
+                    c_mob = c_info.get("mobile") or row.get("mobile") or "-"
+                    c_code = c_info.get("customer_code") or ""
+                    
                     b_label = b_name_map.get(row.get("branch_id"), f"கிளை {row.get('branch_id', '')}")
-                    p_amt = float(row.get("principal_amount", row.get("amount", 0)) or 0.0)
-                    g_wt = float(row.get("gross_weight", 0) or 0.0)
-                    n_wt = float(row.get("net_weight", 0) or 0.0)
-                    item_desc = row.get("item_details", "") or "-"
-                    rem = row.get("remarks", "-") or "-"
-                    t_status = row.get("status", "Approved") or "Approved"
-                    t_type = row.get("transaction_type", "Pledge")
+                    loan_no = row.get("loan_no", "-") or "-"
+                    p_amt = float(row.get("sanctioned_amount") or row.get("amount") or 0.0)
+                    g_wt = float(row.get("gross_weight") or 0.0)
+                    n_wt = float(row.get("net_weight") or 0.0)
+                    item_desc = row.get("ornament_details") or "-"
+                    items_cnt = row.get("items_count") or 1
+                    t_status = row.get("status") or "Active"
+                    sch_name = row.get("scheme_name") or "Regular"
+                    roi_val = float(row.get("interest_rate") or 12.0)
+                    c_date = str(row.get("created_at", ""))[:10]
 
                     # கார்டு விரிவடையும் பெட்டி
-                    with st.expander(f"🏷️ {rem} | {c_name} ({b_label}) | ₹{p_amt:,.2f} | ஜி: {g_wt}g / நெட்: {n_wt}g | நிலை: {t_status}"):
+                    card_title = f"🏷️ {loan_no} | {c_name} ({b_label}) | ₹{p_amt:,.2f} | ஜி: {g_wt}g / நெட்: {n_wt}g | நிலை: {t_status}"
+                    with st.expander(card_title):
                         col_t1, col_t2 = st.tabs(["✏️ விவரம் & திருத்து (Edit)", "🗑️ நீக்கு (Delete)"])
 
-                        # ✏️ எடிட் பிரிவு
+                        # -------------------------------------------------------------
+                        # ✏️ எடிட் பிரிவு (Edit Tab)
+                        # -------------------------------------------------------------
                         with col_t1:
-                            with st.form(key=f"edit_txn_{t_id}"):
+                            with st.form(key=f"edit_gl_form_{gl_id}"):
                                 ec1, ec2 = st.columns(2)
                                 with ec1:
-                                    up_name = st.text_input("வாடிக்கையாளர் பெயர்:", value=c_name, key=f"up_name_{t_id}")
-                                    up_mob = st.text_input("மொபைல் எண்:", value=c_mob, key=f"up_mob_{t_id}")
-                                    up_amt = st.number_input("கடன் தொகை (₹):", value=p_amt, step=500.0, key=f"up_amt_{t_id}")
-                                    up_items = st.text_area("💍 நகை விவரம் (Ornaments):", value=item_desc, placeholder="எ.கா: செயின் - 1, மோதிரம் - 2", key=f"up_items_{t_id}")
+                                    up_name = st.text_input("வாடிக்கையாளர் பெயர்:", value=c_name, key=f"up_name_{gl_id}")
+                                    up_mob = st.text_input("மொபைல் எண்:", value=c_mob, key=f"up_mob_{gl_id}")
+                                    up_amt = st.number_input("கடன் தொகை (₹ Sanctioned):", value=p_amt, step=500.0, key=f"up_amt_{gl_id}")
+                                    up_items = st.text_area("💍 நகை விவரம் (Ornaments):", value=item_desc, key=f"up_items_{gl_id}")
+                                    up_cnt = st.number_input("பொருட்கள் எண்ணிக்கை:", value=int(items_cnt), step=1, key=f"up_cnt_{gl_id}")
 
                                 with ec2:
-                                    up_gw = st.number_input("மொத்த எடை (Gross Wt g):", value=g_wt, step=0.1, key=f"up_gw_{t_id}")
-                                    up_nw = st.number_input("நிகர எடை (Net Wt g):", value=n_wt, step=0.1, key=f"up_nw_{t_id}")
-                                    up_rem = st.text_input("கடன் குறிப்பு / GL No (Remarks):", value=rem, key=f"up_rem_{t_id}")
-                                    
-                                    stat_options = ["Approved", "Closed", "Overdue", "Auctioned", "Cancelled", "Pending"]
+                                    up_lno = st.text_input("கடன் எண் (Loan No):", value=loan_no, key=f"up_lno_{gl_id}")
+                                    up_gw = st.number_input("மொத்த எடை (Gross Wt g):", value=g_wt, step=0.1, key=f"up_gw_{gl_id}")
+                                    up_nw = st.number_input("நிகர எடை (Net Wt g):", value=n_wt, step=0.1, key=f"up_nw_{gl_id}")
+                                    up_sch = st.text_input("திட்டப் பெயர் (Scheme):", value=sch_name, key=f"up_sch_{gl_id}")
+                                    up_roi = st.number_input("ஆண்டு வட்டி விகிதம் (% ROI):", value=roi_val, step=0.5, key=f"up_roi_{gl_id}")
+
+                                    stat_options = ["Active", "Approved", "Closed", "Overdue", "Auctioned", "Cancelled", "Pending"]
                                     stat_idx = stat_options.index(t_status) if t_status in stat_options else 0
-                                    up_stat = st.selectbox("தற்போதைய கடன் நிலை (Status):", stat_options, index=stat_idx, key=f"up_stat_{t_id}")
+                                    up_stat = st.selectbox("தற்போதைய கடன் நிலை (Status):", stat_options, index=stat_idx, key=f"up_stat_{gl_id}")
 
                                 if st.form_submit_button("💾 மாற்றங்களைச் சேமி (Update Record)", type="primary"):
                                     try:
-                                        supabase.table("transactions").update({
-                                            "customer_name": up_name.strip(),
-                                            "mobile": up_mob.strip(),
-                                            "amount": float(up_amt),
-                                            "principal_amount": float(up_amt),
+                                        # 1. gold_loans அட்டவணையைப் புதுப்பித்தல்
+                                        supabase.table("gold_loans").update({
+                                            "loan_no": up_lno.strip(),
+                                            "sanctioned_amount": float(up_amt),
                                             "gross_weight": float(up_gw),
                                             "net_weight": float(up_nw),
-                                            "item_details": up_items.strip(),
-                                            "remarks": up_rem.strip(),
+                                            "ornament_details": up_items.strip(),
+                                            "items_count": int(up_cnt),
+                                            "scheme_name": up_sch.strip(),
+                                            "interest_rate": float(up_roi),
                                             "status": up_stat
-                                        }).eq("id", t_id).execute()
+                                        }).eq("id", gl_id).execute()
+
+                                        # 2. வாடிக்கையாளர் அட்டவணையைப் (customers) புதுப்பித்தல்
+                                        if c_id:
+                                            supabase.table("customers").update({
+                                                "name": up_name.strip(),
+                                                "mobile": up_mob.strip()
+                                            }).eq("id", c_id).execute()
+
+                                        # 3. transactions அட்டவணையில் இருந்தால் அதையும் புதுப்பித்தல்
+                                        try:
+                                            supabase.table("transactions").update({
+                                                "customer_name": up_name.strip(),
+                                                "mobile": up_mob.strip(),
+                                                "amount": float(up_amt),
+                                                "principal_amount": float(up_amt),
+                                                "gross_weight": float(up_gw),
+                                                "net_weight": float(up_nw),
+                                                "item_details": up_items.strip(),
+                                                "status": up_stat
+                                            }).ilike("remarks", f"%{loan_no}%").execute()
+                                        except Exception:
+                                            pass
+
                                         st.success("✅ கடன் விவரங்கள் வெற்றிகரமாகப் புதுப்பிக்கப்பட்டன!")
                                         st.rerun()
                                     except Exception as ex:
                                         st.error(f"பிழை: {ex}")
 
-                        # 🗑️ டிலீட் பிரிவு
+                        # -------------------------------------------------------------
+                        # 🗑️ டிலீட் பிரிவு (Delete Tab)
+                        # -------------------------------------------------------------
                         with col_t2:
                             st.warning("⚠️ இக்கடனை நீக்கினால் இந்த பதிவு கணக்கிலிருந்து நிரந்தரமாக அழிக்கப்படும்.")
-                            confirm_del = st.checkbox(f"நான் உறுதியாக ID: {t_id} ({c_name}) கடனை நீக்க விரும்புகிறேன்.", key=f"del_chk_{t_id}")
-                            if st.button("🗑️ நிரந்தரமாக நீக்கு", key=f"del_btn_{t_id}", disabled=not confirm_del):
+                            confirm_del = st.checkbox(f"நான் உறுதியாக ID: {gl_id} ({loan_no} - {c_name}) கடனை நீக்க விரும்புகிறேன்.", key=f"del_chk_{gl_id}")
+                            if st.button("🗑️ நிரந்தரமாக நீக்கு", key=f"del_btn_{gl_id}", disabled=not confirm_del):
                                 try:
-                                    supabase.table("transactions").delete().eq("id", t_id).execute()
-                                    st.success(f"✅ கடன் ID: {t_id} வெற்றிகரமாக நீக்கப்பட்டது!")
+                                    # gold_loans-லிருந்து நீக்குதல்
+                                    supabase.table("gold_loans").delete().eq("id", gl_id).execute()
+                                    
+                                    # transactions-லிருந்து நீக்குதல் (இருந்தால்)
+                                    try:
+                                        supabase.table("transactions").delete().ilike("remarks", f"%{loan_no}%").execute()
+                                    except Exception:
+                                        pass
+
+                                    st.success(f"✅ கடன் எண்: {loan_no} வெற்றிகரமாக நீக்கப்பட்டது!")
                                     st.rerun()
                                 except Exception as dex:
                                     st.error(f"நீக்குவதில் பிழை: {dex}")
