@@ -2153,9 +2153,6 @@ else:
                         st.success("விதி நீக்கப்பட்டது!")
                         st.rerun()
 
-        # -----------------------------------------------------------------
-        # tab5: மொத்தப் பதிவேற்றம் (Bulk Import)
-        # -----------------------------------------------------------------
         with tab5:
             st.subheader("📥 கிளை வாரியான பழைய வாடிக்கையாளர் இறக்குமதி (Branch-wise Bulk Import)")
             
@@ -2181,7 +2178,7 @@ else:
                     if uploaded_cust_file.name.endswith(".csv"):
                         df_raw = pd.read_csv(uploaded_cust_file, header=0, dtype=str)
                     else:
-                        df_raw = pd.read_excel(uploaded_cust_file, header=0, dtype=str)
+                        df_raw = pd.read_excel(uploaded_cust_file, header=0)
                     
                     st.write(f"தேர்ந்தெடுக்கப்பட்ட கிளை: **{chosen_branch_name} ({target_branch_code})** | மொத்த வரிசைகள்: **{len(df_raw)}**")
                     st.dataframe(df_raw.head(3))
@@ -2189,7 +2186,7 @@ else:
                     if st.button("🚀 பதிவேற்றத்தைத் தொடங்கு", type="primary"):
                         cols = list(df_raw.columns)
                         
-                        # தலைப்புகளைத் தானாகக் கண்டறிதல் (Dynamic Column Mapping)
+                        # தலைப்புகளைத் தானாகக் கண்டறிதல்
                         name_col = next((c for c in cols if any(k in str(c).lower() for k in ['name', 'பெயர்', 'வாடிக்கையாளர்'])), cols[0])
                         mob_col = next((c for c in cols if any(k in str(c).lower() for k in ['mobile', 'phone', 'மொபைல்', 'contact'])), None)
                         addr_col = next((c for c in cols if any(k in str(c).lower() for k in ['address', 'முகவரி', 'ஊர்', 'place', 'city'])), None)
@@ -2198,8 +2195,10 @@ else:
                         mob2_col = next((c for c in cols if any(k in str(c).lower() for k in ['mobile2', 'phone2', 'alt'])), None)
                         nom_col = next((c for c in cols if any(k in str(c).lower() for k in ['nominee', 'நாமினி'])), None)
                         rel_col = next((c for c in cols if any(k in str(c).lower() for k in ['relation', 'உறவு'])), None)
+                        gender_col = next((c for c in cols if any(k in str(c).lower() for k in ['gender', 'sex', 'பாலினம்', 'ஆண்/பெண்'])), None)
+                        dob_col = next((c for c in cols if any(k in str(c).lower() for k in ['dob', 'birth', 'பிறந்த தேதி', 'date of birth', 'பிறந்த'])), None)
 
-                        # டேட்டாபேஸில் உள்ள நடப்பு கடைசி வாடிக்கையாளர் எண்ணை எடுத்தல்
+                        # 🌟 கடைசி வாடிக்கையாளர் எண்ணை எடுத்தல் (எ.கா: AVL-001 அமைப்பில்)
                         try:
                             c_res = supabase.table("customers").select("customer_code").ilike("customer_code", f"{target_branch_code}-%").order("id", desc=True).limit(1).execute()
                             if c_res.data:
@@ -2211,7 +2210,7 @@ else:
                         except Exception:
                             seq_start = 0
 
-                        # ஏற்கனவே உள்ள வாடிக்கையாளர் எண்களை ஒரே வினவலில் எடுத்தல் (Duplicate தடுப்பு)
+                        # ஏற்கனவே உள்ள வாடிக்கையாளர் எண்களை எடுத்தல் (Duplicate தடுப்பு)
                         exist_res = supabase.table("customers").select("customer_code").eq("branch_id", target_branch_id).execute()
                         existing_codes = {r["customer_code"] for r in (exist_res.data or [])}
 
@@ -2228,14 +2227,23 @@ else:
                                 skipped_count += 1
                                 continue
                             
-                            # வாடிக்கையாளர் எண் உருவாக்கம்
+                            # =========================================================
+                            # 👈🌟 வாடிக்கையாளர் எண்: branchcode-001 வடிவமைப்பு
+                            # =========================================================
                             if cust_no_col and pd.notna(row.get(cust_no_col)):
                                 raw_cno = str(row.get(cust_no_col)).strip()
                                 raw_cno = raw_cno[:-2] if raw_cno.endswith(".0") else raw_cno
-                                tcode = f"{target_branch_code}-{raw_cno}"
+                                # எக்செல்-ல் ஒருவேளை C-001 அல்லது C001 என இருந்தாலும் 'C' நீக்கப்படும்:
+                                raw_cno = re.sub(r'^[Cc-]', '', raw_cno).strip()
+                                try:
+                                    # 3 இலக்க வடிவமைப்பு (எ.கா: AVL-001, AVL-025)
+                                    tcode = f"{target_branch_code}-{int(raw_cno):03d}"
+                                except Exception:
+                                    tcode = f"{target_branch_code}-{raw_cno}"
                             else:
                                 seq_start += 1
-                                tcode = f"{target_branch_code}-C{seq_start:04d}"
+                                # தானியங்கி எண் உருவாக்கம்: AVL-001, AVL-002...
+                                tcode = f"{target_branch_code}-{seq_start:03d}"
                             
                             if tcode in existing_codes:
                                 skipped_count += 1
@@ -2243,18 +2251,44 @@ else:
                             
                             existing_codes.add(tcode)
                             
-                            # உண்மையான முகவரி எடுத்தல் (இல்லையெனில் மட்டுமே கிளையின் பெயர்)
+                            # முகவரி எடுத்தல்
                             real_addr = str(row.get(addr_col, "")).strip() if addr_col and pd.notna(row.get(addr_col)) else chosen_branch_name
                             if not real_addr or real_addr.lower() == 'nan':
                                 real_addr = chosen_branch_name
+
+                            # பாலினம் (Gender)
+                            clean_gender = None
+                            if gender_col and pd.notna(row.get(gender_col)):
+                                g_raw = str(row.get(gender_col, "")).strip().lower()
+                                if g_raw in ["m", "male", "ஆண்", "ஆ"]:
+                                    clean_gender = "Male"
+                                elif g_raw in ["f", "female", "பெண்", "பெ"]:
+                                    clean_gender = "Female"
+                                elif g_raw in ["o", "other", "others", "மற்றவை"]:
+                                    clean_gender = "Other"
+                                elif g_raw and g_raw != "nan":
+                                    clean_gender = g_raw.capitalize()
+
+                            # பிறந்த தேதி (DOB -> YYYY-MM-DD)
+                            clean_dob = None
+                            if dob_col and pd.notna(row.get(dob_col)):
+                                raw_dob = row.get(dob_col)
+                                try:
+                                    parsed_date = pd.to_datetime(raw_dob, errors='coerce', dayfirst=True)
+                                    if pd.notna(parsed_date):
+                                        clean_dob = parsed_date.strftime("%Y-%m-%d")
+                                except Exception:
+                                    clean_dob = None
                             
                             customer_item = {
                                 "branch_id": target_branch_id,
-                                "customer_code": tcode,
+                                "customer_code": tcode,       # 👈 AVL-001 எனச் சேமிக்கப்படும்
                                 "name": name_val,
                                 "mobile": mobile,
                                 "mobile2": "".join(filter(str.isdigit, str(row.get(mob2_col, ""))))[-10:] if mob2_col and pd.notna(row.get(mob2_col)) else None,
                                 "guardian_name": str(row.get(guard_col, "")).strip() if guard_col and pd.notna(row.get(guard_col)) else None,
+                                "dob": clean_dob,
+                                "gender": clean_gender,
                                 "address": real_addr,
                                 "nominee_name": str(row.get(nom_col, "")).strip() if nom_col and pd.notna(row.get(nom_col)) else None,
                                 "nominee_relation": str(row.get(rel_col, "")).strip() if rel_col and pd.notna(row.get(rel_col)) else None,
