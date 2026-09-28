@@ -3112,7 +3112,7 @@ else:
             st.subheader("📤 பழைய RD / FD கணக்குகளைப் பல்க்காக ஏற்றுதல் (Multi-Branch Bulk Import)")
             st.caption("பழைய பாஸ்புக் கணக்கு எண்களுடன் அனைத்துக் கிளைகளின் தரவுகளையும் ஒரே எக்செல் கோப்பில் பதிவேற்றலாம்.")
 
-            # 1. கிளைகள் மாஸ்டர் விவரங்களை எடுத்தல்
+            # 1. கிளைகள் விவரங்களை எடுத்தல்
             branches_res = supabase.table("branches").select("id, branch_name, branch_code").execute()
             all_branches = branches_res.data or []
             
@@ -3127,7 +3127,7 @@ else:
                 branch_lookup[bcode.lower()] = bid
                 branch_code_map[bid] = bcode
 
-            # 2. மாதிரி எக்செல் டெம்ப்ளேட் டவுன்லோட் வசதி
+            # 2. மாதிரி எக்செல் டெம்ப்ளேட் டவுன்லோட்
             sample_csv = "Type,Branch,Account_No,Name,Mobile,Amount,Scheme,Nominee,Relation,Age,Address\nRD,Aundivilai,AVL/RD/0001,ரமேஷ்,9876543210,1000,Regular RD,சுதா,மனைவி,32,ஆவுடையாள்புரம்\nFD,Thingalnagar,TNG/FD/0001,சுரேஷ்,9876543211,25000,Special FD,கார்த்திக்,மகன்,12,திங்கள்நகர்\nRD,KMK,KMK/RD/0001,முருகன்,9876543212,2000,Regular RD,வள்ளி,மனைவி,28,கீழமணக்குடி"
             st.download_button(
                 "📥 மாதிரி எக்செல் டெம்ப்ளேட் (Template CSV with Account_No) பதிவிறக்குக",
@@ -3138,7 +3138,7 @@ else:
 
             st.write("---")
 
-            # 3. கோப்புப் பதிவேற்றம் (CSV / Excel)
+            # 3. கோப்புப் பதிவேற்றம்
             uploaded_file = st.file_uploader("📂 பூர்த்தி செய்யப்பட்ட கோப்பைத் தேர்ந்தெடுக்கவும் (CSV அல்லது Excel)", type=["csv", "xlsx", "xls"], key="multi_branch_bulk_uploader")
 
             if uploaded_file is not None:
@@ -3148,7 +3148,6 @@ else:
                     else:
                         df = pd.read_excel(uploaded_file, dtype=str)
 
-                    # தலைப்புகளைச் சீரமைத்தல்
                     df.columns = [str(c).strip().lower().replace(" ", "_") for c in df.columns]
                     st.write(f"📊 கண்டறியப்பட்ட மொத்தப் பதிவுகள்: **{len(df)}**")
                     st.dataframe(df.head(5), use_container_width=True)
@@ -3157,31 +3156,26 @@ else:
                     if st.button("🚀 பழைய கணக்குகளை டேட்டாபேஸில் ஏற்று (Start Multi-Branch Import)", type="primary"):
                         progress_bar = st.progress(0)
                         status_text = st.empty()
+                        status_text.text("டேட்டாபேஸ் விவரங்களை ஒத்திசைக்கிறது... காத்திருக்கவும்...")
 
-                        # கிளை வாரியாக நடப்பு அதிகபட்ச கணக்கு எண்களை எடுக்கும் ஃபங்க்ஷன் (Fallback)
-                        def fetch_max_seq(b_id, b_code, acc_type):
-                            table_name = "recurring_deposits" if acc_type == "RD" else "fixed_deposits"
-                            col_name = "rd_account_no" if acc_type == "RD" else "fd_account_no"
-                            pattern = re.compile(rf"^{re.escape(b_code)}/{acc_type}/(\d+)$", re.IGNORECASE)
-                            try:
-                                res = supabase.table(table_name).select(col_name).eq("branch_id", b_id).limit(5000).execute()
-                                max_val = 0
-                                for r in (res.data or []):
-                                    m = pattern.match(str(r.get(col_name, "")).strip())
-                                    if m:
-                                        max_val = max(max_val, int(m.group(1)))
-                                return max_val
-                            except Exception:
-                                return 0
+                        # 🌟 A. 1000 லிமிட் தடையின்றி அனைத்து ரெக்கார்டுகளையும் எடுக்கும் பேஜினேஷன் ஃபங்க்ஷன்
+                        def fetch_all_rows(table_name, select_cols="*"):
+                            all_rows = []
+                            step = 1000
+                            start = 0
+                            while True:
+                                res = supabase.table(table_name).select(select_cols).range(start, start + step - 1).execute()
+                                rows = res.data or []
+                                all_rows.extend(rows)
+                                if len(rows) < step:
+                                    break
+                                start += step
+                            return all_rows
 
-                        rd_counters = {}
-                        fd_counters = {}
-
-                        # 🌟 1. ஏற்கனவே உள்ள வாடிக்கையாளர்கள் அனைவரையும் முழுமையாக எடுத்தல் (10,000 வரை)
-                        cust_res = supabase.table("customers").select("id, name, mobile, branch_id, customer_code").limit(10000).execute()
-                        all_custs = cust_res.data or []
+                        # அனைத்து வாடிக்கையாளர்களையும் முழுமையாக எடுத்தல்
+                        all_custs = fetch_all_rows("customers", "id, name, mobile, branch_id, customer_code")
                         
-                        # மேப்பிங் கேச்:
+                        # மேப்பிங் மற்றும் அதிகபட்ச எண்களைக் கணக்கிடுதல்
                         cust_by_mobile = {}
                         cust_by_name_branch = {}
                         existing_cust_codes = set()
@@ -3190,7 +3184,7 @@ else:
                         for c in all_custs:
                             cid = c["id"]
                             cbid = c.get("branch_id")
-                            ccode = str(c.get("customer_code", "")).strip()
+                            ccode = str(c.get("customer_code", "")).strip().upper()
                             cname = str(c.get("name", "")).strip().lower()
                             cmob = "".join(filter(str.isdigit, str(c.get("mobile", ""))))[-10:]
 
@@ -3200,19 +3194,22 @@ else:
                                 cust_by_name_branch[(cbid, cname)] = cid
                             if ccode:
                                 existing_cust_codes.add(ccode)
-                                # அந்தந்த கிளையின் கடைசி வாடிக்கையாளர் எண்ணைக் கண்டறிதல்
-                                b_code_part = ccode.split("-")[0].upper()
-                                num_part = re.findall(r'\d+', ccode)
-                                if num_part:
-                                    last_n = int(num_part[-1])
-                                    branch_cust_max[b_code_part] = max(branch_cust_max.get(b_code_part, 0), last_n)
+                                if "-" in ccode:
+                                    pfx, num_part = ccode.split("-", 1)
+                                    digits = re.findall(r'\d+', num_part)
+                                    if digits:
+                                        branch_cust_max[pfx] = max(branch_cust_max.get(pfx, 0), int(digits[-1]))
 
-                        # ஏற்கனவே உள்ள கணக்கு எண்கள் (Duplicate தவிர்ப்பு)
-                        existing_rd_res = supabase.table("recurring_deposits").select("rd_account_no").limit(10000).execute()
-                        existing_rds = {str(r["rd_account_no"]).strip() for r in (existing_rd_res.data or []) if r.get("rd_account_no")}
-                        
-                        existing_fd_res = supabase.table("fixed_deposits").select("fd_account_no").limit(10000).execute()
-                        existing_fds = {str(f["fd_account_no"]).strip() for f in (existing_fd_res.data or []) if f.get("fd_account_no")}
+                        # ஏற்கனவே உள்ள அனைத்து RD / FD கணக்கு எண்களையும் எடுத்தல்
+                        all_rds = fetch_all_rows("recurring_deposits", "rd_account_no")
+                        existing_rds = {str(r["rd_account_no"]).strip() for r in all_rds if r.get("rd_account_no")}
+
+                        all_fds = fetch_all_rows("fixed_deposits", "fd_account_no")
+                        existing_fds = {str(f["fd_account_no"]).strip() for f in all_fds if f.get("fd_account_no")}
+
+                        # கிளை வாரியாக கடைசி கணக்கு எண் வரிசைகள்
+                        rd_counters = {}
+                        fd_counters = {}
 
                         success_rd = 0
                         success_fd = 0
@@ -3246,7 +3243,6 @@ else:
                                 
                             address = str(row.get("address", "")).strip()
 
-                            # செல்லுபடியாகாத வரிகளைத் தவிர்த்தல்
                             if not name or row_type not in ["RD", "FD"]:
                                 skipped_rows += 1
                                 continue
@@ -3262,7 +3258,7 @@ else:
                             if not address or address.lower() == 'nan':
                                 address = f"Branch {target_b_code}"
 
-                            # 🌟 1. பழைய கணக்கு எண் (Account Number) பிரித்தெடுத்தல்
+                            # 🌟 1. பழைய கணக்கு எண் (Account_No)
                             raw_acc_no = str(row.get(acc_col, "")).strip() if acc_col and pd.notna(row.get(acc_col)) else ""
                             if raw_acc_no.endswith(".0"):
                                 raw_acc_no = raw_acc_no[:-2]
@@ -3273,15 +3269,12 @@ else:
                                 else:
                                     acc_no = raw_acc_no
                             else:
+                                # எக்செல்-ல் விடுபட்டிருந்தால் ஆட்டோ-ஜெனரேட்
                                 if row_type == "RD":
-                                    if target_b_id not in rd_counters:
-                                        rd_counters[target_b_id] = fetch_max_seq(target_b_id, target_b_code, "RD")
-                                    rd_counters[target_b_id] += 1
+                                    rd_counters[target_b_id] = rd_counters.get(target_b_id, branch_cust_max.get(target_b_code, 0)) + 1
                                     acc_no = f"{target_b_code}/RD/{rd_counters[target_b_id]:04d}"
                                 else:
-                                    if target_b_id not in fd_counters:
-                                        fd_counters[target_b_id] = fetch_max_seq(target_b_id, target_b_code, "FD")
-                                    fd_counters[target_b_id] += 1
+                                    fd_counters[target_b_id] = fd_counters.get(target_b_id, branch_cust_max.get(target_b_code, 0)) + 1
                                     acc_no = f"{target_b_code}/FD/{fd_counters[target_b_id]:04d}"
 
                             # ஏற்கனவே பதிவாகியிருந்தால் தவிர்த்தல்
@@ -3290,14 +3283,27 @@ else:
                                 continue
 
                             try:
-                                # 🌟 2. வாடிக்கையாளரைக் கண்டறிதல் (1. Mobile -> 2. Branch+Name)
+                                # 🌟 2. வாடிக்கையாளரைக் கண்டறிதல் (3-அடுக்கு சரிபார்ப்பு)
                                 c_id = None
                                 if mobile and len(mobile) == 10:
                                     c_id = cust_by_mobile.get(mobile)
                                 if not c_id:
                                     c_id = cust_by_name_branch.get((target_b_id, name.lower()))
+                                
+                                # மெமரியில் இல்லையெனில் டேட்டாபேஸில் நேரடித் தேடல்
+                                if not c_id and mobile and len(mobile) == 10:
+                                    db_c = supabase.table("customers").select("id").eq("mobile", mobile).limit(1).execute()
+                                    if db_c.data:
+                                        c_id = db_c.data[0]["id"]
+                                        cust_by_mobile[mobile] = c_id
 
-                                # 🌟 3. இல்லையெனில் புதிய தனித்துவமான எண்ணுடன் உருவாக்குதல் (No Duplicate Key Error!)
+                                if not c_id:
+                                    db_c_name = supabase.table("customers").select("id").eq("branch_id", target_b_id).ilike("name", name.strip()).limit(1).execute()
+                                    if db_c_name.data:
+                                        c_id = db_c_name.data[0]["id"]
+                                        cust_by_name_branch[(target_b_id, name.lower())] = c_id
+
+                                # 🌟 3. இல்லையெனில் மட்டுமே புதிய வாடிக்கையாளரை உருவாக்குதல் (மோதலே இல்லாத எண்)
                                 if not c_id:
                                     cur_max = branch_cust_max.get(target_b_code, 0)
                                     while True:
@@ -3409,12 +3415,11 @@ else:
                             except Exception as row_e:
                                 error_list.append(f"கணக்கு {acc_no} ({name}) பிழை: {row_e}")
 
-                            # முன்னேற்றப் பட்டி (Progress)
                             progress_bar.progress((idx + 1) / total_rows)
                             status_text.text(f"ஏற்றப்படுகிறது... ({idx+1}/{total_rows}) - {name} ({acc_no})")
 
                         status_text.empty()
-                        st.success(f"🎉 பழைய எண்களுடன் வெற்றிகரமாக **{success_rd} RD** மற்றும் **{success_fd} FD** கணக்குகள் டேட்டாபேஸில் ஏற்றப்பட்டன!")
+                        st.success(f"🎉 **{success_rd} RD** மற்றும் **{success_fd} FD** கணக்குகள் எந்தப் பிழையுமின்றி டேட்டாபேஸில் வெற்றிகரமாக ஏற்றப்பட்டன!")
                         if skipped_rows > 0:
                             st.info(f"ℹ️ ஏற்கனவே பதிவானதால் / விடுபட்டதால் தவிர்க்கப்பட்டவை: **{skipped_rows}**")
                         if error_list:
