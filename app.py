@@ -2168,7 +2168,7 @@ else:
             if branch_dict:
                 chosen_branch_name = st.selectbox("எந்தக் கிளைக்கான பட்டியல் இது? (Select Branch)", list(branch_dict.keys()))
                 target_branch_id = branch_dict[chosen_branch_name]
-                target_branch_code = branch_code_map.get(target_branch_id, "BR")
+                target_branch_code = branch_code_map.get(target_branch_id, "BR")[:3].upper()
             else:
                 st.warning("கிளைகள் எதுவும் கிடைக்கவில்லை!")
                 target_branch_id = None
@@ -2179,65 +2179,115 @@ else:
             if uploaded_cust_file and target_branch_id:
                 try:
                     if uploaded_cust_file.name.endswith(".csv"):
-                        df_raw = pd.read_csv(uploaded_cust_file, header=0)
+                        df_raw = pd.read_csv(uploaded_cust_file, header=0, dtype=str)
                     else:
-                        df_raw = pd.read_excel(uploaded_cust_file, header=0)
+                        df_raw = pd.read_excel(uploaded_cust_file, header=0, dtype=str)
                     
-                    st.write(f"தேர்ந்தெடுக்கப்பட்ட கிளை: **{chosen_branch_name} ({target_branch_code})** | மொத்த வரிசைகள்: {len(df_raw)}")
+                    st.write(f"தேர்ந்தெடுக்கப்பட்ட கிளை: **{chosen_branch_name} ({target_branch_code})** | மொத்த வரிசைகள்: **{len(df_raw)}**")
                     st.dataframe(df_raw.head(3))
                     
-                    if st.button("பதிவேற்றத்தைத் தொடங்கு", type="primary"):
+                    if st.button("🚀 பதிவேற்றத்தைத் தொடங்கு", type="primary"):
                         cols = list(df_raw.columns)
                         
-                        name_col_name = next((c for c in cols if 'name' in str(c).lower() or 'பெயர்' in str(c)), cols[2] if len(cols) > 2 else cols[0])
-                        mob_col_name = next((c for c in cols if 'mobile' in str(c).lower() or 'phone' in str(c) or 'மொபைல்' in str(c)), cols[7] if len(cols) > 7 else cols[1])
-                        cust_no_col = next((c for c in cols if any(k in str(c).lower() for k in ['cust_no', 'customer_no', 'cust no', 'code', 'id', 'வ.எண்', 'எண்'])), None)
-                        
-                        progress_bar = st.progress(0)
-                        success_count = 0
+                        # தலைப்புகளைத் தானாகக் கண்டறிதல் (Dynamic Column Mapping)
+                        name_col = next((c for c in cols if any(k in str(c).lower() for k in ['name', 'பெயர்', 'வாடிக்கையாளர்'])), cols[0])
+                        mob_col = next((c for c in cols if any(k in str(c).lower() for k in ['mobile', 'phone', 'மொபைல்', 'contact'])), None)
+                        addr_col = next((c for c in cols if any(k in str(c).lower() for k in ['address', 'முகவரி', 'ஊர்', 'place', 'city'])), None)
+                        cust_no_col = next((c for c in cols if any(k in str(c).lower() for k in ['cust_no', 'customer_no', 'cust no', 'code', 'வ.எண்', 'எண்'])), None)
+                        guard_col = next((c for c in cols if any(k in str(c).lower() for k in ['guardian', 'father', 'husband', 'தந்தை', 'கணவர்'])), None)
+                        mob2_col = next((c for c in cols if any(k in str(c).lower() for k in ['mobile2', 'phone2', 'alt'])), None)
+                        nom_col = next((c for c in cols if any(k in str(c).lower() for k in ['nominee', 'நாமினி'])), None)
+                        rel_col = next((c for c in cols if any(k in str(c).lower() for k in ['relation', 'உறவு'])), None)
+
+                        # டேட்டாபேஸில் உள்ள நடப்பு கடைசி வாடிக்கையாளர் எண்ணை எடுத்தல்
+                        try:
+                            c_res = supabase.table("customers").select("customer_code").ilike("customer_code", f"{target_branch_code}-%").order("id", desc=True).limit(1).execute()
+                            if c_res.data:
+                                last_c = c_res.data[0]["customer_code"]
+                                num_part = re.findall(r'\d+', last_c)
+                                seq_start = int(num_part[-1]) if num_part else 0
+                            else:
+                                seq_start = 0
+                        except Exception:
+                            seq_start = 0
+
+                        # ஏற்கனவே உள்ள வாடிக்கையாளர் எண்களை ஒரே வினவலில் எடுத்தல் (Duplicate தடுப்பு)
+                        exist_res = supabase.table("customers").select("customer_code").eq("branch_id", target_branch_id).execute()
+                        existing_codes = {r["customer_code"] for r in (exist_res.data or [])}
+
+                        customers_batch = []
                         skipped_count = 0
-                        total_rows = len(df_raw)
                         
                         for idx, row in df_raw.iterrows():
-                            name_val = row.get(name_col_name, "")
-                            name = str(name_val).strip() if pd.notna(name_val) else ""
+                            name_val = str(row.get(name_col, "")).strip() if pd.notna(row.get(name_col)) else ""
                             
-                            mob_val = row.get(mob_col_name, "")
-                            raw_mob = str(mob_val).strip() if pd.notna(mob_val) else ""
+                            raw_mob = str(row.get(mob_col, "")).strip() if mob_col and pd.notna(row.get(mob_col)) else ""
                             mobile = "".join(filter(str.isdigit, raw_mob))[-10:]
                             
-                            if cust_no_col and pd.notna(row.get(cust_no_col)):
-                                sheet_cust_no = str(row.get(cust_no_col)).strip()
-                                if sheet_cust_no.endswith(".0"):
-                                    sheet_cust_no = sheet_cust_no[:-2]
-                                tcode = f"{target_branch_code}-{sheet_cust_no}"
-                            else:
-                                tcode = f"{target_branch_code}-{idx+1}"
-
-                            if name and name.lower() != 'nan' and len(mobile) == 10:
-                                existing_code = supabase.table("customers").select("id").eq("customer_code", tcode).execute()
-                                
-                                if not existing_code.data:
-                                    try:
-                                        supabase.table("customers").insert({
-                                            "branch_id": target_branch_id,
-                                            "customer_code": tcode,
-                                            "name": name,
-                                            "mobile": mobile,
-                                            "address": chosen_branch_name,
-                                            "kyc_status": "Approved",
-                                            "is_active": True
-                                        }).execute()
-                                        success_count += 1
-                                    except Exception:
-                                        skipped_count += 1
-                                else:
-                                    skipped_count += 1
+                            if not name_val or name_val.lower() == 'nan' or len(mobile) != 10:
+                                skipped_count += 1
+                                continue
                             
-                            if total_rows > 0:
-                                progress_bar.progress(min((idx + 1) / total_rows, 1.0))
+                            # வாடிக்கையாளர் எண் உருவாக்கம்
+                            if cust_no_col and pd.notna(row.get(cust_no_col)):
+                                raw_cno = str(row.get(cust_no_col)).strip()
+                                raw_cno = raw_cno[:-2] if raw_cno.endswith(".0") else raw_cno
+                                tcode = f"{target_branch_code}-{raw_cno}"
+                            else:
+                                seq_start += 1
+                                tcode = f"{target_branch_code}-C{seq_start:04d}"
+                            
+                            if tcode in existing_codes:
+                                skipped_count += 1
+                                continue
+                            
+                            existing_codes.add(tcode)
+                            
+                            # உண்மையான முகவரி எடுத்தல் (இல்லையெனில் மட்டுமே கிளையின் பெயர்)
+                            real_addr = str(row.get(addr_col, "")).strip() if addr_col and pd.notna(row.get(addr_col)) else chosen_branch_name
+                            if not real_addr or real_addr.lower() == 'nan':
+                                real_addr = chosen_branch_name
+                            
+                            customer_item = {
+                                "branch_id": target_branch_id,
+                                "customer_code": tcode,
+                                "name": name_val,
+                                "mobile": mobile,
+                                "mobile2": "".join(filter(str.isdigit, str(row.get(mob2_col, ""))))[-10:] if mob2_col and pd.notna(row.get(mob2_col)) else None,
+                                "guardian_name": str(row.get(guard_col, "")).strip() if guard_col and pd.notna(row.get(guard_col)) else None,
+                                "address": real_addr,
+                                "nominee_name": str(row.get(nom_col, "")).strip() if nom_col and pd.notna(row.get(nom_col)) else None,
+                                "nominee_relation": str(row.get(rel_col, "")).strip() if rel_col and pd.notna(row.get(rel_col)) else None,
+                                "kyc_status": "Approved",
+                                "is_active": True
+                            }
+                            customers_batch.append(customer_item)
+
+                        # பல்க்காக டேட்டாபேஸில் ஏற்றுதல் (Batch size: 50)
+                        success_count = 0
+                        error_list = []
+                        progress_bar = st.progress(0)
                         
-                        st.success(f"✅ {chosen_branch_name} கிளைக்கு வெற்றிகரமாக {success_count} வாடிக்கையாளர்கள் பதிவு செய்யப்பட்டுவிட்டனர்! (ஏற்கனவே இருந்தவை: {skipped_count})")
+                        if customers_batch:
+                            batch_size = 50
+                            for i in range(0, len(customers_batch), batch_size):
+                                chunk = customers_batch[i:i + batch_size]
+                                try:
+                                    supabase.table("customers").insert(chunk).execute()
+                                    success_count += len(chunk)
+                                except Exception as b_err:
+                                    error_list.append(f"வரிசை {i+1} முதல் {i+len(chunk)} வரை பிழை: {b_err}")
+                                
+                                progress_bar.progress(min((i + len(chunk)) / len(customers_batch), 1.0))
+                        
+                        st.success(f"✅ **{chosen_branch_name}** கிளைக்கு வெற்றிகரமாக **{success_count}** வாடிக்கையாளர்கள் பதிவு செய்யப்பட்டனர்!")
+                        if skipped_count > 0:
+                            st.info(f"ℹ️ செல்லுபடியாகாத செல்போன் எண் அல்லது ஏற்கனவே பதிவானதால் தவிர்க்கப்பட்டவை: **{skipped_count}**")
+                        if error_list:
+                            for err in error_list:
+                                st.error(err)
+                        st.balloons()
+                        
                 except Exception as e:
                     st.error(f"இறக்குமதி செய்வதில் பிழை: {e}")
 
