@@ -1821,22 +1821,38 @@ else:
     if st.session_state.user_role == "Admin":
         st.header("⚙️ நிர்வாக மேலாண்மை (Admin Control Panel)")
         
-        # 🌟 1. tab_dash-ஐ முதல் டேபாகச் சேர்த்தல் (மொத்தம் 13 டேப்கள்):
-        tab_dash, tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11, tab_bulk_rdfd = st.tabs(
+        # 🌟 tab_dash-க்கு அடுத்து 2-வதாக tab_packet_mgmt வைக்கப்பட்டுள்ளது:
+        (
+            tab_dash,
+            tab_packet_mgmt,  # 👈 2-வது புதிய டேப்!
+            tab1,
+            tab2,
+            tab3,
+            tab4,
+            tab5,
+            tab6,
+            tab7,
+            tab8,
+            tab9,
+            tab10,
+            tab11,
+            tab_bulk_rdfd,
+        ) = st.tabs(
             [
-                "🏢 நேரடி கல்லா & தினசரி வணிகம்",  # 👈 1-வது புதிய டாஷ்போர்டு டேப்!
-                "🏢 கிளைகள்",
-                "👥 பணியாளர்கள்",
-                "📋 ஸ்கீம்கள் மேலாண்மை (Pledge, FD, RD)",
-                "🎯 இன்சென்டிவ் & புள்ளி விதிகள்",
-                "📥 மொத்தப் பதிவேற்றம்",
-                "🗂️ வாடிக்கையாளர் மேலாண்மை",
-                "📊 வருகை & பரிவர்த்தனை திருத்தம்",
-                "💰 கிளை துவக்க இருப்பு & கல்லா",
-                "🏦 தலைமையக பணப் பரிமாற்றம்",
-                "📈 காரணப் பணியாளர் அறிக்கை",
-                "🪙 நகைக் கடன் மேலாண்மை",
-                "📤 பல்க் RD / FD பதிவேற்றம்"
+                "🏢 நேரடி கல்லா & தினசரி வணிகம்",  # 1
+                "📦 பாக்கெட் & லாக்கர் மேலாண்மை",   # 2 👈 tab_dash-க்கு அடுத்து!
+                "🏢 கிளைகள்",                      # 3
+                "👥 பணியாளர்கள்",                   # 4
+                "📋 ஸ்கீம்கள் மேலாண்மை (Pledge, FD, RD)", # 5
+                "🎯 இன்சென்டிவ் & புள்ளி விதிகள்",      # 6
+                "📥 மொத்தப் பதிவேற்றம்",             # 7
+                "🗂️ வாடிக்கையாளர் மேலாண்மை",         # 8
+                "📊 வருகை & பரிவர்த்தனை திருத்தம்",     # 9
+                "💰 கிளை துவக்க இருப்பு & கல்லா",     # 10
+                "🏦 தலைமையக பணப் பரிமாற்றம்",       # 11
+                "📈 காரணப் பணியாளர் அறிக்கை",         # 12
+                "🪙 நகைக் கடன் மேலாண்மை",          # 13
+                "📤 பல்க் RD / FD பதிவேற்றம்"       # 14
             ]
         )
 
@@ -2297,6 +2313,248 @@ else:
                                 "பணியாளர்": t.get("staff_name", "-"),
                                 "குறிப்பு": t.get("remarks", "-")
                             } for t in tx_list]), use_container_width=True)
+        # ==============================================================================
+        # 📦 தலைமையக நகைப் பெட்டகம், லாக்கர் & GP உருக்குதல் மேலாண்மை
+        # ==============================================================================
+        with tab_packet_mgmt:
+            st.subheader("📦 நகைப் பாக்கெட் நகர்வு, வங்கி லாக்கர் & GP உருக்குதல் மேலாண்மை")
+            st.caption("கிளைகள் ➔ தலைமையகம் ➔ வங்கி லாக்கர் பாக்கெட் நகர்வுகள் மற்றும் ஜிபி உருக்குதல்/மறுவிற்பனை கண்காணிப்பு.")
+
+            # 1. கிளைகள் மேப்பிங்
+            b_res = supabase.table("branches").select("id, branch_name, branch_code").execute()
+            b_map_name = {b["id"]: f"{b['branch_name']} ({b.get('branch_code', 'BR')})" for b in (b_res.data or [])}
+
+            # 2. நடப்பு பாக்கெட்கள் விவரங்களை எடுத்தல்
+            loans_pkt_res = supabase.table("gold_loans").select("id, loan_no, branch_id, gross_weight, net_weight, ornament_details, packet_location, repledge_bank, repledge_loan_no, repledge_amount, release_requested, release_request_date, status").execute()
+            all_loan_pkts = [p for p in (loans_pkt_res.data or []) if p.get("status") != "Closed"]
+
+            gp_pkt_res = supabase.table("gold_purchases").select("id, gp_no, branch_id, gross_weight, net_weight, packet_location, disposal_type, melting_batch_no, melting_loss_weight, pure_gold_obtained").execute()
+            all_gp_pkts = gp_pkt_res.data or []
+
+            # 3. தலைமை நிலவரக் கார்டுகள் (Top Status KPI Metrics)
+            cnt_branch = sum(1 for p in all_loan_pkts if p.get("packet_location", "AT_BRANCH") == "AT_BRANCH") + sum(1 for g in all_gp_pkts if g.get("packet_location", "AT_BRANCH") == "AT_BRANCH")
+            cnt_transit_hq = sum(1 for p in all_loan_pkts if p.get("packet_location") == "IN_TRANSIT_TO_HQ") + sum(1 for g in all_gp_pkts if g.get("packet_location") == "IN_TRANSIT_TO_HQ")
+            cnt_hq_vault = sum(1 for p in all_loan_pkts if p.get("packet_location") == "AT_HQ_VAULT") + sum(1 for g in all_gp_pkts if g.get("packet_location") == "AT_HQ_VAULT" and g.get("disposal_type") == "PENDING")
+            
+            repledge_pkts = [p for p in all_loan_pkts if p.get("packet_location") == "IN_BANK_LOCKER"]
+            tot_repledge_amt = sum(float(p.get("repledge_amount", 0) or 0) for p in repledge_pkts)
+            
+            urgent_requests = [p for p in all_loan_pkts if p.get("release_requested")]
+
+            k1, k2, k3, k4, k5 = st.columns(5)
+            k1.metric("📍 கிளைகளில் உள்ளவை", f"{cnt_branch} பாக்கெட்கள்")
+            k2.metric("🚚 HQ-க்கு வழியில்", f"{cnt_transit_hq} பாக்கெட்கள்")
+            k3.metric("🏢 HQ பெட்டக இருப்பு", f"{cnt_hq_vault} பாக்கெட்கள்")
+            k4.metric("🏦 வங்கி லாக்கரில்", f"{len(repledge_pkts)} பாக்கெட்கள்", f"கடன்: ₹{tot_repledge_amt:,.0f}")
+            k5.metric("🚨 மீட்புக் கோரிக்கைகள்", f"{len(urgent_requests)} பாக்கெட்கள்", delta="அவசரம்" if urgent_requests else "இல்லை")
+            st.markdown("---")
+
+            # 4. மேலாண்மை உள்-டேப்கள் (Management Sub-Tabs)
+            p_tab1, p_tab2, p_tab3, p_tab4, p_tab5 = st.tabs([
+                "📥 1. கிளைகளிலிருந்து பெறுதல் (Receive at HQ)",
+                "🏦 2. வங்கி லாக்கர் (Re-Pledge)",
+                "🚚 3. கிளைகளின் மீட்புக் கோரிக்கைகள் (Dispatch to Branch)",
+                "🔥 4. GP உருக்குதல் & மறுவிற்பனை",
+                "🔍 5. அனைத்து பாக்கெட் தேடல்"
+            ])
+
+            # -------------------------------------------------------------------------
+            # டேப் 1: கிளைகளிலிருந்து அனுப்பப்பட்ட பாக்கெட்களைப் பெற்று சரிபார்த்தல்
+            # -------------------------------------------------------------------------
+            with p_tab1:
+                st.markdown("##### 📥 கிளைகளிலிருந்து வழியில் உள்ள பாக்கெட்கள் (In Transit to HQ)")
+                transit_loans = [p for p in all_loan_pkts if p.get("packet_location") == "IN_TRANSIT_TO_HQ"]
+                transit_gps = [g for g in all_gp_pkts if g.get("packet_location") == "IN_TRANSIT_TO_HQ"]
+
+                if not transit_loans and not transit_gps:
+                    st.info("தற்போது கிளைகளிலிருந்து வழியில் எந்த பாக்கெட்களும் இல்லை.")
+                else:
+                    if transit_loans:
+                        st.write(f"🪙 **நகைக்கடன் பாக்கெட்கள் ({len(transit_loans)}):**")
+                        for tl in transit_loans:
+                            c_a, c_b, c_c, c_d = st.columns([2, 3, 2, 2])
+                            c_a.write(f"🏷️ **{tl['loan_no']}**")
+                            c_b.write(f"கிளை: {b_map_name.get(tl['branch_id'], '-')} | எடை: {tl['gross_weight']}g")
+                            c_c.write(f"நகை: {tl.get('ornament_details', '-')}")
+                            if c_d.button("✅ பெற்றுக்கொள் (Accept)", key=f"acc_l_{tl['id']}"):
+                                supabase.table("gold_loans").update({
+                                    "packet_location": "AT_HQ_VAULT",
+                                    "packet_received_by": st.session_state.get("username", "Admin"),
+                                    "packet_updated_at": datetime.now().isoformat()
+                                }).eq("id", tl["id"]).execute()
+                                st.success(f"{tl['loan_no']} HQ பெட்டகத்தில் சேர்க்கப்பட்டது!")
+                                st.rerun()
+
+                    if transit_gps:
+                        st.write(f"✨ **ஜிபி நகை வாங்குதல் பாக்கெட்கள் ({len(transit_gps)}):**")
+                        for tg in transit_gps:
+                            g_a, g_b, g_c, g_d = st.columns([2, 3, 2, 2])
+                            g_a.write(f"🧾 **{tg['gp_no']}**")
+                            g_b.write(f"கிளை: {b_map_name.get(tg['branch_id'], '-')} | எடை: {tg['gross_weight']}g")
+                            g_c.write("வகை: GP கொள்முதல்")
+                            if g_d.button("✅ பெற்றுக்கொள் (Accept)", key=f"acc_g_{tg['id']}"):
+                                supabase.table("gold_purchases").update({
+                                    "packet_location": "AT_HQ_VAULT",
+                                    "packet_received_by": st.session_state.get("username", "Admin"),
+                                    "packet_updated_at": datetime.now().isoformat()
+                                }).eq("id", tg["id"]).execute()
+                                st.success(f"{tg['gp_no']} HQ பெட்டகத்தில் சேர்க்கப்பட்டது!")
+                                st.rerun()
+
+            # -------------------------------------------------------------------------
+            # டேப் 2: வங்கி லாக்கரில் மறு-அடமானம் வைத்தல் / திருப்புதல்
+            # -------------------------------------------------------------------------
+            with p_tab2:
+                st.markdown("##### 🏦 வங்கி லாக்கர் மறு-அடமான மேலாண்மை (Re-Pledge Management)")
+                vault_loans = [p for p in all_loan_pkts if p.get("packet_location") == "AT_HQ_VAULT"]
+
+                col_bk1, col_bk2 = st.columns(2)
+                with col_bk1:
+                    st.write("🏢 **HQ பெட்டகத்தில் உள்ள கடன்கள் (லாக்கருக்கு அனுப்ப):**")
+                    if not vault_loans:
+                        st.caption("HQ பெட்டகத்தில் நகைக் கடன்கள் ஏதும் இல்லை.")
+                    else:
+                        for vl in vault_loans:
+                            with st.expander(f"🪙 {vl['loan_no']} | {b_map_name.get(vl['branch_id'], '-')} | ஜி: {vl['gross_weight']}g"):
+                                with st.form(key=f"repledge_form_{vl['id']}"):
+                                    b_name_in = st.text_input("வங்கி பெயர் (Bank Name):", placeholder="எ.கா: HDFC Bank / SBI")
+                                    b_loan_in = st.text_input("வங்கி கடன் எண் (Bank Loan No):", placeholder="எ.கா: 88741256")
+                                    b_amt_in = st.number_input("வாங்கிய தொகை (₹ Loan Amount):", min_value=0.0, step=5000.0)
+                                    if st.form_submit_button("🏦 வங்கி லாக்கருக்கு மாற்று"):
+                                        if b_name_in.strip():
+                                            supabase.table("gold_loans").update({
+                                                "packet_location": "IN_BANK_LOCKER",
+                                                "repledge_bank": b_name_in.strip(),
+                                                "repledge_loan_no": b_loan_in.strip(),
+                                                "repledge_amount": b_amt_in,
+                                                "packet_updated_at": datetime.now().isoformat()
+                                            }).eq("id", vl["id"]).execute()
+                                            st.success(f"{vl['loan_no']} வங்கி லாக்கருக்கு மாற்றப்பட்டது!")
+                                            st.rerun()
+
+                with col_bk2:
+                    st.write("🏦 **வங்கி லாக்கரில் உள்ள பாக்கெட்கள் (HQ-க்கு திருப்ப):**")
+                    if not repledge_pkts:
+                        st.caption("வங்கி லாக்கரில் பாக்கெட்கள் ஏதும் இல்லை.")
+                    else:
+                        for rpk in repledge_pkts:
+                            with st.expander(f"🏦 {rpk['loan_no']} | {rpk.get('repledge_bank', '-')} | கடன்: ₹{float(rpk.get('repledge_amount',0)):,.2f}"):
+                                st.write(f"வங்கி கடன் எண்: **{rpk.get('repledge_loan_no', '-')}** | எடை: **{rpk['gross_weight']}g**")
+                                if st.button("🏢 வங்கியிலிருந்து மீட்டு HQ பெட்டகத்திற்கு மாற்று", key=f"ret_bank_{rpk['id']}"):
+                                    supabase.table("gold_loans").update({
+                                        "packet_location": "AT_HQ_VAULT",
+                                        "repledge_bank": None,
+                                        "repledge_loan_no": None,
+                                        "repledge_amount": 0.0,
+                                        "packet_updated_at": datetime.now().isoformat()
+                                    }).eq("id", rpk["id"]).execute()
+                                    st.success(f"{rpk['loan_no']} மீண்டும் HQ பெட்டகத்திற்கு மாற்றப்பட்டது!")
+                                    st.rerun()
+
+            # -------------------------------------------------------------------------
+            # டேப் 3: கிளைகளின் வாடிக்கையாளர் மீட்புக் கோரிக்கைகள்
+            # -------------------------------------------------------------------------
+            with p_tab3:
+                st.markdown("##### 🚨 கிளைகளின் அவசர மீட்புக் கோரிக்கைகள் (Customer Release Requests)")
+                if not urgent_requests:
+                    st.info("தற்போது கிளைகளிலிருந்து எந்த மீட்புக் கோரிக்கைகளும் நிலுவையில் இல்லை.")
+                else:
+                    for uq in urgent_requests:
+                        loc_txt = "🏢 HQ பெட்டகத்தில் உள்ளது" if uq["packet_location"] == "AT_HQ_VAULT" else f"🏦 {uq.get('repledge_bank', 'வங்கி')} லாக்கரில் உள்ளது"
+                        with st.container():
+                            u1, u2, u3, u4 = st.columns([2, 3, 2, 2])
+                            u1.error(f"🏷️ **{uq['loan_no']}**")
+                            u2.write(f"கிளை: **{b_map_name.get(uq['branch_id'], '-')}** | எடை: **{uq['gross_weight']}g**\nஇருப்பிடம்: **{loc_txt}**")
+                            u3.caption(f"கோரப்பட்ட நேரம்:\n{str(uq.get('release_request_date', ''))[:16]}")
+                            if u4.button("🚚 கிளைக்கு அனுப்பி வை", key=f"disp_br_{uq['id']}"):
+                                supabase.table("gold_loans").update({
+                                    "packet_location": "IN_TRANSIT_TO_BRANCH",
+                                    "release_requested": False,
+                                    "packet_dispatched_by": st.session_state.get("username", "Admin"),
+                                    "packet_updated_at": datetime.now().isoformat()
+                                }).eq("id", uq["id"]).execute()
+                                st.success(f"{uq['loan_no']} கிளைக்கு அனுப்பி வைக்கப்பட்டது!")
+                                st.rerun()
+                        st.divider()
+
+            # -------------------------------------------------------------------------
+            # டேப் 4: ஜிபி (GP) உருக்குதல் & மறுவிற்பனை
+            # -------------------------------------------------------------------------
+            with p_tab4:
+                st.markdown("##### 🔥 ஜிபி நகை உருக்குதல் & நேரடி மறுவிற்பனை (GP Processing)")
+                vault_gps = [g for g in all_gp_pkts if g.get("packet_location") == "AT_HQ_VAULT" and g.get("disposal_type") == "PENDING"]
+
+                if not vault_gps:
+                    st.info("HQ பெட்டகத்தில் உருக்குவதற்கு/விற்பதற்கு GP பாக்கெட்கள் ஏதும் இல்லை.")
+                else:
+                    for vg in vault_gps:
+                        with st.expander(f"✨ ஜிபி எண்: {vg['gp_no']} | கிளை: {b_map_name.get(vg['branch_id'], '-')} | மொத்த எடை: {vg['gross_weight']}g"):
+                            gp_col1, gp_col2 = st.columns(2)
+                            
+                            # உருக்குதல் (Melting)
+                            with gp_col1:
+                                st.write("🔥 **உருக்கு ஆலைக்கு அனுப்புதல் (Melting):**")
+                                with st.form(key=f"melt_form_{vg['id']}"):
+                                    b_batch = st.text_input("உருக்கு பேட்ச் எண் (Batch No):", placeholder="எ.கா: BATCH-2026-01")
+                                    loss_wt = st.number_input("கழிவு எடை (Loss Wt g):", min_value=0.0, step=0.01)
+                                    pure_wt = st.number_input("கிடைத்த சுத்த தங்கம் (24K Pure Wt g):", min_value=0.0, step=0.01)
+                                    if st.form_submit_button("🔥 உருக்கியதாகப் பதிவு செய்"):
+                                        supabase.table("gold_purchases").update({
+                                            "packet_location": "MELTED",
+                                            "disposal_type": "MELTING",
+                                            "melting_batch_no": b_batch.strip(),
+                                            "melting_loss_weight": loss_wt,
+                                            "pure_gold_obtained": pure_wt,
+                                            "packet_updated_at": datetime.now().isoformat()
+                                        }).eq("id", vg["id"]).execute()
+                                        st.success(f"{vg['gp_no']} உருக்கப்பட்டதாகப் பதிவானது!")
+                                        st.rerun()
+
+                            # நேரடி மறுவிற்பனை (Resale)
+                            with gp_col2:
+                                st.write("💎 **நேரடி மறுவிற்பனைக்கு மாற்றுதல் (Resale):**")
+                                st.caption("நல்ல நிலையில் உள்ள நகைகளை உருக்காமல் வாடிக்கையாளர் விற்பனைப் பிரிவுக்கு மாற்றலாம்.")
+                                if st.button("💎 மறுவிற்பனை சரக்காக மாற்று", key=f"resale_btn_{vg['id']}"):
+                                    supabase.table("gold_purchases").update({
+                                        "packet_location": "RESOLD",
+                                        "disposal_type": "RESALE",
+                                        "packet_updated_at": datetime.now().isoformat()
+                                    }).eq("id", vg["id"]).execute()
+                                    st.success(f"{vg['gp_no']} மறுவிற்பனை சரக்காக மாற்றப்பட்டது!")
+                                    st.rerun()
+
+            # -------------------------------------------------------------------------
+            # டேப் 5: முழு பாக்கெட் இருப்பு & தேடல் (Master Inventory Search)
+            # -------------------------------------------------------------------------
+            with p_tab5:
+                st.markdown("##### 🔍 அனைத்து பாக்கெட்கள் நேரடி இருப்பு & தேடல்")
+                search_pkt = st.text_input("பாக்கெட் எண் (கடன் எண் / ஜீபி எண்) உள்ளிடவும்:", placeholder="எ.கா: KMK/1230 அல்லது AVL-GP-001")
+                
+                all_combined = []
+                for l in all_loan_pkts:
+                    all_combined.append({
+                        "வகை": "🪙 நகைக் கடன்",
+                        "பாக்கெட் எண்": l["loan_no"],
+                        "கிளை": b_map_name.get(l["branch_id"], "-"),
+                        "மொத்த எடை": f"{l['gross_weight']}g",
+                        "தற்போதைய இருப்பிடம்": l.get("packet_location", "AT_BRANCH"),
+                        "வங்கி லாக்கர் விவரம்": f"{l.get('repledge_bank', '')} (₹{float(l.get('repledge_amount',0)):,.0f})" if l.get('repledge_bank') else "-"
+                    })
+                for g in all_gp_pkts:
+                    all_combined.append({
+                        "வகை": "✨ ஜிபி நகை வாங்குதல்",
+                        "பாக்கெட் எண்": g["gp_no"],
+                        "கிளை": b_map_name.get(g["branch_id"], "-"),
+                        "மொத்த எடை": f"{g['gross_weight']}g",
+                        "தற்போதைய இருப்பிடம்": g.get("packet_location", "AT_BRANCH"),
+                        "வங்கி லாக்கர் விவரம்": f"உருக்குதல்: {g.get('melting_batch_no', '')}" if g.get('melting_batch_no') else "-"
+                    })
+
+                df_pkt_all = pd.DataFrame(all_combined)
+                if search_pkt.strip():
+                    df_pkt_all = df_pkt_all[df_pkt_all["பாக்கெட் எண்"].str.contains(search_pkt.strip(), case=False, na=False)]
+
+                st.dataframe(df_pkt_all, use_container_width=True)
 
         with tab1:
             st.subheader("➕ புதிய கிளை சேர்த்தல்")
@@ -4438,11 +4696,142 @@ else:
     # D. கிளை செயல்பாடுகள் திரை (BRANCH FLOW)
     # ----------------------------------------------------
     else:
-        branch_tab1, branch_tab2, branch_tab3, branch_tab4, branch_tab5, branch_tab6 = st.tabs([
-            "🛒 கவுண்ட்டர் வருகை & OTP", "📁 கிளை ஆவணங்கள் பதிவேற்றம்",
-            "⚠️ விளக்கங்கள்", "💼 கிளை கல்லா", "🏦 HO பணப் பரிமாற்றம்", "📈 காரணப் பணியாளர் அறிக்கை"
+        # 🌟 branch_tab7 (7-வது புதிய டேப்) சேர்க்கப்பட்டுள்ளது:
+        branch_tab1, branch_tab2, branch_tab3, branch_tab4, branch_tab5, branch_tab6, branch_tab7 = st.tabs([
+            "🛒 கவுண்ட்டர் வருகை & OTP", 
+            "📁 கிளை ஆவணங்கள் பதிவேற்றம்",
+            "⚠️ விளக்கங்கள்", 
+            "💼 கிளை கல்லா", 
+            "🏦 HO பணப் பரிமாற்றம்", 
+            "📈 காரணப் பணியாளர் அறிக்கை",
+            "📦 நகைப் பாக்கெட்கள் மேலாண்மை"  # 👈 7-வது புதிய டேப்!
         ])
+        # ==============================================================================
+        # 📦 7. கிளை நகைப் பாக்கெட்கள் மேலாண்மை (Branch Packet Management)
+        # ==============================================================================
+        with branch_tab7:
+            st.subheader("📦 நகைப் பாக்கெட்கள் அனுப்புதல், கோருதல் & ஒப்படைத்தல்")
+            st.caption("கிளையில் உள்ள நகைக்கடன் மற்றும் ஜிபி பாக்கெட்களை தலைமையகத்திற்கு அனுப்புதல், மீட்புக் கோரிக்கை வைத்தல் மற்றும் வாடிக்கையாளரிடம் ஒப்படைத்தல்.")
 
+            curr_b_id = st.session_state.get("branch_id")
+            staff_uname = st.session_state.get("username", "Staff")
+
+            # 1. இந்த கிளையின் நகைக் கடன்கள் மற்றும் ஜிபி கொள்முதல் விவரங்களை எடுத்தல்
+            try:
+                b_loans_res = supabase.table("gold_loans").select(
+                    "id, loan_no, gross_weight, ornament_details, packet_location, "
+                    "repledge_bank, release_requested, status"
+                ).eq("branch_id", curr_b_id).neq("status", "Closed").execute()
+                b_loans = b_loans_res.data or []
+            except Exception:
+                b_loans = []
+
+            try:
+                b_gps_res = supabase.table("gold_purchases").select(
+                    "id, gp_no, gross_weight, packet_location, disposal_type"
+                ).eq("branch_id", curr_b_id).execute()
+                b_gps = b_gps_res.data or []
+            except Exception:
+                b_gps = []
+
+            # உள்-டேப்கள் (3 நிலைகள்)
+            sub_bp1, sub_bp2, sub_bp3 = st.tabs([
+                "🚚 1. தலைமையகத்திற்கு அனுப்புதல் (Dispatch to HQ)",
+                "🚨 2. தலைமையகத்திடம் கோருதல் (Request Release)",
+                "🤝 3. கிளையில் பெற்று வாடிக்கையாளரிடம் ஒப்படைத்தல்"
+            ])
+
+            # -----------------------------------------------------------------
+            # நிலை 1: கிளையில் உள்ள பாக்கெட்களை HQ-க்கு அனுப்புதல்
+            # -----------------------------------------------------------------
+            with sub_bp1:
+                st.markdown("##### 🚚 கிளையில் உள்ள பாக்கெட்களை தலைமையகத்திற்கு அனுப்புதல்")
+                loans_to_send = [l for l in b_loans if l.get("packet_location", "AT_BRANCH") == "AT_BRANCH"]
+                gps_to_send = [g for g in b_gps if g.get("packet_location", "AT_BRANCH") == "AT_BRANCH"]
+
+                if not loans_to_send and not gps_to_send:
+                    st.info("தற்போது கிளையில் தலைமையகத்திற்கு அனுப்ப வேண்டிய பாக்கெட்கள் ஏதும் இல்லை.")
+                else:
+                    if loans_to_send:
+                        st.write(f"🪙 **நகைக்கடன் பாக்கெட்கள் ({len(loans_to_send)}):**")
+                        for l in loans_to_send:
+                            c1, c2, c3 = st.columns([3, 4, 3])
+                            c1.write(f"🏷️ **{l['loan_no']}**")
+                            c2.write(f"எடை: **{l['gross_weight']}g** | {l.get('ornament_details', '-')}")
+                            if c3.button("🚚 HQ-க்கு அனுப்பி வை", key=f"br_disp_l_{l['id']}"):
+                                supabase.table("gold_loans").update({
+                                    "packet_location": "IN_TRANSIT_TO_HQ",
+                                    "packet_dispatched_by": staff_uname,
+                                    "packet_updated_at": datetime.now().isoformat()
+                                }).eq("id", l["id"]).execute()
+                                st.success(f"{l['loan_no']} தலைமையகத்திற்கு அனுப்பப்பட்டது!")
+                                st.rerun()
+
+                    if gps_to_send:
+                        st.write(f"✨ **ஜிபி நகை வாங்குதல் பாக்கெட்கள் ({len(gps_to_send)}):**")
+                        for g in gps_to_send:
+                            gc1, gc2, gc3 = st.columns([3, 4, 3])
+                            gc1.write(f"🧾 **{g['gp_no']}**")
+                            gc2.write(f"எடை: **{g['gross_weight']}g** (GP கொள்முதல்)")
+                            if gc3.button("🚚 HQ-க்கு அனுப்பி வை", key=f"br_disp_g_{g['id']}"):
+                                supabase.table("gold_purchases").update({
+                                    "packet_location": "IN_TRANSIT_TO_HQ",
+                                    "packet_dispatched_by": staff_uname,
+                                    "packet_updated_at": datetime.now().isoformat()
+                                }).eq("id", g["id"]).execute()
+                                st.success(f"{g['gp_no']} தலைமையகத்திற்கு அனுப்பப்பட்டது!")
+                                st.rerun()
+
+            # -----------------------------------------------------------------
+            # நிலை 2: வாடிக்கையாளர் மீட்க வரும்போது தலைமையகத்திடம் கோருதல்
+            # -----------------------------------------------------------------
+            with sub_bp2:
+                st.markdown("##### 🚨 வாடிக்கையாளர் கடன் அடைப்பிற்காக HQ-டம் பாக்கெட்டைக் கோருதல்")
+                hq_hold_loans = [
+                    l for l in b_loans 
+                    if l.get("packet_location") in ["AT_HQ_VAULT", "IN_BANK_LOCKER"] and not l.get("release_requested")
+                ]
+
+                if not hq_hold_loans:
+                    st.info("தலைமையகத்தில் கோருவதற்கு பாக்கெட்கள் ஏதும் நிலுவையில் இல்லை.")
+                else:
+                    st.caption("வாடிக்கையாளர் கடனை அடைக்க வரும்போது தலைமையக பெட்டகம் அல்லது வங்கி லாக்கரில் உள்ள நகையைக் கோரலாம்:")
+                    for hl in hq_hold_loans:
+                        h1, h2, h3 = st.columns([3, 4, 3])
+                        h1.write(f"🏷️ **{hl['loan_no']}**")
+                        loc_name = "🏢 HQ பெட்டகம்" if hl.get("packet_location") == "AT_HQ_VAULT" else f"🏦 {hl.get('repledge_bank', 'வங்கி')} லாக்கர்"
+                        h2.write(f"எடை: **{hl['gross_weight']}g** | இருப்பிடம்: **{loc_name}**")
+                        if h3.button("🚨 தலைமையகத்திடம் கோரு", key=f"br_req_l_{hl['id']}"):
+                            supabase.table("gold_loans").update({
+                                "release_requested": True,
+                                "release_request_date": datetime.now().isoformat()
+                            }).eq("id", hl["id"]).execute()
+                            st.warning(f"{hl['loan_no']} அவசரக் கோரிக்கை தலைமையகத்திற்கு அனுப்பப்பட்டது!")
+                            st.rerun()
+
+            # -----------------------------------------------------------------
+            # நிலை 3: HQ-லிருந்து வந்ததை வாடிக்கையாளரிடம் ஒப்படைத்தல்
+            # -----------------------------------------------------------------
+            with sub_bp3:
+                st.markdown("##### 🤝 HQ-லிருந்து வந்த பாக்கெட்களை வாடிக்கையாளரிடம் ஒப்படைத்தல்")
+                transit_to_br = [l for l in b_loans if l.get("packet_location") == "IN_TRANSIT_TO_BRANCH"]
+
+                if not transit_to_br:
+                    st.info("HQ-லிருந்து கிளைக்கு வழியில்/வந்த பாக்கெட்கள் ஏதும் இல்லை.")
+                else:
+                    st.caption("தலைமையகத்திலிருந்து அனுப்பி வைக்கப்பட்ட பாக்கெட்களைச் சரிபார்த்து வாடிக்கையாளரிடம் ஒப்படைக்கவும்:")
+                    for tb in transit_to_br:
+                        t1, t2, t3 = st.columns([3, 4, 3])
+                        t1.write(f"🏷️ **{tb['loan_no']}**")
+                        t2.write(f"எடை: **{tb['gross_weight']}g** (HQ-லிருந்து வந்துள்ளது)")
+                        if t3.button("🤝 வாடிக்கையாளரிடம் ஒப்படை", key=f"br_deliv_l_{tb['id']}"):
+                            supabase.table("gold_loans").update({
+                                "packet_location": "DELIVERED",
+                                "packet_updated_at": datetime.now().isoformat()
+                            }).eq("id", tb["id"]).execute()
+                            st.success(f"{tb['loan_no']} வாடிக்கையாளரிடம் வெற்றிகரமாக ஒப்படைக்கப்பட்டது!")
+                            st.rerun()
+                            
         # Tab 6: காரணப் பணியாளர் அறிக்கை
         with branch_tab6:
             render_staff_attribution_report(selected_branch_id=st.session_state.branch_id)
