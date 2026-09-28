@@ -2198,28 +2198,42 @@ else:
                         gender_col = next((c for c in cols if any(k in str(c).lower() for k in ['gender', 'sex', 'பாலினம்', 'ஆண்/பெண்'])), None)
                         dob_col = next((c for c in cols if any(k in str(c).lower() for k in ['dob', 'birth', 'பிறந்த தேதி', 'date of birth', 'பிறந்த'])), None)
 
-                        # 🌟 கடைசி வாடிக்கையாளர் எண்ணை எடுத்தல் (எ.கா: AVL-001 அமைப்பில்)
-                        try:
-                            c_res = supabase.table("customers").select("customer_code").ilike("customer_code", f"{target_branch_code}-%").order("id", desc=True).limit(1).execute()
-                            if c_res.data:
-                                last_c = c_res.data[0]["customer_code"]
-                                num_part = re.findall(r'\d+', last_c)
-                                seq_start = int(num_part[-1]) if num_part else 0
-                            else:
-                                seq_start = 0
-                        except Exception:
-                            seq_start = 0
-
-                        # ஏற்கனவே உள்ள வாடிக்கையாளர் எண்களை எடுத்தல் (Duplicate தடுப்பு)
+                        # ஏற்கனவே உள்ள வாடிக்கையாளர் குறியீடுகளை எடுத்தல் (Duplicate தடுப்பு)
                         exist_res = supabase.table("customers").select("customer_code").eq("branch_id", target_branch_id).execute()
                         existing_codes = {r["customer_code"] for r in (exist_res.data or [])}
+
+                        # பிறந்த தேதியை (DOB) 4 இலக்க ஆண்டாக மாற்றும் பாதுகாப்பு ஃபங்க்ஷன்
+                        def parse_safe_dob(raw_val):
+                            if not raw_val or pd.isna(raw_val):
+                                return None
+                            raw_str = str(raw_val).strip()
+                            if raw_str.lower() in ['nan', 'nat', 'none', 'null', '-', '']:
+                                return None
+                            try:
+                                # நாள் முதலில் வரும் வடிவம் (DD/MM/YYYY அல்லது DD-MM-YY)
+                                dt = pd.to_datetime(raw_str, errors='coerce', dayfirst=True)
+                                if pd.isna(dt):
+                                    dt = pd.to_datetime(raw_str, errors='coerce')
+                                if pd.isna(dt):
+                                    return None
+                                
+                                yr = dt.year
+                                # 2 இலக்க ஆண்டாக இருந்தால் (எ.கா: 52 -> 1952)
+                                if yr < 100:
+                                    yr += 1900
+                                # 2026-க்கு மேல் எதிர்கால ஆண்டாக இருந்தால் (எ.கா: 2052 -> 1952)
+                                elif yr > datetime.now().year:
+                                    yr -= 100
+                                    
+                                return f"{yr:04d}-{dt.month:02d}-{dt.day:02d}"
+                            except Exception:
+                                return None
 
                         customers_batch = []
                         skipped_count = 0
                         
                         for idx, row in df_raw.iterrows():
                             name_val = str(row.get(name_col, "")).strip() if pd.notna(row.get(name_col)) else ""
-                            
                             raw_mob = str(row.get(mob_col, "")).strip() if mob_col and pd.notna(row.get(mob_col)) else ""
                             mobile = "".join(filter(str.isdigit, raw_mob))[-10:]
                             
@@ -2227,23 +2241,17 @@ else:
                                 skipped_count += 1
                                 continue
                             
-                            # =========================================================
-                            # 👈🌟 வாடிக்கையாளர் எண்: branchcode-001 வடிவமைப்பு
-                            # =========================================================
+                            # வாடிக்கையாளர் எண்: branchcode-001 வரிசை
                             if cust_no_col and pd.notna(row.get(cust_no_col)):
                                 raw_cno = str(row.get(cust_no_col)).strip()
                                 raw_cno = raw_cno[:-2] if raw_cno.endswith(".0") else raw_cno
-                                # எக்செல்-ல் ஒருவேளை C-001 அல்லது C001 என இருந்தாலும் 'C' நீக்கப்படும்:
                                 raw_cno = re.sub(r'^[Cc-]', '', raw_cno).strip()
                                 try:
-                                    # 3 இலக்க வடிவமைப்பு (எ.கா: AVL-001, AVL-025)
                                     tcode = f"{target_branch_code}-{int(raw_cno):03d}"
                                 except Exception:
                                     tcode = f"{target_branch_code}-{raw_cno}"
                             else:
-                                seq_start += 1
-                                # தானியங்கி எண் உருவாக்கம்: AVL-001, AVL-002...
-                                tcode = f"{target_branch_code}-{seq_start:03d}"
+                                tcode = f"{target_branch_code}-{(idx + 1):03d}"
                             
                             if tcode in existing_codes:
                                 skipped_count += 1
@@ -2251,12 +2259,11 @@ else:
                             
                             existing_codes.add(tcode)
                             
-                            # முகவரி எடுத்தல்
                             real_addr = str(row.get(addr_col, "")).strip() if addr_col and pd.notna(row.get(addr_col)) else chosen_branch_name
                             if not real_addr or real_addr.lower() == 'nan':
                                 real_addr = chosen_branch_name
 
-                            # பாலினம் (Gender)
+                            # பாலினம்
                             clean_gender = None
                             if gender_col and pd.notna(row.get(gender_col)):
                                 g_raw = str(row.get(gender_col, "")).strip().lower()
@@ -2269,20 +2276,12 @@ else:
                                 elif g_raw and g_raw != "nan":
                                     clean_gender = g_raw.capitalize()
 
-                            # பிறந்த தேதி (DOB -> YYYY-MM-DD)
-                            clean_dob = None
-                            if dob_col and pd.notna(row.get(dob_col)):
-                                raw_dob = row.get(dob_col)
-                                try:
-                                    parsed_date = pd.to_datetime(raw_dob, errors='coerce', dayfirst=True)
-                                    if pd.notna(parsed_date):
-                                        clean_dob = parsed_date.strftime("%Y-%m-%d")
-                                except Exception:
-                                    clean_dob = None
+                            # பிறந்த தேதி (பிழையின்றி 4 இலக்க வடிவில்)
+                            clean_dob = parse_safe_dob(row.get(dob_col)) if dob_col else None
                             
                             customer_item = {
                                 "branch_id": target_branch_id,
-                                "customer_code": tcode,       # 👈 AVL-001 எனச் சேமிக்கப்படும்
+                                "customer_code": tcode,
                                 "name": name_val,
                                 "mobile": mobile,
                                 "mobile2": "".join(filter(str.isdigit, str(row.get(mob2_col, ""))))[-10:] if mob2_col and pd.notna(row.get(mob2_col)) else None,
@@ -2297,7 +2296,7 @@ else:
                             }
                             customers_batch.append(customer_item)
 
-                        # பல்க்காக டேட்டாபேஸில் ஏற்றுதல் (Batch size: 50)
+                        # பல்க்காக டேட்டாபேஸில் ஏற்றுதல் (Batch size: 50 + Auto Fallback)
                         success_count = 0
                         error_list = []
                         progress_bar = st.progress(0)
@@ -2310,13 +2309,26 @@ else:
                                     supabase.table("customers").insert(chunk).execute()
                                     success_count += len(chunk)
                                 except Exception as b_err:
-                                    error_list.append(f"வரிசை {i+1} முதல் {i+len(chunk)} வரை பிழை: {b_err}")
+                                    # 🌟 Fallback: ஒருவேளை அந்த 50 பேரில் ஒருவரிடம் பிழை இருந்தால், 
+                                    # மற்ற 49 பேர் விடுபடாமல் இருக்க ஒவ்வொன்றாகச் சேமித்தல்:
+                                    for single_item in chunk:
+                                        try:
+                                            supabase.table("customers").insert(single_item).execute()
+                                            success_count += 1
+                                        except Exception:
+                                            try:
+                                                # DOB பிழையாக இருந்தால் அதை மட்டும் நீக்கிவிட்டு மீண்டும் சேமித்தல்
+                                                single_item["dob"] = None
+                                                supabase.table("customers").insert(single_item).execute()
+                                                success_count += 1
+                                            except Exception as retry_err:
+                                                error_list.append(f"{single_item['name']} ({single_item['customer_code']}) பிழை: {retry_err}")
                                 
                                 progress_bar.progress(min((i + len(chunk)) / len(customers_batch), 1.0))
                         
-                        st.success(f"✅ **{chosen_branch_name}** கிளைக்கு வெற்றிகரமாக **{success_count}** வாடிக்கையாளர்கள் பதிவு செய்யப்பட்டனர்!")
+                        st.success(f"✅ **{chosen_branch_name}** கிளைக்கு மேலும் **{success_count}** வாடிக்கையாளர்கள் வெற்றிகரமாகப் பதிவு செய்யப்பட்டனர்!")
                         if skipped_count > 0:
-                            st.info(f"ℹ️ செல்லுபடியாகாத செல்போன் எண் அல்லது ஏற்கனவே பதிவானதால் தவிர்க்கப்பட்டவை: **{skipped_count}**")
+                            st.info(f"ℹ️ ஏற்கனவே பதிவானதால் / விடுபட்டதால் தவிர்க்கப்பட்டவை: **{skipped_count}** (முந்தைய 200 வாடிக்கையாளர்களையும் சேர்த்து)")
                         if error_list:
                             for err in error_list:
                                 st.error(err)
