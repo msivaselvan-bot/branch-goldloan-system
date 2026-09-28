@@ -3158,14 +3158,13 @@ else:
                         progress_bar = st.progress(0)
                         status_text = st.empty()
 
-                        # கிளை வாரியாக நடப்பு அதிகபட்ச எண்களை எடுக்கும் ஃபங்க்ஷன் (Fallback தேவைப்பட்டால்)
+                        # கிளை வாரியாக நடப்பு அதிகபட்ச கணக்கு எண்களை எடுக்கும் ஃபங்க்ஷன் (Fallback)
                         def fetch_max_seq(b_id, b_code, acc_type):
                             table_name = "recurring_deposits" if acc_type == "RD" else "fixed_deposits"
                             col_name = "rd_account_no" if acc_type == "RD" else "fd_account_no"
                             pattern = re.compile(rf"^{re.escape(b_code)}/{acc_type}/(\d+)$", re.IGNORECASE)
-                            
                             try:
-                                res = supabase.table(table_name).select(col_name).eq("branch_id", b_id).execute()
+                                res = supabase.table(table_name).select(col_name).eq("branch_id", b_id).limit(5000).execute()
                                 max_val = 0
                                 for r in (res.data or []):
                                     m = pattern.match(str(r.get(col_name, "")).strip())
@@ -3178,15 +3177,41 @@ else:
                         rd_counters = {}
                         fd_counters = {}
 
-                        # ஏற்கனவே உள்ள வாடிக்கையாளர்கள் கேச் (Mobile -> Customer ID Map)
-                        cust_res = supabase.table("customers").select("id, mobile, branch_id").execute()
-                        cust_cache = {str(c["mobile"]).strip()[-10:]: c["id"] for c in (cust_res.data or []) if c.get("mobile")}
+                        # 🌟 1. ஏற்கனவே உள்ள வாடிக்கையாளர்கள் அனைவரையும் முழுமையாக எடுத்தல் (10,000 வரை)
+                        cust_res = supabase.table("customers").select("id, name, mobile, branch_id, customer_code").limit(10000).execute()
+                        all_custs = cust_res.data or []
+                        
+                        # மேப்பிங் கேச்:
+                        cust_by_mobile = {}
+                        cust_by_name_branch = {}
+                        existing_cust_codes = set()
+                        branch_cust_max = {}
 
-                        # ஏற்கனவே உள்ள கணக்கு எண்களை எடுத்தல் (Duplicate தவிர்ப்பு)
-                        existing_rd_res = supabase.table("recurring_deposits").select("rd_account_no").execute()
+                        for c in all_custs:
+                            cid = c["id"]
+                            cbid = c.get("branch_id")
+                            ccode = str(c.get("customer_code", "")).strip()
+                            cname = str(c.get("name", "")).strip().lower()
+                            cmob = "".join(filter(str.isdigit, str(c.get("mobile", ""))))[-10:]
+
+                            if cmob:
+                                cust_by_mobile[cmob] = cid
+                            if cbid and cname:
+                                cust_by_name_branch[(cbid, cname)] = cid
+                            if ccode:
+                                existing_cust_codes.add(ccode)
+                                # அந்தந்த கிளையின் கடைசி வாடிக்கையாளர் எண்ணைக் கண்டறிதல்
+                                b_code_part = ccode.split("-")[0].upper()
+                                num_part = re.findall(r'\d+', ccode)
+                                if num_part:
+                                    last_n = int(num_part[-1])
+                                    branch_cust_max[b_code_part] = max(branch_cust_max.get(b_code_part, 0), last_n)
+
+                        # ஏற்கனவே உள்ள கணக்கு எண்கள் (Duplicate தவிர்ப்பு)
+                        existing_rd_res = supabase.table("recurring_deposits").select("rd_account_no").limit(10000).execute()
                         existing_rds = {str(r["rd_account_no"]).strip() for r in (existing_rd_res.data or []) if r.get("rd_account_no")}
                         
-                        existing_fd_res = supabase.table("fixed_deposits").select("fd_account_no").execute()
+                        existing_fd_res = supabase.table("fixed_deposits").select("fd_account_no").limit(10000).execute()
                         existing_fds = {str(f["fd_account_no"]).strip() for f in (existing_fd_res.data or []) if f.get("fd_account_no")}
 
                         success_rd = 0
@@ -3195,7 +3220,6 @@ else:
                         total_rows = len(df)
                         error_list = []
 
-                        # எக்செல் காலம்களைத் தானாக அடையாளம் காணுதல்
                         cols = list(df.columns)
                         acc_col = next((c for c in cols if any(k in c for k in ['account_no', 'account', 'acc_no', 'rd_no', 'fd_no', 'கணக்கு'])), None)
 
@@ -3223,7 +3247,7 @@ else:
                             address = str(row.get("address", "")).strip()
 
                             # செல்லுபடியாகாத வரிகளைத் தவிர்த்தல்
-                            if not name or len(mobile) != 10 or row_type not in ["RD", "FD"]:
+                            if not name or row_type not in ["RD", "FD"]:
                                 skipped_rows += 1
                                 continue
 
@@ -3238,21 +3262,17 @@ else:
                             if not address or address.lower() == 'nan':
                                 address = f"Branch {target_b_code}"
 
-                            # =========================================================
-                            # 🌟 1. பழைய கணக்கு எண் (Account Number) பிரித்தெடுத்தல்:
-                            # =========================================================
+                            # 🌟 1. பழைய கணக்கு எண் (Account Number) பிரித்தெடுத்தல்
                             raw_acc_no = str(row.get(acc_col, "")).strip() if acc_col and pd.notna(row.get(acc_col)) else ""
                             if raw_acc_no.endswith(".0"):
                                 raw_acc_no = raw_acc_no[:-2]
 
                             if raw_acc_no and raw_acc_no.lower() != 'nan':
-                                # வெறும் எண்ணாக இருந்தால் (எ.கா: 5 -> AVL/RD/0005 என மாற்றுதல்)
                                 if raw_acc_no.isdigit():
                                     acc_no = f"{target_b_code}/{row_type}/{int(raw_acc_no):04d}"
                                 else:
                                     acc_no = raw_acc_no
                             else:
-                                # எக்செல்-ல் விடுபட்டிருந்தால் தானியங்கி எண் உருவாக்கம்:
                                 if row_type == "RD":
                                     if target_b_id not in rd_counters:
                                         rd_counters[target_b_id] = fetch_max_seq(target_b_id, target_b_code, "RD")
@@ -3270,26 +3290,45 @@ else:
                                 continue
 
                             try:
-                                # 2. வாடிக்கையாளர் உள்ளாரா எனப் பார்த்தல் (இல்லையெனில் உடனே உருவாக்குதல்)
-                                c_id = cust_cache.get(mobile)
+                                # 🌟 2. வாடிக்கையாளரைக் கண்டறிதல் (1. Mobile -> 2. Branch+Name)
+                                c_id = None
+                                if mobile and len(mobile) == 10:
+                                    c_id = cust_by_mobile.get(mobile)
                                 if not c_id:
-                                    new_c_code = f"{target_b_code}-{(idx + 1):03d}"
+                                    c_id = cust_by_name_branch.get((target_b_id, name.lower()))
+
+                                # 🌟 3. இல்லையெனில் புதிய தனித்துவமான எண்ணுடன் உருவாக்குதல் (No Duplicate Key Error!)
+                                if not c_id:
+                                    cur_max = branch_cust_max.get(target_b_code, 0)
+                                    while True:
+                                        cur_max += 1
+                                        cand_code = f"{target_b_code}-{cur_max:03d}"
+                                        if cand_code not in existing_cust_codes:
+                                            new_c_code = cand_code
+                                            break
+                                    
+                                    branch_cust_max[target_b_code] = cur_max
+                                    existing_cust_codes.add(new_c_code)
+
                                     new_cust = supabase.table("customers").insert({
                                         "branch_id": target_b_id,
                                         "customer_code": new_c_code,
                                         "name": name,
-                                        "mobile": mobile,
+                                        "mobile": mobile if mobile and len(mobile) == 10 else f"99999{cur_max:05d}",
                                         "address": address,
                                         "nominee_name": nominee if nominee != "-" else None,
                                         "nominee_relation": relation if relation != "-" else None,
                                         "kyc_status": "Approved",
                                         "is_active": True
                                     }).execute()
+                                    
                                     if new_cust.data:
                                         c_id = new_cust.data[0]["id"]
-                                        cust_cache[mobile] = c_id
+                                        if mobile and len(mobile) == 10:
+                                            cust_by_mobile[mobile] = c_id
+                                        cust_by_name_branch[(target_b_id, name.lower())] = c_id
 
-                                # 3. மைக்ரேஷன் வருகைப் பதிவு உருவாக்குதல்
+                                # 4. மைக்ரேஷன் வருகைப் பதிவு உருவாக்குதல்
                                 v_no = f"MIG-{target_b_code}-{row_type}-{idx+1:04d}"
                                 visit_payload = {
                                     "visit_no": v_no,
@@ -3307,13 +3346,13 @@ else:
                                 v_insert = supabase.table("customer_visits").insert(visit_payload).execute()
                                 new_visit_id = v_insert.data[0]["id"]
 
-                                # 4. கணக்கு எண்ணுடன் பிரத்யேக அட்டவணைகளில் சேமித்தல்
+                                # 5. கணக்கு எண்ணுடன் அட்டவணைகளில் சேமித்தல்
                                 if row_type == "RD":
                                     rd_payload = {
                                         "visit_id": new_visit_id,
                                         "branch_id": target_b_id,
                                         "customer_id": c_id,
-                                        "rd_account_no": acc_no,  # 👈 பழைய கணக்கு எண் பதிவாகிறது
+                                        "rd_account_no": acc_no,
                                         "monthly_installment": amount,
                                         "tenure_months": 12,
                                         "interest_rate": 12.0,
@@ -3333,7 +3372,7 @@ else:
                                         "visit_id": new_visit_id,
                                         "branch_id": target_b_id,
                                         "customer_id": c_id,
-                                        "fd_account_no": acc_no,  # 👈 பழைய கணக்கு எண் பதிவாகிறது
+                                        "fd_account_no": acc_no,
                                         "deposit_amount": amount,
                                         "tenure_months": 12,
                                         "interest_rate": 12.0,
@@ -3347,7 +3386,7 @@ else:
                                     success_fd += 1
                                     txn_type_label = "FD Open (புதிய வைப்பு நிதி)"
 
-                                # 5. transactions அட்டவணையில் பதிவு
+                                # 6. transactions அட்டவணையில் பதிவு
                                 txn_payload = {
                                     "visit_id": new_visit_id,
                                     "branch_id": target_b_id,
