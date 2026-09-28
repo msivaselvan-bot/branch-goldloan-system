@@ -2464,30 +2464,76 @@ else:
                                         st.rerun()
 
             # -------------------------------------------------------------------------
-            # டேப் 3: கிளைகளின் வாடிக்கையாளர் மீட்புக் கோரிக்கைகள்
+            # டேப் 3: கிளைகளின் மீட்புக் கோரிக்கைகள் & திருப்பி அனுப்பும் அனுமதி மேலாண்மை
             # -------------------------------------------------------------------------
             with p_tab3:
-                st.markdown("##### 🚨 கிளைகளின் அவசர மீட்புக் கோரிக்கைகள் (Customer Release Requests)")
-                if not urgent_requests:
-                    st.info("தற்போது கிளைகளிலிருந்து எந்த மீட்புக் கோரிக்கைகளும் நிலுவையில் இல்லை.")
-                else:
-                    for uq in urgent_requests:
-                        loc_txt = "🏢 HQ பெட்டகத்தில் உள்ளது" if uq["packet_location"] == "AT_HQ_VAULT" else f"🏦 {uq.get('repledge_bank', 'வங்கி')} லாக்கரில் உள்ளது"
-                        with st.container():
-                            u1, u2, u3, u4 = st.columns([2, 3, 2, 2])
-                            u1.error(f"🏷️ **{uq['loan_no']}**")
-                            u2.write(f"கிளை: **{b_map_name.get(uq['branch_id'], '-')}** | எடை: **{uq['gross_weight']}g**\nஇருப்பிடம்: **{loc_txt}**")
-                            u3.caption(f"கோரப்பட்ட நேரம்:\n{str(uq.get('release_request_date', ''))[:16]}")
-                            if u4.button("🚚 கிளைக்கு அனுப்பி வை", key=f"disp_br_{uq['id']}"):
-                                supabase.table("gold_loans").update({
-                                    "packet_location": "IN_TRANSIT_TO_BRANCH",
-                                    "release_requested": False,
-                                    "packet_dispatched_by": st.session_state.get("username", "Admin"),
-                                    "packet_updated_at": datetime.now().isoformat()
-                                }).eq("id", uq["id"]).execute()
-                                st.success(f"{uq['loan_no']} கிளைக்கு அனுப்பி வைக்கப்பட்டது!")
-                                st.rerun()
-                        st.divider()
+                adm_sub1, adm_sub2 = st.tabs([
+                    "🚨 1. கிளைகளின் அவசர மீட்புக் கோரிக்கைகள்",
+                    "🔄 2. கிளைகள் திருப்பி அனுப்ப அனுமதி கோருதல் (Return Approval)"
+                ])
+
+                # 1. கிளைகள் அவசரமாகக் கோரியுள்ளவை (குறிப்புடன் தெரியும்)
+                with adm_sub1:
+                    st.markdown("##### 🚨 வாடிக்கையாளர் மீட்புக் கோரிக்கைகள் (Customer Release Requests)")
+                    if not urgent_requests:
+                        st.info("தற்போது கிளைகளிலிருந்து எந்த மீட்புக் கோரிக்கைகளும் நிலுவையில் இல்லை.")
+                    else:
+                        for uq in urgent_requests:
+                            loc_txt = "🏢 HQ பெட்டகத்தில் உள்ளது" if uq["packet_location"] == "AT_HQ_VAULT" else f"🏦 {uq.get('repledge_bank', 'வங்கி')} லாக்கரில் உள்ளது"
+                            with st.container():
+                                u1, u2, u3, u4 = st.columns([2, 3, 2, 2])
+                                u1.error(f"🏷️ **{uq['loan_no']}**")
+                                u2.write(f"கிளை: **{b_map_name.get(uq['branch_id'], '-')}** | எடை: **{uq['gross_weight']}g**\nஇருப்பிடம்: **{loc_txt}**")
+                                
+                                # 📝 கிளை எழுதிய குறிப்பு (Branch Remarks):
+                                rem_text = uq.get("release_request_remarks") or "குறிப்பு இல்லை"
+                                u2.info(f"💬 **கிளைக் குறிப்பு:** {rem_text}")
+                                
+                                u3.caption(f"கோரப்பட்ட நேரம்:\n{str(uq.get('release_request_date', ''))[:16]}")
+                                if u4.button("🚚 கிளைக்கு அனுப்பி வை", key=f"tmgmt_disp_b_{uq['id']}"):
+                                    supabase.table("gold_loans").update({
+                                        "packet_location": "IN_TRANSIT_TO_BRANCH",
+                                        "release_requested": False,
+                                        "packet_dispatched_by": st.session_state.get("username", "Admin"),
+                                        "packet_updated_at": datetime.now().isoformat()
+                                    }).eq("id", uq["id"]).execute()
+                                    st.success(f"{uq['loan_no']} கிளைக்கு அனுப்பி வைக்கப்பட்டது!")
+                                    st.rerun()
+                            st.divider()
+
+                # 2. வாடிக்கையாளர் வராததால் திருப்பி அனுப்ப அனுமதி கோரும் பாக்கெட்கள்
+                with adm_sub2:
+                    st.markdown("##### 🔄 கிளைகள் திருப்பி அனுப்ப அனுமதி கோரும் பாக்கெட்கள்")
+                    ret_requests = [p for p in all_loan_pkts if p.get("return_request_status") == "REQUESTED"]
+                    
+                    if not ret_requests:
+                        st.info("தற்போது எந்தக் கிளையிலிருந்தும் திருப்பி அனுப்ப அனுமதி கோரிக்கைகள் இல்லை.")
+                    else:
+                        for rq in ret_requests:
+                            with st.container():
+                                r1, r2, r3, r4 = st.columns([2, 3, 2, 2])
+                                r1.warning(f"🏷️ **{rq['loan_no']}**")
+                                r2.write(f"கிளை: **{b_map_name.get(rq['branch_id'], '-')}** | எடை: **{rq['gross_weight']}g**")
+                                r2.error(f"காரணம்: {rq.get('return_reason', 'காரணம் இல்லை')}")
+                                r3.caption(f"கோரப்பட்ட நேரம்:\n{str(rq.get('return_requested_at', ''))[:16]}")
+                                
+                                # அனுமதி அல்லது நிராகரிப்பு
+                                if r4.button("✅ திருப்பி அனுப்ப அனுமதி (Approve)", key=f"appr_ret_{rq['id']}"):
+                                    supabase.table("gold_loans").update({
+                                        "return_request_status": "APPROVED",
+                                        "return_approved_by": st.session_state.get("username", "Admin")
+                                    }).eq("id", rq["id"]).execute()
+                                    st.success(f"{rq['loan_no']}-க்கு அனுமதி வழங்கப்பட்டது!")
+                                    st.rerun()
+                                    
+                                if r4.button("❌ நிராகரி (Reject)", key=f"rej_ret_{rq['id']}"):
+                                    supabase.table("gold_loans").update({
+                                        "return_request_status": "NONE",
+                                        "return_reason": None
+                                    }).eq("id", rq["id"]).execute()
+                                    st.warning(f"{rq['loan_no']} கோரிக்கை நிராகரிக்கப்பட்டது!")
+                                    st.rerun()
+                            st.divider()
 
             # -------------------------------------------------------------------------
             # டேப் 4: ஜிபி (GP) உருக்குதல் & மறுவிற்பனை
@@ -4723,7 +4769,7 @@ else:
         # ==============================================================================
         with branch_tab7:
             st.subheader("📦 நகைப் பாக்கெட்கள் அனுப்புதல், கோருதல் & ஒப்படைத்தல்")
-            st.caption("கிளையில் உள்ள நகைக்கடன் மற்றும் ஜிபி பாக்கெட்களை தலைமையகத்திற்கு அனுப்புதல், மீட்புக் கோரிக்கை வைத்தல் மற்றும் வாடிக்கையாளரிடம் ஒப்படைத்தல்.")
+            st.caption("கிளையில் உள்ள பாக்கெட்களை HQ-க்கு அனுப்புதல், மீட்புக் குறிப்புடன் கோருதல் மற்றும் மீட்காத நகைகளை அட்மின் அனுமதியுடன் திருப்புதல்.")
 
             curr_b_id = st.session_state.get("branch_id")
             staff_uname = st.session_state.get("username", "Staff")
@@ -4732,7 +4778,8 @@ else:
             try:
                 b_loans_res = supabase.table("gold_loans").select(
                     "id, loan_no, gross_weight, ornament_details, packet_location, "
-                    "repledge_bank, release_requested, status"
+                    "release_requested, release_request_remarks, return_request_status, "
+                    "return_reason, status"
                 ).eq("branch_id", curr_b_id).neq("status", "Closed").execute()
                 b_loans = b_loans_res.data or []
             except Exception:
@@ -4750,7 +4797,7 @@ else:
             sub_bp1, sub_bp2, sub_bp3 = st.tabs([
                 "🚚 1. தலைமையகத்திற்கு அனுப்புதல் (Dispatch to HQ)",
                 "🚨 2. தலைமையகத்திடம் கோருதல் (Request Release)",
-                "🤝 3. கிளையில் பெற்று வாடிக்கையாளரிடம் ஒப்படைத்தல்"
+                "🤝 3. ஒப்படைத்தல் / அட்மின் அனுமதியுடன் திருப்புதல்"
             ])
 
             # -----------------------------------------------------------------
@@ -4795,54 +4842,107 @@ else:
                                 st.rerun()
 
             # -----------------------------------------------------------------
-            # நிலை 2: வாடிக்கையாளர் மீட்க வரும்போது தலைமையகத்திடம் கோருதல்
+            # நிலை 2: பாக்கெட்டைத் தேடி, குறிப்புடன் தலைமையகத்திடம் கோருதல்
             # -----------------------------------------------------------------
             with sub_bp2:
                 st.markdown("##### 🚨 வாடிக்கையாளர் கடன் அடைப்பிற்காக HQ-டம் பாக்கெட்டைக் கோருதல்")
+                
+                # 🔍 1. விரைவுத் தேடல் வசதி (Fast Search Box)
+                search_q = st.text_input("🔍 கடன் எண் கொண்டு தேடுக (Quick Search):", placeholder="எ.கா: KMK/0087 அல்லது 0087", key="br_pkt_search_input")
+                
                 hq_hold_loans = [
                     l for l in b_loans 
                     if l.get("packet_location") in ["AT_HQ_VAULT", "IN_BANK_LOCKER"] and not l.get("release_requested")
                 ]
 
+                # தேடல் வடிகட்டல்
+                if search_q.strip():
+                    hq_hold_loans = [l for l in hq_hold_loans if search_q.strip().lower() in str(l.get("loan_no", "")).lower()]
+
                 if not hq_hold_loans:
-                    st.info("தலைமையகத்தில் கோருவதற்கு பாக்கெட்கள் ஏதும் நிலுவையில் இல்லை.")
+                    st.info("தலைமையகப் பாதுகாப்பில் கோருவதற்கு பாக்கெட்கள் ஏதும் இல்லை / பொருந்தவில்லை.")
                 else:
-                    st.caption("வாடிக்கையாளர் கடனை அடைக்க வரும்போது தலைமையகப் பாதுகாப்பில் உள்ள நகையைக் கோரலாம்:")
+                    st.caption(f"கண்டறியப்பட்ட பாக்கெட்கள்: **{len(hq_hold_loans)}**")
                     for hl in hq_hold_loans:
-                        h1, h2, h3 = st.columns([3, 4, 3])
-                        h1.write(f"🏷️ **{hl['loan_no']}**")
-                        # 🔒 ரகசியப் பாதுகாப்பு: எந்த வங்கியின் பெயரும் தெரியாது!
-                        h2.write(f"எடை: **{hl['gross_weight']}g** | இருப்பிடம்: 🏢 **தலைமையகப் பாதுகாப்பில் உள்ளது**")
-                        if h3.button("🚨 தலைமையகத்திடம் கோரு", key=f"br_req_l_{hl['id']}"):
-                            supabase.table("gold_loans").update({
-                                "release_requested": True,
-                                "release_request_date": datetime.now().isoformat()
-                            }).eq("id", hl["id"]).execute()
-                            st.warning(f"{hl['loan_no']} அவசரக் கோரிக்கை தலைமையகத்திற்கு அனுப்பப்பட்டது!")
-                            st.rerun()
+                        with st.expander(f"🪙 {hl['loan_no']} | எடை: {hl['gross_weight']}g | 🏢 தலைமையகப் பாதுகாப்பில் உள்ளது"):
+                            with st.form(key=f"br_req_form_{hl['id']}"):
+                                # 📝 2. குறிப்பு எழுதும் புலம் (Remarks Field)
+                                req_note = st.text_area(
+                                    "கோரிக்கைக்கான குறிப்பு / காரணம் (Branch Remarks):",
+                                    placeholder="எ.கா: வாடிக்கையாளர் இன்று மாலை 4 மணிக்கு கடனை அடைத்து நகையை மீட்க வருகிறார்."
+                                )
+                                if st.form_submit_button("🚨 தலைமையகத்திடம் பாக்கெட்டைக் கோரு (Send Request)"):
+                                    supabase.table("gold_loans").update({
+                                        "release_requested": True,
+                                        "release_request_date": datetime.now().isoformat(),
+                                        "release_request_remarks": req_note.strip() if req_note else "காரணம் குறிப்பிடப்படவில்லை"
+                                    }).eq("id", hl["id"]).execute()
+                                    st.success(f"{hl['loan_no']} அவசரக் கோரிக்கை குறிப்புடன் தலைமையகத்திற்கு அனுப்பப்பட்டது!")
+                                    st.rerun()
 
             # -----------------------------------------------------------------
-            # நிலை 3: HQ-லிருந்து வந்ததை வாடிக்கையாளரிடம் ஒப்படைத்தல்
+            # நிலை 3: வாடிக்கையாளரிடம் ஒப்படைத்தல் அல்லது அட்மின் அனுமதியுடன் திருப்புதல்
             # -----------------------------------------------------------------
             with sub_bp3:
-                st.markdown("##### 🤝 HQ-லிருந்து வந்த பாக்கெட்களை வாடிக்கையாளரிடம் ஒப்படைத்தல்")
+                st.markdown("##### 🤝 வாடிக்கையாளரிடம் ஒப்படைத்தல் / திருப்பி அனுப்புதல்")
                 transit_to_br = [l for l in b_loans if l.get("packet_location") == "IN_TRANSIT_TO_BRANCH"]
 
                 if not transit_to_br:
                     st.info("HQ-லிருந்து கிளைக்கு வழியில்/வந்த பாக்கெட்கள் ஏதும் இல்லை.")
                 else:
-                    st.caption("தலைமையகத்திலிருந்து அனுப்பி வைக்கப்பட்ட பாக்கெட்களைச் சரிபார்த்து வாடிக்கையாளரிடம் ஒப்படைக்கவும்:")
+                    st.caption("HQ-லிருந்து வந்த பாக்கெட்கள் பட்டியல்:")
                     for tb in transit_to_br:
-                        t1, t2, t3 = st.columns([3, 4, 3])
-                        t1.write(f"🏷️ **{tb['loan_no']}**")
-                        t2.write(f"எடை: **{tb['gross_weight']}g** (HQ-லிருந்து வந்துள்ளது)")
-                        if t3.button("🤝 வாடிக்கையாளரிடம் ஒப்படை", key=f"br_deliv_l_{tb['id']}"):
-                            supabase.table("gold_loans").update({
-                                "packet_location": "DELIVERED",
-                                "packet_updated_at": datetime.now().isoformat()
-                            }).eq("id", tb["id"]).execute()
-                            st.success(f"{tb['loan_no']} வாடிக்கையாளரிடம் வெற்றிகரமாக ஒப்படைக்கப்பட்டது!")
-                            st.rerun()
+                        ret_status = tb.get("return_request_status", "NONE")
+                        
+                        with st.expander(f"🏷️ **{tb['loan_no']}** | எடை: {tb['gross_weight']}g | நிலை: {ret_status}"):
+                            col_del, col_ret = st.columns(2)
+                            
+                            # அ. வாடிக்கையாளரிடம் ஒப்படைத்தல்
+                            with col_del:
+                                st.write("✅ **வாடிக்கையாளர் நகையை மீட்டுச் சென்றால்:**")
+                                if st.button("🤝 வாடிக்கையாளரிடம் ஒப்படைக்கப்பட்டது", key=f"deliv_c_{tb['id']}"):
+                                    supabase.table("gold_loans").update({
+                                        "packet_location": "DELIVERED",
+                                        "return_request_status": "NONE",
+                                        "packet_updated_at": datetime.now().isoformat()
+                                    }).eq("id", tb["id"]).execute()
+                                    st.success(f"{tb['loan_no']} வாடிக்கையாளரிடம் வெற்றிகரமாக ஒப்படைக்கப்பட்டது!")
+                                    st.rerun()
+
+                            # ஆ. வாடிக்கையாளர் வராததால் திருப்பி அனுப்புதல் (அட்மின் அனுமதி தேவை)
+                            with col_ret:
+                                st.write("🔙 **வாடிக்கையாளர் வராததால் HQ-க்கு திருப்புதல்:**")
+                                
+                                if ret_status == "NONE":
+                                    st.caption("⚠️ திருப்பி அனுப்ப முதலில் தலைமையக அட்மினிடம் அனுமதி பெற வேண்டும்.")
+                                    with st.form(key=f"ret_req_form_{tb['id']}"):
+                                        r_reason = st.text_input("திருப்பி அனுப்புவதற்கான காரணம்:", placeholder="எ.கா: வாடிக்கையாளர் பணம் கொண்டுவரவில்லை / வர தாமதமாகும் என்றார்.")
+                                        if st.form_submit_button("📩 அட்மினிடம் அனுமதி கோரு (Request Return)"):
+                                            if r_reason.strip():
+                                                supabase.table("gold_loans").update({
+                                                    "return_request_status": "REQUESTED",
+                                                    "return_reason": r_reason.strip(),
+                                                    "return_requested_at": datetime.now().isoformat()
+                                                }).eq("id", tb["id"]).execute()
+                                                st.warning("அட்மின் ஒப்புதலுக்காகக் கோரிக்கை அனுப்பப்பட்டுள்ளது!")
+                                                st.rerun()
+                                            else:
+                                                st.error("காரணத்தைக் கட்டாயம் குறிப்பிட வேண்டும்!")
+                                                
+                                elif ret_status == "REQUESTED":
+                                    st.warning(f"⏳ அட்மின் அனுமதிக்காகக் காத்திருக்கிறது...\n(காரணம்: {tb.get('return_reason')})")
+                                    
+                                elif ret_status == "APPROVED":
+                                    st.success("✅ அட்மின் அனுமதி வழங்கியுள்ளார்! இப்போது தலைமையகத்திற்கு அனுப்பி வைக்கலாம்.")
+                                    if st.button("🚚 HQ-க்கு அனுப்பி வை (Dispatch Back to HQ)", key=f"disp_back_{tb['id']}"):
+                                        supabase.table("gold_loans").update({
+                                            "packet_location": "IN_TRANSIT_TO_HQ",
+                                            "return_request_status": "NONE",
+                                            "packet_dispatched_by": staff_uname,
+                                            "packet_updated_at": datetime.now().isoformat()
+                                        }).eq("id", tb["id"]).execute()
+                                        st.success(f"{tb['loan_no']} தலைமையகத்திற்குத் திருப்பி அனுப்பப்பட்டது!")
+                                        st.rerun()
 
         # Tab 6: காரணப் பணியாளர் அறிக்கை
         with branch_tab6:
