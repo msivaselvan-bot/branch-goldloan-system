@@ -2405,21 +2405,25 @@ else:
             # டேப் 2: வங்கி லாக்கரில் மறு-அடமானம் வைத்தல் / திருப்புதல்
             # -------------------------------------------------------------------------
             with p_tab2:
-                st.markdown("##### 🏦 வங்கி லாக்கர் மறு-அடமான மேலாண்மை (Re-Pledge Management)")
+                st.markdown("##### 🏦 வங்கி லாக்கர் மறு-அடமானம் & நிதி மேலாண்மை (Re-Pledge)")
                 vault_loans = [p for p in all_loan_pkts if p.get("packet_location") == "AT_HQ_VAULT"]
 
                 col_bk1, col_bk2 = st.columns(2)
+                
+                # அ. லாக்கரில் வைக்கும் போது (கடன் + சார்ஜஸ் பதிவு செய்தல்)
                 with col_bk1:
                     st.write("🏢 **HQ பெட்டகத்தில் உள்ள கடன்கள் (லாக்கருக்கு அனுப்ப):**")
                     if not vault_loans:
                         st.caption("HQ பெட்டகத்தில் நகைக் கடன்கள் ஏதும் இல்லை.")
                     else:
                         for vl in vault_loans:
-                            with st.expander(f"🪙 {vl['loan_no']} | {b_map_name.get(vl['branch_id'], '-')} | ஜி: {vl['gross_weight']}g"):
-                                with st.form(key=f"repledge_form_{vl['id']}"):
-                                    b_name_in = st.text_input("வங்கி பெயர் (Bank Name):", placeholder="எ.கா: HDFC Bank / SBI")
+                            with st.expander(f"🪙 {vl['loan_no']} | {b_map_name.get(vl['branch_id'], '-')} | {vl['gross_weight']}g"):
+                                with st.form(key=f"tmgmt_repldge_{vl['id']}"):
+                                    b_name_in = st.text_input("வங்கி / நிதி நிறுவனம் பெயர்:", placeholder="எ.கா: KVB / HDFC Bank / SBI")
                                     b_loan_in = st.text_input("வங்கி கடன் எண் (Bank Loan No):", placeholder="எ.கா: 88741256")
-                                    b_amt_in = st.number_input("வாங்கிய தொகை (₹ Loan Amount):", min_value=0.0, step=5000.0)
+                                    b_amt_in = st.number_input("வாங்கிய கடன் தொகை (₹ Loan Amount):", min_value=0.0, step=5000.0)
+                                    b_charges_in = st.number_input("பிடித்தம் / கட்டணங்கள் (₹ Bank Charges / Processing):", min_value=0.0, step=100.0)
+                                    
                                     if st.form_submit_button("🏦 வங்கி லாக்கருக்கு மாற்று"):
                                         if b_name_in.strip():
                                             supabase.table("gold_loans").update({
@@ -2427,29 +2431,37 @@ else:
                                                 "repledge_bank": b_name_in.strip(),
                                                 "repledge_loan_no": b_loan_in.strip(),
                                                 "repledge_amount": b_amt_in,
+                                                "repledge_charges": b_charges_in,
                                                 "packet_updated_at": datetime.now().isoformat()
                                             }).eq("id", vl["id"]).execute()
-                                            st.success(f"{vl['loan_no']} வங்கி லாக்கருக்கு மாற்றப்பட்டது!")
+                                            st.success(f"{vl['loan_no']} வங்கி லாக்கருக்கு மாற்றப்பட்டது! (கடன்: ₹{b_amt_in:,.0f} | கட்டணம்: ₹{b_charges_in:,.0f})")
                                             st.rerun()
 
+                # ஆ. லாக்கரில் இருந்து திருப்பும் போது (செலுத்திய வட்டி பதிவு செய்து HQ-க்கு மாற்றுதல்)
                 with col_bk2:
                     st.write("🏦 **வங்கி லாக்கரில் உள்ள பாக்கெட்கள் (HQ-க்கு திருப்ப):**")
                     if not repledge_pkts:
                         st.caption("வங்கி லாக்கரில் பாக்கெட்கள் ஏதும் இல்லை.")
                     else:
                         for rpk in repledge_pkts:
-                            with st.expander(f"🏦 {rpk['loan_no']} | {rpk.get('repledge_bank', '-')} | கடன்: ₹{float(rpk.get('repledge_amount',0)):,.2f}"):
+                            with st.expander(f"🏦 {rpk['loan_no']} | {rpk.get('repledge_bank', '-')} | கடன்: ₹{float(rpk.get('repledge_amount',0)):,.0f}"):
                                 st.write(f"வங்கி கடன் எண்: **{rpk.get('repledge_loan_no', '-')}** | எடை: **{rpk['gross_weight']}g**")
-                                if st.button("🏢 வங்கியிலிருந்து மீட்டு HQ பெட்டகத்திற்கு மாற்று", key=f"ret_bank_{rpk['id']}"):
-                                    supabase.table("gold_loans").update({
-                                        "packet_location": "AT_HQ_VAULT",
-                                        "repledge_bank": None,
-                                        "repledge_loan_no": None,
-                                        "repledge_amount": 0.0,
-                                        "packet_updated_at": datetime.now().isoformat()
-                                    }).eq("id", rpk["id"]).execute()
-                                    st.success(f"{rpk['loan_no']} மீண்டும் HQ பெட்டகத்திற்கு மாற்றப்பட்டது!")
-                                    st.rerun()
+                                st.caption(f"தொடக்கத்தில் பிடித்த கட்டணம்: ₹{float(rpk.get('repledge_charges', 0) or 0):,.2f}")
+                                
+                                with st.form(key=f"tmgmt_ret_form_{rpk['id']}"):
+                                    int_paid_in = st.number_input("வங்கிக்குச் செலுத்திய வட்டித் தொகை (₹ Interest Paid):", min_value=0.0, step=100.0)
+                                    
+                                    if st.form_submit_button("🏢 வட்டி செலுத்தி HQ பெட்டகத்திற்கு திருப்பு"):
+                                        supabase.table("gold_loans").update({
+                                            "packet_location": "AT_HQ_VAULT",
+                                            "repledge_bank": None,
+                                            "repledge_loan_no": None,
+                                            "repledge_amount": 0.0,
+                                            "repledge_interest_paid": int_paid_in,
+                                            "packet_updated_at": datetime.now().isoformat()
+                                        }).eq("id", rpk["id"]).execute()
+                                        st.success(f"{rpk['loan_no']} மீட்கப்பட்டு HQ பெட்டகத்திற்கு மாற்றப்பட்டது! (செலுத்திய வட்டி: ₹{int_paid_in:,.2f})")
+                                        st.rerun()
 
             # -------------------------------------------------------------------------
             # டேப் 3: கிளைகளின் வாடிக்கையாளர் மீட்புக் கோரிக்கைகள்
@@ -4795,12 +4807,12 @@ else:
                 if not hq_hold_loans:
                     st.info("தலைமையகத்தில் கோருவதற்கு பாக்கெட்கள் ஏதும் நிலுவையில் இல்லை.")
                 else:
-                    st.caption("வாடிக்கையாளர் கடனை அடைக்க வரும்போது தலைமையக பெட்டகம் அல்லது வங்கி லாக்கரில் உள்ள நகையைக் கோரலாம்:")
+                    st.caption("வாடிக்கையாளர் கடனை அடைக்க வரும்போது தலைமையகப் பாதுகாப்பில் உள்ள நகையைக் கோரலாம்:")
                     for hl in hq_hold_loans:
                         h1, h2, h3 = st.columns([3, 4, 3])
                         h1.write(f"🏷️ **{hl['loan_no']}**")
-                        loc_name = "🏢 HQ பெட்டகம்" if hl.get("packet_location") == "AT_HQ_VAULT" else f"🏦 {hl.get('repledge_bank', 'வங்கி')} லாக்கர்"
-                        h2.write(f"எடை: **{hl['gross_weight']}g** | இருப்பிடம்: **{loc_name}**")
+                        # 🔒 ரகசியப் பாதுகாப்பு: எந்த வங்கியின் பெயரும் தெரியாது!
+                        h2.write(f"எடை: **{hl['gross_weight']}g** | இருப்பிடம்: 🏢 **தலைமையகப் பாதுகாப்பில் உள்ளது**")
                         if h3.button("🚨 தலைமையகத்திடம் கோரு", key=f"br_req_l_{hl['id']}"):
                             supabase.table("gold_loans").update({
                                 "release_requested": True,
@@ -4831,7 +4843,7 @@ else:
                             }).eq("id", tb["id"]).execute()
                             st.success(f"{tb['loan_no']} வாடிக்கையாளரிடம் வெற்றிகரமாக ஒப்படைக்கப்பட்டது!")
                             st.rerun()
-                            
+
         # Tab 6: காரணப் பணியாளர் அறிக்கை
         with branch_tab6:
             render_staff_attribution_report(selected_branch_id=st.session_state.branch_id)
