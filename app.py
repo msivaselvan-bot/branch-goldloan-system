@@ -2321,17 +2321,40 @@ else:
             st.caption("கிளைகள் ➔ தலைமையகம் ➔ வங்கி லாக்கர் பாக்கெட் நகர்வுகள் மற்றும் ஜிபி உருக்குதல்/மறுவிற்பனை கண்காணிப்பு.")
 
             # 1. கிளைகள் மேப்பிங்
-            b_res = supabase.table("branches").select("id, branch_name, branch_code").execute()
-            b_map_name = {b["id"]: f"{b['branch_name']} ({b.get('branch_code', 'BR')})" for b in (b_res.data or [])}
+            try:
+                b_res = supabase.table("branches").select("id, branch_name, branch_code").execute()
+                b_map_name = {b["id"]: f"{b['branch_name']} ({b.get('branch_code', 'BR')})" for b in (b_res.data or [])}
+            except Exception:
+                b_map_name = {}
 
-            # 2. நடப்பு பாக்கெட்கள் விவரங்களை எடுத்தல்
-            loans_pkt_res = supabase.table("gold_loans").select("id, loan_no, branch_id, gross_weight, net_weight, ornament_details, packet_location, repledge_bank, repledge_loan_no, repledge_amount, release_requested, release_request_date, status").execute()
-            all_loan_pkts = [p for p in (loans_pkt_res.data or []) if p.get("status") != "Closed"]
+            # 2. நடப்பு பாக்கெட்கள் விவரங்களை எடுத்தல் (select("*") மூலம் அனைத்து புதிய பத்திகளும் வந்துவிடும்)
+            try:
+                loans_pkt_res = supabase.table("gold_loans").select("*").neq("status", "Closed").execute()
+                all_loan_pkts = loans_pkt_res.data or []
+            except Exception:
+                all_loan_pkts = []
 
-            gp_pkt_res = supabase.table("gold_purchases").select("id, gp_no, branch_id, gross_weight, net_weight, packet_location, disposal_type, melting_batch_no, melting_loss_weight, pure_gold_obtained").execute()
-            all_gp_pkts = gp_pkt_res.data or []
+            # 3. GP கொள்முதல் பாக்கெட்கள்
+            try:
+                gp_pkt_res = supabase.table("gold_purchases").select("*").execute()
+                raw_gps = gp_pkt_res.data or []
+                all_gp_pkts = []
+                for g in raw_gps:
+                    gp_id = (
+                        g.get("gp_no") 
+                        or g.get("bill_no") 
+                        or g.get("purchase_no") 
+                        or g.get("voucher_no") 
+                        or f"GP-{g.get('id', '')}"
+                    )
+                    g["gp_no"] = gp_id
+                    all_gp_pkts.append(g)
+            except Exception:
+                all_gp_pkts = []
 
+            # =========================================================================
             # 3. தலைமை நிலவரக் கார்டுகள் (Top Status KPI Metrics)
+            # =========================================================================
             cnt_branch = sum(1 for p in all_loan_pkts if p.get("packet_location", "AT_BRANCH") == "AT_BRANCH") + sum(1 for g in all_gp_pkts if g.get("packet_location", "AT_BRANCH") == "AT_BRANCH")
             cnt_transit_hq = sum(1 for p in all_loan_pkts if p.get("packet_location") == "IN_TRANSIT_TO_HQ") + sum(1 for g in all_gp_pkts if g.get("packet_location") == "IN_TRANSIT_TO_HQ")
             cnt_hq_vault = sum(1 for p in all_loan_pkts if p.get("packet_location") == "AT_HQ_VAULT") + sum(1 for g in all_gp_pkts if g.get("packet_location") == "AT_HQ_VAULT" and g.get("disposal_type") == "PENDING")
@@ -2339,21 +2362,33 @@ else:
             repledge_pkts = [p for p in all_loan_pkts if p.get("packet_location") == "IN_BANK_LOCKER"]
             tot_repledge_amt = sum(float(p.get("repledge_amount", 0) or 0) for p in repledge_pkts)
             
+            # 🌟 கிளைகளின் மீட்புக் கோரிக்கைகள் & திருப்பி அனுப்ப அனுமதி கோரிய பாக்கெட்கள்:
             urgent_requests = [p for p in all_loan_pkts if p.get("release_requested")]
+            ret_requests = [p for p in all_loan_pkts if p.get("return_request_status") == "REQUESTED"]
+            total_branch_alerts = len(urgent_requests) + len(ret_requests)
 
+            # 5 கார்டுகள் வரிசை
             k1, k2, k3, k4, k5 = st.columns(5)
             k1.metric("📍 கிளைகளில் உள்ளவை", f"{cnt_branch} பாக்கெட்கள்")
             k2.metric("🚚 HQ-க்கு வழியில்", f"{cnt_transit_hq} பாக்கெட்கள்")
             k3.metric("🏢 HQ பெட்டக இருப்பு", f"{cnt_hq_vault} பாக்கெட்கள்")
             k4.metric("🏦 வங்கி லாக்கரில்", f"{len(repledge_pkts)} பாக்கெட்கள்", f"கடன்: ₹{tot_repledge_amt:,.0f}")
-            k5.metric("🚨 மீட்புக் கோரிக்கைகள்", f"{len(urgent_requests)} பாக்கெட்கள்", delta="அவசரம்" if urgent_requests else "இல்லை")
+            
+            # 🌟 5-வது கார்டு: மீட்பு + திருப்புதல் இரண்டையும் காட்டும் நேரடி அலர்ட்
+            k5.metric(
+                "🚨 கிளைக் கோரிக்கைகள்", 
+                f"{total_branch_alerts} பாக்கெட்கள்", 
+                delta=f"மீட்பு: {len(urgent_requests)} | திருப்புதல்: {len(ret_requests)}" if total_branch_alerts > 0 else "நிலுவை இல்லை"
+            )
             st.markdown("---")
 
+            # =========================================================================
             # 4. மேலாண்மை உள்-டேப்கள் (Management Sub-Tabs)
+            # =========================================================================
             p_tab1, p_tab2, p_tab3, p_tab4, p_tab5 = st.tabs([
                 "📥 1. கிளைகளிலிருந்து பெறுதல் (Receive at HQ)",
                 "🏦 2. வங்கி லாக்கர் (Re-Pledge)",
-                "🚚 3. கிளைகளின் மீட்புக் கோரிக்கைகள் (Dispatch to Branch)",
+                "🚚 3. கிளைகளின் மீட்புக் கோரிக்கைகள் & திருப்புதல் அனுமதி",
                 "🔥 4. GP உருக்குதல் & மறுவிற்பனை",
                 "🔍 5. அனைத்து பாக்கெட் தேடல்"
             ])
