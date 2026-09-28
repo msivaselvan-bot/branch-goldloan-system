@@ -3109,14 +3109,13 @@ else:
         # 🌟 பல்க் RD & FD பதிவேற்ற மேசை (Bulk Upload Desk)
         # -----------------------------------------------------------------
         with tab_bulk_rdfd:
-            st.subheader("📤 அனைத்துக் கிளைகளுக்குமான RD / FD கணக்குகளைப் பல்க்காக ஏற்றுதல் (Multi-Branch Bulk Import)")
-            st.caption("ஒரே எக்செல் கோப்பில் அனைத்துக் கிளைகளின் தரவுகளையும் பதிவேற்றி தானியங்கி கிளைக் குறியீட்டுடன் கணக்கு எண்களை உருவாக்கலாம்.")
+            st.subheader("📤 பழைய RD / FD கணக்குகளைப் பல்க்காக ஏற்றுதல் (Multi-Branch Bulk Import)")
+            st.caption("பழைய பாஸ்புக் கணக்கு எண்களுடன் அனைத்துக் கிளைகளின் தரவுகளையும் ஒரே எக்செல் கோப்பில் பதிவேற்றலாம்.")
 
             # 1. கிளைகள் மாஸ்டர் விவரங்களை எடுத்தல்
             branches_res = supabase.table("branches").select("id, branch_name, branch_code").execute()
             all_branches = branches_res.data or []
             
-            # கிளை பெயர் & குறியீட்டு மேப்பிங்
             branch_lookup = {}
             branch_code_map = {}
             for b in all_branches:
@@ -3128,10 +3127,10 @@ else:
                 branch_lookup[bcode.lower()] = bid
                 branch_code_map[bid] = bcode
 
-            # 2. அனைத்துக் கிளைகளுக்கான மாதிரி எக்செல் டெம்ப்ளேட் டவுன்லோட்
-            sample_csv = "Type,Branch,Name,Mobile,Amount,Scheme,Nominee,Relation,Age,Address\nRD,Aundivilai,ரமேஷ்,9876543210,1000,Regular RD,சுதா,மனைவி,32,ஆவுடையாள்புரம்\nFD,Thingalnagar,சுரேஷ்,9876543211,25000,Special FD,கார்த்திக்,மகன்,12,திங்கள்நகர்\nRD,KMK,முருகன்,9876543212,2000,Regular RD,வள்ளி,மனைவி,28,கீழமணக்குடி"
+            # 2. மாதிரி எக்செல் டெம்ப்ளேட் டவுன்லோட் வசதி
+            sample_csv = "Type,Branch,Account_No,Name,Mobile,Amount,Scheme,Nominee,Relation,Age,Address\nRD,Aundivilai,AVL/RD/0001,ரமேஷ்,9876543210,1000,Regular RD,சுதா,மனைவி,32,ஆவுடையாள்புரம்\nFD,Thingalnagar,TNG/FD/0001,சுரேஷ்,9876543211,25000,Special FD,கார்த்திக்,மகன்,12,திங்கள்நகர்\nRD,KMK,KMK/RD/0001,முருகன்,9876543212,2000,Regular RD,வள்ளி,மனைவி,28,கீழமணக்குடி"
             st.download_button(
-                "📥 அனைத்துக் கிளை மாதிரி எக்செல் (Multi-Branch Template) பதிவிறக்குக",
+                "📥 மாதிரி எக்செல் டெம்ப்ளேட் (Template CSV with Account_No) பதிவிறக்குக",
                 data=sample_csv.encode("utf-8-sig"),
                 file_name="All_Branches_RD_FD_Template.csv",
                 mime="text/csv"
@@ -3149,17 +3148,17 @@ else:
                     else:
                         df = pd.read_excel(uploaded_file, dtype=str)
 
-                    # காலம்களின் பெயர்களைச் சீரமைத்தல்
-                    df.columns = [str(c).strip().lower() for c in df.columns]
+                    # தலைப்புகளைச் சீரமைத்தல்
+                    df.columns = [str(c).strip().lower().replace(" ", "_") for c in df.columns]
                     st.write(f"📊 கண்டறியப்பட்ட மொத்தப் பதிவுகள்: **{len(df)}**")
                     st.dataframe(df.head(5), use_container_width=True)
 
                     # 4. பதிவேற்றும் பட்டன்
-                    if st.button("🚀 அனைத்துக் கிளைகளுக்கும் டேட்டாபேஸில் ஏற்று (Start Multi-Branch Import)", type="primary"):
+                    if st.button("🚀 பழைய கணக்குகளை டேட்டாபேஸில் ஏற்று (Start Multi-Branch Import)", type="primary"):
                         progress_bar = st.progress(0)
                         status_text = st.empty()
 
-                        # கிளை வாரியாக நடப்பு அதிகபட்ச எண்களை எடுக்கும் ஃபங்க்ஷன்
+                        # கிளை வாரியாக நடப்பு அதிகபட்ச எண்களை எடுக்கும் ஃபங்க்ஷன் (Fallback தேவைப்பட்டால்)
                         def fetch_max_seq(b_id, b_code, acc_type):
                             table_name = "recurring_deposits" if acc_type == "RD" else "fixed_deposits"
                             col_name = "rd_account_no" if acc_type == "RD" else "fd_account_no"
@@ -3176,19 +3175,29 @@ else:
                             except Exception:
                                 return 0
 
-                        # ஒவ்வொரு கிளைக்கும் தனித்தனி கவுண்ட்டர் டிக்ஷனரி
                         rd_counters = {}
                         fd_counters = {}
 
-                        # ஏற்கனவே உள்ள வாடிக்கையாளர்கள் (Mobile -> Customer ID Map)
+                        # ஏற்கனவே உள்ள வாடிக்கையாளர்கள் கேச் (Mobile -> Customer ID Map)
                         cust_res = supabase.table("customers").select("id, mobile, branch_id").execute()
                         cust_cache = {str(c["mobile"]).strip()[-10:]: c["id"] for c in (cust_res.data or []) if c.get("mobile")}
+
+                        # ஏற்கனவே உள்ள கணக்கு எண்களை எடுத்தல் (Duplicate தவிர்ப்பு)
+                        existing_rd_res = supabase.table("recurring_deposits").select("rd_account_no").execute()
+                        existing_rds = {str(r["rd_account_no"]).strip() for r in (existing_rd_res.data or []) if r.get("rd_account_no")}
+                        
+                        existing_fd_res = supabase.table("fixed_deposits").select("fd_account_no").execute()
+                        existing_fds = {str(f["fd_account_no"]).strip() for f in (existing_fd_res.data or []) if f.get("fd_account_no")}
 
                         success_rd = 0
                         success_fd = 0
                         skipped_rows = 0
                         total_rows = len(df)
                         error_list = []
+
+                        # எக்செல் காலம்களைத் தானாக அடையாளம் காணுதல்
+                        cols = list(df.columns)
+                        acc_col = next((c for c in cols if any(k in c for k in ['account_no', 'account', 'acc_no', 'rd_no', 'fd_no', 'கணக்கு'])), None)
 
                         for idx, row in df.iterrows():
                             row_type = str(row.get("type", "")).strip().upper()
@@ -3229,8 +3238,39 @@ else:
                             if not address or address.lower() == 'nan':
                                 address = f"Branch {target_b_code}"
 
+                            # =========================================================
+                            # 🌟 1. பழைய கணக்கு எண் (Account Number) பிரித்தெடுத்தல்:
+                            # =========================================================
+                            raw_acc_no = str(row.get(acc_col, "")).strip() if acc_col and pd.notna(row.get(acc_col)) else ""
+                            if raw_acc_no.endswith(".0"):
+                                raw_acc_no = raw_acc_no[:-2]
+
+                            if raw_acc_no and raw_acc_no.lower() != 'nan':
+                                # வெறும் எண்ணாக இருந்தால் (எ.கா: 5 -> AVL/RD/0005 என மாற்றுதல்)
+                                if raw_acc_no.isdigit():
+                                    acc_no = f"{target_b_code}/{row_type}/{int(raw_acc_no):04d}"
+                                else:
+                                    acc_no = raw_acc_no
+                            else:
+                                # எக்செல்-ல் விடுபட்டிருந்தால் தானியங்கி எண் உருவாக்கம்:
+                                if row_type == "RD":
+                                    if target_b_id not in rd_counters:
+                                        rd_counters[target_b_id] = fetch_max_seq(target_b_id, target_b_code, "RD")
+                                    rd_counters[target_b_id] += 1
+                                    acc_no = f"{target_b_code}/RD/{rd_counters[target_b_id]:04d}"
+                                else:
+                                    if target_b_id not in fd_counters:
+                                        fd_counters[target_b_id] = fetch_max_seq(target_b_id, target_b_code, "FD")
+                                    fd_counters[target_b_id] += 1
+                                    acc_no = f"{target_b_code}/FD/{fd_counters[target_b_id]:04d}"
+
+                            # ஏற்கனவே பதிவாகியிருந்தால் தவிர்த்தல்
+                            if (row_type == "RD" and acc_no in existing_rds) or (row_type == "FD" and acc_no in existing_fds):
+                                skipped_rows += 1
+                                continue
+
                             try:
-                                # 1. வாடிக்கையாளர் உள்ளாரா எனப் பார்த்தல் (இல்லையெனில் உடனே உருவாக்குதல்)
+                                # 2. வாடிக்கையாளர் உள்ளாரா எனப் பார்த்தல் (இல்லையெனில் உடனே உருவாக்குதல்)
                                 c_id = cust_cache.get(mobile)
                                 if not c_id:
                                     new_c_code = f"{target_b_code}-{(idx + 1):03d}"
@@ -3249,7 +3289,7 @@ else:
                                         c_id = new_cust.data[0]["id"]
                                         cust_cache[mobile] = c_id
 
-                                # 2. மைக்ரேஷன் வருகைப் பதிவு உருவாக்குதல்
+                                # 3. மைக்ரேஷன் வருகைப் பதிவு உருவாக்குதல்
                                 v_no = f"MIG-{target_b_code}-{row_type}-{idx+1:04d}"
                                 visit_payload = {
                                     "visit_no": v_no,
@@ -3267,20 +3307,13 @@ else:
                                 v_insert = supabase.table("customer_visits").insert(visit_payload).execute()
                                 new_visit_id = v_insert.data[0]["id"]
 
-                                # 3. கணக்கு எண் தயாரித்துச் சேமித்தல்
+                                # 4. கணக்கு எண்ணுடன் பிரத்யேக அட்டவணைகளில் சேமித்தல்
                                 if row_type == "RD":
-                                    if target_b_id not in rd_counters:
-                                        rd_counters[target_b_id] = fetch_max_seq(target_b_id, target_b_code, "RD")
-                                    
-                                    rd_counters[target_b_id] += 1
-                                    acc_no = f"{target_b_code}/RD/{rd_counters[target_b_id]:04d}"
-                                    txn_type_label = "RD Open (புதிய RD சேமிப்பு)"
-
                                     rd_payload = {
                                         "visit_id": new_visit_id,
                                         "branch_id": target_b_id,
                                         "customer_id": c_id,
-                                        "rd_account_no": acc_no,
+                                        "rd_account_no": acc_no,  # 👈 பழைய கணக்கு எண் பதிவாகிறது
                                         "monthly_installment": amount,
                                         "tenure_months": 12,
                                         "interest_rate": 12.0,
@@ -3291,21 +3324,16 @@ else:
                                         "status": "Active"
                                     }
                                     supabase.table("recurring_deposits").insert(rd_payload).execute()
+                                    existing_rds.add(acc_no)
                                     success_rd += 1
+                                    txn_type_label = "RD Open (புதிய RD சேமிப்பு)"
 
                                 else:  # FD கணக்கு
-                                    if target_b_id not in fd_counters:
-                                        fd_counters[target_b_id] = fetch_max_seq(target_b_id, target_b_code, "FD")
-                                    
-                                    fd_counters[target_b_id] += 1
-                                    acc_no = f"{target_b_code}/FD/{fd_counters[target_b_id]:04d}"
-                                    txn_type_label = "FD Open (புதிய வைப்பு நிதி)"
-
                                     fd_payload = {
                                         "visit_id": new_visit_id,
                                         "branch_id": target_b_id,
                                         "customer_id": c_id,
-                                        "fd_account_no": acc_no,
+                                        "fd_account_no": acc_no,  # 👈 பழைய கணக்கு எண் பதிவாகிறது
                                         "deposit_amount": amount,
                                         "tenure_months": 12,
                                         "interest_rate": 12.0,
@@ -3315,9 +3343,11 @@ else:
                                         "status": "Active"
                                     }
                                     supabase.table("fixed_deposits").insert(fd_payload).execute()
+                                    existing_fds.add(acc_no)
                                     success_fd += 1
+                                    txn_type_label = "FD Open (புதிய வைப்பு நிதி)"
 
-                                # 4. transactions அட்டவணையில் பதிவு
+                                # 5. transactions அட்டவணையில் பதிவு
                                 txn_payload = {
                                     "visit_id": new_visit_id,
                                     "branch_id": target_b_id,
@@ -3338,16 +3368,16 @@ else:
                                 supabase.table("transactions").insert(txn_payload).execute()
 
                             except Exception as row_e:
-                                error_list.append(f"வரிசை {idx+1} ({name}) பிழை: {row_e}")
+                                error_list.append(f"கணக்கு {acc_no} ({name}) பிழை: {row_e}")
 
                             # முன்னேற்றப் பட்டி (Progress)
                             progress_bar.progress((idx + 1) / total_rows)
-                            status_text.text(f"ஏற்றப்படுகிறது... ({idx+1}/{total_rows}) - {name} ({target_b_code})")
+                            status_text.text(f"ஏற்றப்படுகிறது... ({idx+1}/{total_rows}) - {name} ({acc_no})")
 
                         status_text.empty()
-                        st.success(f"🎉 அனைத்துக் கிளைகளுக்கும் சேர்த்து வெற்றிகரமாக **{success_rd} RD** மற்றும் **{success_fd} FD** கணக்குகள் ஏற்றப்பட்டன!")
+                        st.success(f"🎉 பழைய எண்களுடன் வெற்றிகரமாக **{success_rd} RD** மற்றும் **{success_fd} FD** கணக்குகள் டேட்டாபேஸில் ஏற்றப்பட்டன!")
                         if skipped_rows > 0:
-                            st.info(f"ℹ️ தவிர்க்கப்பட்ட வரிசைகள்: **{skipped_rows}**")
+                            st.info(f"ℹ️ ஏற்கனவே பதிவானதால் / விடுபட்டதால் தவிர்க்கப்பட்டவை: **{skipped_rows}**")
                         if error_list:
                             with st.expander("⚠️ பிழை விவரங்களைக் காண்க"):
                                 for err in error_list[:15]:
