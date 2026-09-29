@@ -1767,45 +1767,94 @@ branch_id_to_name = {b["id"]: b["branch_name"] for b in branches_data} if branch
 if not st.session_state.logged_in:
     col_left, col_center, col_right = st.columns([1.2, 1.4, 1.2])
     with col_center:
-        st.markdown("""
+        st.markdown(
+            """
         <div class="login-box">
             <h3>🏦 Muthusise Gold Product Data Center </h3>
             <p>பணியாளர் பாதுகாப்பான உள்நுழைவு</p>
         </div>
-        """, unsafe_allow_html=True)
+        """,
+            unsafe_allow_html=True,
+        )
 
         with st.form("login_form"):
-            username = st.text_input("பயனர் பெயர் (Username)", placeholder="Username")
-            password = st.text_input("கடவுச்சொல் (Password)", type="password", placeholder="Password")
-            submitted = st.form_submit_button("உள்நுழைக (Login)", use_container_width=True, type="primary")
+            username = st.text_input(
+                "பயனர் பெயர் (Username)", placeholder="Username"
+            )
+            password = st.text_input(
+                "கடவுச்சொல் (Password)", type="password", placeholder="Password"
+            )
+            submitted = st.form_submit_button(
+                "உள்நுழைக (Login)", use_container_width=True, type="primary"
+            )
 
             if submitted:
                 if username.strip() and password.strip():
                     try:
-                        res = supabase.table("users").select("*").eq("username", username.strip()).execute()
+                        res = (
+                            supabase.table("users")
+                            .select("*")
+                            .eq("username", username.strip())
+                            .execute()
+                        )
                         if res.data:
                             user_info = res.data[0]
-                            db_pass = str(user_info.get("password_hash") or "").strip()
-                            
+                            db_pass = str(
+                                user_info.get("password_hash") or ""
+                            ).strip()
+
                             if db_pass == password.strip():
                                 role = user_info["role"]
                                 b_id = user_info.get("branch_id")
-                                
+
                                 if role in ["Admin", "Auditor", "Operations"]:
                                     b_name = f"Head Office / {role}"
                                 else:
                                     b_name = "ஒதுக்கப்படாத கிளை"
                                     if b_id:
-                                        b_res = supabase.table("branches").select("branch_name").eq("id", b_id).execute()
+                                        b_res = (
+                                            supabase.table("branches")
+                                            .select("branch_name")
+                                            .eq("id", b_id)
+                                            .execute()
+                                        )
                                         if b_res.data:
-                                            b_name = b_res.data[0].get("branch_name", "கிளை")
+                                            b_name = b_res.data[0].get(
+                                                "branch_name", "கிளை"
+                                            )
 
+                                # --- 🌟 பர்மிஷன் மற்றும் செஷன் விவரங்களை அமைத்தல் ---
                                 st.session_state.logged_in = True
                                 st.session_state.user_role = role
                                 st.session_state.branch = b_name
                                 st.session_state.branch_id = b_id
                                 st.session_state.username = user_info["name"]
-                                st.session_state.profile_image = user_info.get("profile_image_url")
+                                st.session_state.profile_image = user_info.get(
+                                    "profile_image_url"
+                                )
+
+                                # அட்மின் என்றால் அனைத்துப் பிரிவுகளுக்கும் அனுமதி உண்டு
+                                st.session_state["is_admin"] = role == "Admin"
+
+                                # Supabase டேபிளில் இருந்து பர்மிஷன் பட்டியலை எடுத்தல்
+                                fetched_perms = user_info.get(
+                                    "permissions", []
+                                )
+
+                                # ஒருவேளை டேட்டாபேஸில் String-ஆக சேமிக்கப்பட்டிருந்தால் List-ஆக மாற்றுதல்
+                                if isinstance(fetched_perms, str):
+                                  import json
+
+                                  try:
+                                    fetched_perms = json.loads(fetched_perms)
+                                  except:
+                                    fetched_perms = []
+
+                                st.session_state["user_permissions"] = (
+                                    fetched_perms
+                                )
+                                # ----------------------------------------------------
+
                                 st.rerun()
                             else:
                                 st.error("தவறான கடவுச்சொல்!")
@@ -1814,7 +1863,9 @@ if not st.session_state.logged_in:
                     except Exception as e:
                         st.error(f"பிழை: {e}")
                 else:
-                    st.warning("தயவுசெய்து பயனர் பெயர் மற்றும் கடவுச்சொல்லை உள்ளிடவும்.")
+                    st.warning(
+                        "தயவுசெய்து பயனர் பெயர் மற்றும் கடவுச்சொல்லை உள்ளிடவும்."
+                    )
 
 # ==========================================
 # 6. முதன்மை திரை
@@ -1847,38 +1898,43 @@ else:
 
     st.markdown("---")
 
-    # ----------------------------------------------------
-    # A. நிர்வாக மேலாண்மை திரை (ADMIN PANEL WITH 11 FULL TABS)
-    # ----------------------------------------------------
-    if st.session_state.user_role == "Admin":
-        st.header("⚙️ நிர்வாக மேலாண்மை (Admin Control Panel)")
-        
-        # 🌟 14 டேப்களையும் சுமை இல்லாமல் இயக்கும் அதிவேக மெனு:
-        admin_menu = [
-            "🏢 நேரடி கல்லா & தினசரி வணிகம்",
-            "📦 பாக்கெட் & லாக்கர் மேலாண்மை",
-            "🏢 கிளைகள்",
-            "👥 பணியாளர்கள்",
-            "📋 ஸ்கீம்கள் மேலாண்மை (Pledge, FD, RD)",
-            "🎯 இன்சென்டிவ் & புள்ளி விதிகள்",
-            "📥 மொத்தப் பதிவேற்றம்",
-            "🗂️ வாடிக்கையாளர் மேலாண்மை",
-            "📊 வருகை & பரிவர்த்தனை திருத்தம்",
-            "💰 கிளை துவக்க இருப்பு & கல்லா",
-            "🏦 தலைமையக பணப் பரிமாற்றம்",
-            "📈 காரணப் பணியாளர் அறிக்கை",
-            "🪙 நகைக் கடன் மேலாண்மை",
-            "📤 பல்க் RD / FD பதிவேற்றம்"
-        ]
-        
-        # நீங்கள் பட்டன்களாகப் பார்க்க விரும்பினால் st.radio, அல்லது டிராப்டவுனாக விரும்பினால் st.selectbox:
-        selected_admin_tab = st.radio("📌 நிர்வாகப் பிரிவு தேர்வு:", admin_menu, horizontal=True)
-        st.markdown("---")
+# ----------------------------------------------------
+# A. நிர்வாக மேலாண்மை திரை (ADMIN PANEL WITH PERMISSION FILTERING)
+# ----------------------------------------------------
 
-        # ==============================================================================
-        # 🏢 அனைத்துக் கிளைகள் நேரடி கல்லா & தினசரி வணிக அறிக்கை (Multi-Branch Dashboard)
-        # ==============================================================================
-        if selected_admin_tab == "🏢 நேரடி கல்லா & தினசரி வணிகம்": 
+# 1. நிறுவனத்தின் அனைத்து நிர்வாகப் பிரிவுகளின் பட்டியல் (Emojis உடன்)
+all_admin_sections = [
+    "🏢 நேரடி கல்லா & தினசரி வணிகம்",
+    "📦 பாக்கெட் & லாக்கர் மேலாண்மை",
+    "🏢 கிளைகள்",
+    "👥 பணியாளர்கள்",
+    "📋 ஸ்கீம்கள் மேலாண்மை (Pledge, FD, RD)",
+    "🎯 இன்சென்டிவ் & புள்ளி விதிகள்",
+    "📥 மொத்தப் பதிவேற்றம்",
+    "🗂️ வாடிக்கையாளர் மேலாண்மை",
+    "📊 வருகை & பரிவர்த்தனை திருத்தம்",
+    "💰 கிளை துவக்க இருப்பு & கல்லா",
+    "🏦 தலைமையக பணப் பரிமாற்றம்",
+    "📈 காரணப் பணியாளர் அறிக்கை",
+    "🪙 நகைக் கடன் மேலாண்மை",
+    "📤 பல்க் RD / FD பதிவேற்றம்"
+]
+
+# 2. அட்மின் என்றால் அனைத்துப் பிரிவுகளும் கிடைக்கும்; மற்றவர்களுக்கு அவர்களின் பர்மிஷன் மட்டும்
+if st.session_state.get('is_admin', False) or st.session_state.get('user_role') == "Admin":
+    allowed_sections = all_admin_sections
+else:
+    staff_perms = st.session_state.get('user_permissions', [])
+    # பணியாளருக்கு அனுமதிக்கப்பட்ட பிரிவுகள் மட்டும் (Emojis பொருத்தத்துடன் சரிபார்க்கப்படும்)
+    allowed_sections = [sec for sec in all_admin_sections if any(p in sec for p in staff_perms)]
+
+# 3. மெனுவைக் காட்டுதல் மற்றும் பிரிவுகளுக்கு ஏற்ப செயல்படுத்துதல்
+if allowed_sections:
+    st.header("⚙️ நிர்வாக மேலாண்மை (Admin Control Panel)")
+    selected_section = st.radio("நிர்வாகப் பிரிவு தேர்வு:", allowed_sections, horizontal=True)
+    
+    # தேர்ந்தெடுக்கப்பட்ட பிரிவிற்கான உங்களின் பழைய if / elif நிபந்தனைகள்:
+    if selected_section == "🏢 நேரடி கல்லா & தினசரி வணிகம்": 
             st.subheader("🏢 அனைத்துக் கிளைகள் நேரடி கல்லா, வங்கி & வணிக அறிக்கை")
             st.caption("நிறுவனத்தின் நேரடி கல்லா இருப்பு, வங்கிப் புழக்கம், தலைமையகப் பணப் பரிமாற்றம் மற்றும் கிளைச் செலவுகளின் முழுமையான நிதிச் சமரசம்.")
 
@@ -2331,7 +2387,7 @@ else:
         # ==============================================================================
         # 📦 தலைமையக நகைப் பெட்டகம், லாக்கர் & GP உருக்குதல் மேலாண்மை
         # ==============================================================================
-        elif selected_admin_tab == "📦 பாக்கெட் & லாக்கர் மேலாண்மை":
+        elif selected_section == "📦 பாக்கெட் & லாக்கர் மேலாண்மை":
             st.subheader("📦 நகைப் பாக்கெட் நகர்வு, வங்கி லாக்கர் & GP உருக்குதல் மேலாண்மை")
             st.caption("கிளைகள் ➔ தலைமையகம் ➔ வங்கி லாக்கர் பாக்கெட் நகர்வுகள் மற்றும் ஜிபி உருக்குதல்/மறுவிற்பனை கண்காணிப்பு.")
 
@@ -2664,7 +2720,7 @@ else:
 
                 st.dataframe(df_pkt_all, use_container_width=True)
 
-        elif selected_admin_tab == "🏢 கிளைகள்":
+        elif selected_section == "🏢 கிளைகள்":
             st.subheader("➕ புதிய கிளை சேர்த்தல்")
             with st.form("admin_add_branch_form", clear_on_submit=True):
                 b_name = st.text_input("கிளையின் பெயர்", placeholder="எ.கா: திங்கள்நகர் கிளை")
@@ -2682,9 +2738,12 @@ else:
             if b_list_res.data:
                 st.dataframe(pd.DataFrame(b_list_res.data), use_container_width=True)
 
-        elif selected_admin_tab == "👥 பணியாளர்கள்":
+        elif selected_section == "👥 பணியாளர்கள்":
             st.subheader("👥 பணியாளர்கள் பட்டியல் & சேர்த்தல்")
-            users_res = supabase.table("users").select("id, name, username, role, branch_id, is_active").order("id").execute()
+            
+            # 1. அனைத்து பயனர்களின் விவரங்களையும் டேட்டாபேஸில் இருந்து எடுத்தல் (permissions உடன் சேர்த்து)
+            users_res = supabase.table("users").select("id, name, username, role, branch_id, is_active, permissions").order("id").execute()
+            
             if users_res.data:
                 st.dataframe(pd.DataFrame([{
                     "ID": u["id"], "பெயர்": u["name"], "Username": u["username"], "பணி நிலை": u["role"],
@@ -2694,46 +2753,105 @@ else:
 
             st.markdown("---")
             sub_col1, sub_col2 = st.columns(2)
+            
+            # ----------------------------------------------------
+            # COL 1: புதிய பணியாளரை உருவாக்குவது
+            # ----------------------------------------------------
             with sub_col1:
                 with st.form("admin_add_user_form", clear_on_submit=True):
+                    st.markdown("#### ➕ புதிய பணியாளர் சேர்ப்பு")
                     u_name = st.text_input("முழுப் பெயர்")
                     u_username = st.text_input("உள்நுழைவு பெயர்")
                     u_pass = st.text_input("கடவுச்சொல்", type="password")
                     u_role = st.selectbox("பணி நிலை", ["Branch Head / Cashier", "Staff", "Operations", "Auditor", "Admin"])
                     b_selection = st.selectbox("கிளை", options=list(branch_options.keys()))
+                    
                     if st.form_submit_button("உருவாக்கு"):
                         if u_name.strip() and u_username.strip() and u_pass.strip():
                             b_id = branch_options.get(b_selection) if u_role not in ["Admin", "Auditor", "Operations"] else None
+                            # புதிய பயனருக்கு இயல்பாக அனைத்துப் பிரிவுகளும் அல்லது காலியான பர்மிஷன் கொடுக்கலாம்
                             supabase.table("users").insert({
-                                "name": u_name.strip(), "username": u_username.strip(),
-                                "password_hash": u_pass.strip(), "role": u_role, "branch_id": b_id, "is_active": True
+                                "name": u_name.strip(), 
+                                "username": u_username.strip(),
+                                "password_hash": u_pass.strip(), 
+                                "role": u_role, 
+                                "branch_id": b_id, 
+                                "is_active": True,
+                                "permissions": [] # ஆரம்பத்தில் காலியாக இருக்கும், பின்னர் அட்மின் டிக் செய்து கொள்ளலாம்
                             }).execute()
                             st.success("பயனர் உருவாக்கப்பட்டுவிட்டார்!")
                             st.rerun()
 
+            # ----------------------------------------------------
+            # COL 2: பணியாளர் விவரங்கள் மற்றும் பர்மிஷன்களைத் திருத்துவது
+            # ----------------------------------------------------
             with sub_col2:
                 if users_res.data:
+                    st.markdown("#### ✏️ பணியாளர் திருத்தம் & அனுமதி மேலாண்மை")
                     user_choices = {f"{u['name']} (@{u['username']})": u for u in users_res.data}
                     selected_user_key = st.selectbox("திருத்த வேண்டிய பணியாளர்", list(user_choices.keys()))
                     curr_user = user_choices[selected_user_key]
+                    
+                    # பணியாளர் திருத்தும் ஃபார்ம்
                     with st.form("admin_edit_user_form"):
                         edit_name = st.text_input("பெயர்", value=curr_user["name"])
                         edit_pass = st.text_input("புதிய கடவுச்சொல் (விரும்பினால் மட்டும்)", type="password")
                         roles_list = ["Branch Head / Cashier", "Staff", "Operations", "Auditor", "Admin"]
-                        edit_role = st.selectbox("பணி நிலை", roles_list, index=roles_list.index(curr_user["role"]))
+                        edit_role = st.selectbox("பணி நிலை", roles_list, index=roles_list.index(curr_user["role"]) if curr_user["role"] in roles_list else 0)
                         edit_status = st.radio("நிலை", ["Active", "Inactive"], index=0 if curr_user.get("is_active", True) else 1)
-                        if st.form_submit_button("புதுப்பி"):
-                            up_data = {"name": edit_name.strip(), "role": edit_role, "is_active": edit_status == "Active"}
+                        
+                        # --- 🌟 குறிப்பிட்ட பணியாளருக்கான 14 பிரிவுகள் செக்பாக்ஸ்கள் ---
+                        st.markdown("---")
+                        st.write(f"**{curr_user['name']}** அவர்களுக்கான பிரிவு அனுமதிகள்:")
+                        
+                        current_perms = curr_user.get("permissions", [])
+                        if not isinstance(current_perms, list):
+                            current_perms = []
+                        
+                        # நிறுவனத்தின் 14 நிர்வாகப் பிரிவுகள்
+                        all_admin_sections = [
+                            "🏢 நேரடி கல்லா & தினசரி வணிகம்",
+                            "📦 பாக்கெட் & லாக்கர் மேலாண்மை",
+                            "🏢 கிளைகள்",
+                            "👥 பணியாளர்கள்",
+                            "📋 ஸ்கீம்கள் மேலாண்மை (Pledge, FD, RD)",
+                            "🎯 இன்சென்டிவ் & புள்ளி விதிகள்",
+                            "📥 மொத்தப் பதிவேற்றம்",
+                            "🗂️ வாடிக்கையாளர் மேலாண்மை",
+                            "📊 வருகை & பரிவர்த்தனை திருத்தம்",
+                            "💰 கிளை துவக்க இருப்பு & கல்லா",
+                            "🏦 தலைமையக பணப் பரிமாற்றம்",
+                            "📈 காரணப் பணியாளர் அறிக்கை",
+                            "🪙 நகைக் கடன் மேலாண்மை",
+                            "📤 பல்க் RD / FD பதிவேற்றம்"
+                        ]
+                        
+                        updated_perms = []
+                        for section in all_admin_sections:
+                            is_checked = section in current_perms
+                            # ஒவ்வொரு செக்பாக்ஸிற்கும் தனிப்பயன் key கொடுப்பது அவசியம்
+                            if st.checkbox(section, value=is_checked, key=f"perm_chk_{curr_user['id']}_{section}"):
+                                updated_perms.append(section)
+                        # ----------------------------------------------------------------
+                        
+                        if st.form_submit_button("புதுப்பி & அனுமதிகளைச் சேமி"):
+                            up_data = {
+                                "name": edit_name.strip(), 
+                                "role": edit_role, 
+                                "is_active": edit_status == "Active",
+                                "permissions": updated_perms  # டிக் செய்யப்பட்ட புதிய அனுமதிகள் சேமிக்கப்படும்
+                            }
                             if edit_pass.strip():
                                 up_data["password_hash"] = edit_pass.strip()
+                                
                             supabase.table("users").update(up_data).eq("id", curr_user["id"]).execute()
-                            st.success("புதுப்பிக்கப்பட்டது!")
+                            st.success("பணியாளர் விவரங்களும் அனுமதிகளும் வெற்றிகரமாகப் புதுப்பிக்கப்பட்டன!")
                             st.rerun()
 
         # -----------------------------------------------------------------
         # tab3: ஸ்கீம்கள் மேலாண்மை (Pledge RPG, FD, RD)
         # -----------------------------------------------------------------
-        elif selected_admin_tab == "📋 ஸ்கீம்கள் மேலாண்மை (Pledge, FD, RD)":
+        elif selected_section == "📋 ஸ்கீம்கள் மேலாண்மை (Pledge, FD, RD)":
             st.subheader("📋 ஸ்கீம்கள் மேலாண்மை (Pledge, FD & RD Scheme Master)")
             s_tab1, s_tab2, s_tab3 = st.tabs(["🪙 நகைக்கடன் திட்டங்கள் (Pledge)", "📑 FD திட்டங்கள்", "📈 RD திட்டங்கள்"])
 
@@ -2884,7 +3002,7 @@ else:
         # -----------------------------------------------------------------
         # tab4: இன்சென்டிவ் & புள்ளி விதிகள் (Delete / Edit / Multi-Scheme)
         # -----------------------------------------------------------------
-        elif selected_admin_tab == "🎯 இன்சென்டிவ் & புள்ளி விதிகள்":
+        elif selected_section == "🎯 இன்சென்டிவ் & புள்ளி விதிகள்":
             st.subheader("🎯 பணியாளர் இன்சென்டிவ் & புள்ளிகள் விதிகள் (Staff Incentive Master)")
             
             set_res = supabase.table("incentive_settings").select("*").eq("id", 1).execute().data
@@ -2980,7 +3098,7 @@ else:
                         st.success("விதி நீக்கப்பட்டது!")
                         st.rerun()
 
-        elif selected_admin_tab == "📥 மொத்தப் பதிவேற்றம்":
+        elif selected_section == "📥 மொத்தப் பதிவேற்றம்":
             st.subheader("📥 கிளை வாரியான பழைய வாடிக்கையாளர் இறக்குமதி (Branch-wise Bulk Import)")
             
             branch_res = supabase.table("branches").select("id, branch_name, branch_code").execute()
@@ -3167,7 +3285,7 @@ else:
         # -----------------------------------------------------------------
         # tab6: வாடிக்கையாளர் மேலாண்மை (Customer Management)
         # -----------------------------------------------------------------
-        elif selected_admin_tab == "🗂️ வாடிக்கையாளர் மேலாண்மை":
+        elif selected_section == "🗂️ வாடிக்கையாளர் மேலாண்மை":
             st.subheader("👥 வாடிக்கையாளர் மேலாண்மை (Customer Management)")
             
             b_data = supabase.table("branches").select("id, branch_name, branch_code").execute().data or []
@@ -3306,7 +3424,7 @@ else:
         # -----------------------------------------------------------------
         # tab7: வருகை, பரிவர்த்தனை & OTP விலக்கு அட்மின் ஒப்புதல் மேசை
         # -----------------------------------------------------------------
-        elif selected_admin_tab == "📊 வருகை & பரிவர்த்தனை திருத்தம்":
+        elif selected_section == "📊 வருகை & பரிவர்த்தனை திருத்தம்":
             st.subheader("📋 OTP விலக்குக் கோரிக்கைகள் (Admin Approval Desk)")
             
             # 🌟 எவ்வித Join-ம் இன்றி நேரடியாக எடுத்தல் (பிழையின்றி வர)
@@ -3403,7 +3521,7 @@ else:
         # -----------------------------------------------------------------
         # tab8: கிளை துவக்க இருப்பு நிர்ணயம் (Opening Stock with 8 Denominations)
         # -----------------------------------------------------------------
-        elif selected_admin_tab == "💰 கிளை துவக்க இருப்பு & கல்லா":
+        elif selected_section == "💰 கிளை துவக்க இருப்பு & கல்லா":
             st.subheader("💰 கிளை துவக்க இருப்பு நிர்ணயம்")
             
             sel_op_branch = st.selectbox("கிளையைத் தேர்ந்தெடுக்கவும் *:", list(branch_options.keys()), key="sel_op_b_direct")
@@ -3681,7 +3799,8 @@ else:
 
                 except Exception as e:
                     st.error(f"❌ கோப்பைப் பதிவேற்றுவதில் பிழை: {e}")
-        elif selected_admin_tab == "🏦 தலைமையக பணப் பரிமாற்றம்":
+
+        elif selected_section == "🏦 தலைமையக பணப் பரிமாற்றம்":
             st.subheader("🏦 தலைமையக பணப் பரிமாற்றம் (HO ⇄ Branch)")
             with st.form("adm_fund_form"):
                 ft_b = st.selectbox("கிளை:", list(branch_options.keys()))
@@ -3696,7 +3815,7 @@ else:
                     st.success("பதிவு செய்யப்பட்டது!")
                     st.rerun()
 
-        elif selected_admin_tab == "📈 காரணப் பணியாளர் அறிக்கை":
+        elif selected_section == "📈 காரணப் பணியாளர் அறிக்கை":
             rep_b_opts = ["அனைத்து கிளைகளும் (All Branches)"] + list(branch_options.keys())
             sel_rep_b = st.selectbox("கிளையை வடிகட்டவும்:", rep_b_opts, key="adm_rep_branch_sel")
             filter_b_id = branch_options.get(sel_rep_b) if sel_rep_b != "அனைத்து கிளைகளும் (All Branches)" else None
@@ -3705,7 +3824,7 @@ else:
         # -------------------------------------------------------------
         # 🪙 TAB 11: கிளை வாரியாக நகைக்கடன் மேலாண்மை (Foreign Key பிழையின்றி)
         # -------------------------------------------------------------
-        elif selected_admin_tab == "🪙 நகைக் கடன் மேலாண்மை":
+        elif selected_section == "🪙 நகைக் கடன் மேலாண்மை":
             st.subheader("📋 கிளை வாரியாக நகைக் கடன் மேலாண்மை & வரிசை எண் கட்டுப்பாடு")
             st.caption("பழைய மற்றும் புதிய கடன்களின் நகை விவரங்கள், எடை மற்றும் நிலையை ஆய்வு செய்யவும், திருத்தவும்.")
 
@@ -3926,7 +4045,7 @@ else:
         # -----------------------------------------------------------------
         # 🌟 பல்க் RD & FD பதிவேற்ற மேசை (Bulk Upload Desk)
         # -----------------------------------------------------------------
-        elif selected_admin_tab == "📤 பல்க் RD / FD பதிவேற்றம்":
+        elif selected_section == "📤 பல்க் RD / FD பதிவேற்றம்":
             st.subheader("📤 பழைய RD / FD கணக்குகளைப் பல்க்காக ஏற்றுதல் (Multi-Branch Bulk Import)")
             st.caption("பழைய பாஸ்புக் கணக்கு எண்களுடன் அனைத்துக் கிளைகளின் தரவுகளையும் ஒரே எக்செல் கோப்பில் பதிவேற்றலாம்.")
 
@@ -4248,6 +4367,8 @@ else:
 
                 except Exception as upload_err:
                     st.error(f"❌ கோப்பைப் பதிவேற்றுவதில் பிழை: {upload_err}")
+    else:
+    st.warning("⚠️ உங்களுக்கான நிர்வாகப் பிரிவுகள் எதுவும் ஒதுக்கப்படவில்லை. தயவுசெய்து தலைமை அலுவலகத்தை (Admin) அணுகவும்.")
 
     # ----------------------------------------------------
     # B. ஆப்பரேஷன்ஸ் திரை (OPERATIONS DESK)
