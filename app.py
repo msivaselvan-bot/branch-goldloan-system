@@ -4415,10 +4415,10 @@ if allowed_sections:
             if st.button(
                 "✖ இந்த அறிவிப்பை மூடு (Close Alert)", key="btn_close_succ_alert"
             ):
-            st.session_state["last_saved_visit"] = None
-            st.rerun()
+                st.session_state["last_saved_visit"] = None
+                st.rerun()
 
-            st.markdown("---")
+                st.markdown("---")
     
     
     elif selected_section == "📁 கிளை ஆவணங்கள் பதிவேற்றம்":
