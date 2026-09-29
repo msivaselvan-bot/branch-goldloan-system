@@ -139,6 +139,7 @@ def upload_ornament_image(file_obj):
 # ==============================================================================
 st.markdown("""
 <style>
+    /* 1. தேவையில்லாத Streamlit UI கூறுகளை முழுமையாக மறைத்தல் */
     header[data-testid="stHeader"] {
         display: none !important;
         visibility: hidden !important;
@@ -168,8 +169,9 @@ st.markdown("""
         transform: scale(0) !important;
     }
 
+    /* 2. மொத்தப் பக்கத்திற்கும் நேர்த்தியான ஊதா பின்னணி (Rich Purple Gradient) */
     .stApp {
-        background: #F4EFFB !important;
+        background: linear-gradient(180deg, #EFE5F8 0%, #E6D7F4 40%, #DDC6F0 100%) !important;
         color: #26153B !important;
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif !important;
         -webkit-tap-highlight-color: transparent;
@@ -184,6 +186,23 @@ st.markdown("""
         margin: auto;
     }
 
+    /* 3. அனைத்து தலைப்புகளுக்கும் (H1 to H6) கம்பீரமான ராயல் ஊதா நிறம் */
+    h1, h2, h3, h4, h5, h6 {
+        color: #4A1D6D !important;
+        font-weight: 700 !important;
+    }
+    
+    .stCaption, [data-testid="stCaptionContainer"] p {
+        color: #5D3785 !important;
+        font-weight: 500 !important;
+    }
+
+    hr {
+        border-color: #CBAFE6 !important;
+        margin: 1.2rem 0 !important;
+    }
+
+    /* 4. உள்நுழைவுப் பெட்டி (Login Box) */
     .login-box {
         background: linear-gradient(145deg, #2D144E 0%, #1E0B36 100%) !important;
         border: 1.5px solid #D4AF37 !important;
@@ -208,19 +227,19 @@ st.markdown("""
         margin-bottom: 22px;
     }
 
-    .stTextInput input, .stNumberInput input {
+    /* 5. உள்ளீட்டுப் புலங்கள் (Input Fields) */
+    .stTextInput input, .stNumberInput input, .stTextArea textarea, .stSelectbox div[data-baseweb="select"] {
         background-color: #FFFFFF !important;
-        border: 1.5px solid #D6C2F0 !important;
+        border: 1.5px solid #C5A8E5 !important;
         border-radius: 10px !important;
         color: #24113A !important;
         font-weight: 500 !important;
-        height: 42px !important;
-        box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.03) !important;
+        box-shadow: inset 0 1px 3px rgba(74, 29, 109, 0.04) !important;
     }
 
-    .stTextInput input:focus, .stNumberInput input:focus {
-        border-color: #A36B00 !important;
-        box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.2) !important;
+    .stTextInput input:focus, .stNumberInput input:focus, .stTextArea textarea:focus {
+        border-color: #723A91 !important;
+        box-shadow: 0 0 0 3px rgba(114, 58, 145, 0.2) !important;
     }
 
     .login-box .stTextInput input {
@@ -230,6 +249,7 @@ st.markdown("""
         font-weight: 600 !important;
     }
 
+    /* 6. பட்டன்கள் (Buttons) */
     button[kind="primary"], .stButton > button[type="primary"] {
         background: linear-gradient(135deg, #D4AF37 0%, #E8CA65 50%, #B8860B 100%) !important;
         color: #2B1800 !important;
@@ -249,41 +269,63 @@ st.markdown("""
     button[kind="secondary"], .stButton > button {
         background: #FFFFFF !important;
         color: #4A207A !important;
-        border: 1.5px solid #C5A059 !important;
+        border: 1.5px solid #723A91 !important;
         font-weight: 600 !important;
         border-radius: 10px !important;
-        transition: transform 0.1s ease !important;
+        transition: all 0.2s ease !important;
+    }
+    
+    button[kind="secondary"]:hover, .stButton > button:hover {
+        background: #F3EAFB !important;
+        border-color: #4A1D6D !important;
+        color: #310D4F !important;
     }
 
+    /* 7. புதிய கிடைமட்ட மெனு (Admin Radio Navigation) ஊதா வடிவமைப்பு */
+    div[role="radiogroup"] {
+        background: #FFFFFF !important;
+        border: 1.5px solid #C5A8E5 !important;
+        border-radius: 12px !important;
+        padding: 8px 12px !important;
+        box-shadow: 0 4px 14px rgba(74, 29, 109, 0.08) !important;
+    }
+    div[role="radiogroup"] label {
+        color: #4A1D6D !important;
+        font-weight: 600 !important;
+    }
+
+    /* 8. விரிவடையும் பெட்டிகள் & கன்டெய்னர்கள் (Expanders) */
     div[data-testid="stExpander"], div[data-testid="stVerticalBlock"] > div[style*="border:"] {
         background: #FFFFFF !important;
-        border: 1.5px solid #E1D2F5 !important;
+        border: 1.5px solid #CFB6E8 !important;
         border-radius: 14px !important;
-        box-shadow: 0 3px 12px rgba(74, 32, 122, 0.05) !important;
+        box-shadow: 0 4px 15px rgba(74, 29, 109, 0.06) !important;
         color: #26153B !important;
         overflow: hidden;
     }
 
+    /* 9. நிலவர கார்டுகள் (KPI Metrics) */
     div[data-testid="stMetric"] {
         background: #FFFFFF !important;
-        border: 1px solid #E8DCF8 !important;
-        border-left: 4px solid #D4AF37 !important;
-        padding: 8px 14px !important;
-        border-radius: 10px !important;
-        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.02) !important;
+        border: 1.5px solid #D6BEEA !important;
+        border-left: 5px solid #723A91 !important;
+        padding: 10px 16px !important;
+        border-radius: 12px !important;
+        box-shadow: 0 4px 12px rgba(74, 29, 109, 0.06) !important;
     }
 
     div[data-testid="stMetricValue"] {
-        color: #8C5D00 !important;
+        color: #723A91 !important;
         font-weight: 800 !important;
-        font-size: 1.3rem !important;
+        font-size: 1.35rem !important;
     }
 
     div[data-testid="stMetricLabel"] {
-        color: #4A207A !important;
-        font-weight: 600 !important;
+        color: #4A1D6D !important;
+        font-weight: 700 !important;
     }
 
+    /* 10. டேப்கள் (Tabs) */
     button[data-baseweb="tab"] {
         background: transparent !important;
         color: #613E8D !important;
@@ -293,13 +335,14 @@ st.markdown("""
     }
 
     button[data-baseweb="tab"][aria-selected="true"] {
-        color: #7A4E00 !important;
-        background: rgba(212, 175, 55, 0.15) !important;
+        color: #360E58 !important;
+        background: #E8D7F7 !important;
         font-weight: 700 !important;
-        border-bottom: 3px solid #D4AF37 !important;
+        border-bottom: 3px solid #723A91 !important;
     }
 </style>
-""", unsafe_allow_html=True)
+""", 
+unsafe_allow_html=True)
 
 # ==========================================
 # 2. Supabase இணைப்பு
