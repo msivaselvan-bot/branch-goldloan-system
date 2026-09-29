@@ -303,7 +303,7 @@ st.markdown("""
 
 
 # ==========================================
-# 2. Supabase இணைப்பு
+# 2.  Supabase இணைப்பு
 # ==========================================
 @st.cache_resource
 def get_supabase_client() -> Client:
