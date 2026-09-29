@@ -5580,26 +5580,23 @@ if allowed_sections:
               st.write(f"• **தொகை:** ₹{ex_amt:,.2f}")
 
             st.markdown("##### 💵 செலவுக்கான டினாமினேஷன் விவரம்:")
-            ex_denoms = ex.get("denomination_details") or {}
-            ex_items = []
-            if isinstance(ex_denoms, dict) and ex_denoms:
-              for k, v in ex_denoms.items():
-                try:
-                  count = (
-                      int(float(v)) if v not in (None, "", " ") else 0
-                  )
-                  if count > 0:
-                    ex_items.append(f"**₹{k}:** {count}")
-                except (ValueError, TypeError):
-                  continue
-              ex_denom_text = " | ".join(ex_items)
-              st.info(
-                  ex_denom_text
-                  if ex_denom_text
-                  else "டினாமினேஷன் விவரம் இல்லை"
-              )
-            else:
-              st.json(ex_denoms)
+            
+        ex_denoms = ex.get("denomination_details") or {}
+        ex_items = []
+        if isinstance(ex_denoms, dict) and ex_denoms:
+          for k, v in ex_denoms.items():
+            try:
+              count = int(float(v)) if v not in (None, "", " ") else 0
+              if count > 0:
+                ex_items.append(f"**₹{k}:** {count}")
+            except (ValueError, TypeError):
+              continue
+          ex_denom_text = " | ".join(ex_items)
+          st.info(
+              ex_denom_text if ex_denom_text else "டினாமினேஷன் விவரம் இல்லை"
+          )
+        else:
+          st.json(ex_denoms)
 
             current_user = st.session_state.get("username", "Admin")
             col_ex1, col_ex2 = st.columns(2)
