@@ -2019,7 +2019,7 @@ def generate_next_gl_number(branch_id):
 # -------------------------------------------------------------
 
 
-def get_current_display_gl_number(branch_id):
+ddef get_current_display_gl_number(branch_id):
     """branch_loan_sequences அட்டவணையில் உள்ள prefix மற்றும் last_number-ஐ நேரடியாக எடுத்து AVL/1754 என உருவாக்கும்"""
     try:
         clean_b_id = int(branch_id)
@@ -2037,11 +2037,9 @@ def get_current_display_gl_number(branch_id):
 
         if seq_res.data:
             rec = seq_res.data[0]
-            # prefix-ல் உள்ள தேவையில்லாத குறியீடுகளை நீக்குதல் (எ.கா: 'AVL' -> 'AVL')
             prefix = str(rec.get("prefix") or "AVL").strip().rstrip("/-")
             last_num = int(rec.get("last_number") or 0)
         else:
-            # அட்டவணையில் பதிவு இல்லையெனில் branches அட்டவணையில் இருந்து பொதுவான தகவலை எடுத்தல்
             try:
                 b_res = (
                     supabase.table("branches")
@@ -2064,22 +2062,15 @@ def get_current_display_gl_number(branch_id):
             except Exception:
                 prefix = "AVL"
 
-        # 2. அடுத்த வரிசை எண் கணக்கீடு (1753 + 1 = 1754)
+        # 2. அடுத்த வரிசை எண் கணக்கீடு (Data base last_num + 1)
         next_num = last_num + 1
 
-        # 3. கார்ட்டில் ஏற்கனவே சேர்க்கப்பட்ட கடன்களின் எண்ணிக்கையைக் கூட்டுதல்
-        cart = st.session_state.get("transactions_cart", [])
-        cart_pledge_count = sum(
-            1
-            for itm in cart
-            if any(
-                k in str(itm.get("transaction_type", ""))
-                for k in ["Pledge", "Loan", "நகைக்கடன்"]
-            )
-        )
-        display_num = next_num + cart_pledge_count
+        # 🌟 குறிப்பு: கார்ட் கவுண்ட் (cart_pledge_count) டெபாக்சிங் செய்யும் போது 
+        # இரட்டிப்பாகக் கூட்டுவதைத் தவிர்க்க இது விலக்கப்படலாம் அல்லது கவனமாகக் கையாளப்பட வேண்டும்.
+        # டேட்டாபேஸ் சீக்வென்ஸ் மட்டுமே போதுமானது என்பதால் கார்ட் கவுண்டை நீக்குவது பாதுகாப்பானது.
+        display_num = next_num
 
-        # 4. '-' இன்றி '/' குறியீட்டுடன் கடன் எண் உருவாக்குதல் (எ.கா: AVL/1754)
+        # 3. கடன் எண் உருவாக்குதல் (எ.கா: AVL/1754)
         suggested_gl_no = (
             f"{prefix}/{display_num:04d}"
             if display_num < 1000
@@ -2089,9 +2080,7 @@ def get_current_display_gl_number(branch_id):
         return suggested_gl_no, next_num
 
     except Exception:
-        # ஏதேனும் பிழை ஏற்பட்டாலும் கிளையின் இயல்பான எண்ணைக் காட்டுதல்
         return "AVL/1754", 1754
-
 
 def commit_next_gl_number(branch_id, used_number):
     try:
