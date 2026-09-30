@@ -380,27 +380,6 @@ except Exception as e:
 # ==========================================
 
 
-def upload_files_to_supabase(files, visit_no):
-    uploaded_links = []
-    bucket_name = "branch-documents"
-    for f in files:
-        if f is not None:
-            # 🌟 1 MB (1,048,576 bytes) வரம்புச் சரிபார்ப்பு
-            if f.size > 1 * 1024 * 1024:
-                st.error(f"❌ கோப்பின் அளவு (File Size) 1 MB-க்கு அதிகமாக உள்ளது: {f.name}")
-                continue  # இந்தக்கோப்பைத் தவிர்த்துவிட்டு அடுத்ததுக்குச் செல்லும்
-                
-        file_path = f"{visit_no}/{f.name}"
-        supabase.storage.from_(bucket_name).upload(
-            path=file_path,
-            file=f.getvalue(),
-            file_options={"content-type": f.type, "upsert": "true"},
-        )
-        public_url = supabase.storage.from_(bucket_name).get_public_url(file_path)
-        uploaded_links.append(public_url)
-    return uploaded_links
-
-
 def upload_single_file(file_obj, folder_name):
     if not file_obj:
         return None
@@ -408,7 +387,7 @@ def upload_single_file(file_obj, folder_name):
     # 🌟 1 MB (1,048,576 bytes) வரம்புச் சரிபார்ப்பு
     if file_obj.size > 1 * 1024 * 1024:
         st.error(f"❌ கோப்பின் அளவு (File Size) 1 MB-க்கு அதிகமாக உள்ளது: {file_obj.name}. தயவுசெய்து 1 MB-க்கு உட்பட்ட கோப்பைப் பதிவேற்றவும்!")
-        return None
+        st.stop()  # 🛑 கோப்பு அப்லோட் ஆவதை உடனே தடுத்து நிறுத்தும்!
         
     bucket_name = "branch-documents"
     file_path = (
@@ -420,6 +399,27 @@ def upload_single_file(file_obj, folder_name):
         file_options={"content-type": file_obj.type, "upsert": "true"},
     )
     return supabase.storage.from_(bucket_name).get_public_url(file_path)
+
+
+def upload_files_to_supabase(files, visit_no):
+    uploaded_links = []
+    bucket_name = "branch-documents"
+    for f in files:
+        if f is not None:
+            # 🌟 1 MB (1,048,576 bytes) வரம்புச் சரிபார்ப்பு
+            if f.size > 1 * 1024 * 1024:
+                st.error(f"❌ கோப்பின் அளவு (File Size) 1 MB-க்கு அதிகமாக உள்ளது: {f.name}. தயவுசெய்து 1 MB-க்கு உட்பட்ட கோப்பைப் பதிவேற்றவும்!")
+                st.stop()  # 🛑 உடனே நிறுத்தும்
+                
+        file_path = f"{visit_no}/{f.name}"
+        supabase.storage.from_(bucket_name).upload(
+            path=file_path,
+            file=f.getvalue(),
+            file_options={"content-type": f.type, "upsert": "true"},
+        )
+        public_url = supabase.storage.from_(bucket_name).get_public_url(file_path)
+        uploaded_links.append(public_url)
+    return uploaded_links
 
 
 # ==============================================================================
