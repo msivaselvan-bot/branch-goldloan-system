@@ -1889,6 +1889,8 @@ else:
     with top_col4:
         if st.button("வெளியேறு", use_container_width=True):
             st.session_state.logged_in = False
+            st.session_state.user_role = None          # முக்கியம்: ரோலை அழிக்க வேண்டும்
+            st.session_state.username = None           # முக்கியம்: பயனர் பெயரை அழிக்க வேண்டும்
             st.session_state.current_visit = None
             st.session_state.transactions_cart = []
             st.session_state.generated_otp = None
