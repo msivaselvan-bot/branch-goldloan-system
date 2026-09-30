@@ -6670,9 +6670,9 @@ if st.session_state.get("logged_in", False):
                         col_n1, col_n2, col_n3 = st.columns(3)
                         with col_n1:
                             new_name = st.text_input("வாடிக்கையாளர் பெயர் *")
-                            new_guardian = st.text_input("கார்டியன் / தந்தை / கணவர் பெயர்")
-                            new_dob = st.date_input("பிறந்த தேதி", min_value=datetime(1940, 1, 1), max_value=datetime.today())
-                            new_gender = st.selectbox("பாலினம்", ["ஆண் (Male)", "பெண் (Female)", "மற்றவை (Other)"])
+                            new_guardian = st.text_input("கார்டியன் / தந்தை / கணவர் பெயர் *")
+                            new_dob = st.date_input("பிறந்த தேதி *", min_value=datetime(1940, 1, 1), max_value=datetime.today())
+                            new_gender = st.selectbox("பாலினம் *", ["ஆண் (Male)", "பெண் (Female)", "மற்றவை (Other)"])
                             new_photo = st.file_uploader("1. வாடிக்கையாளர் புகைப்படம் *", type=["jpg", "jpeg", "png"])
                         with col_n2:
                             new_mob1 = st.text_input("முதன்மை மொபைல் எண் *")
@@ -6681,12 +6681,17 @@ if st.session_state.get("logged_in", False):
                             new_id_doc = st.file_uploader("2. அடையாள அட்டை ஆவணம் *", type=["jpg", "jpeg", "png", "pdf"])
                         with col_n3:
                             new_address = st.text_area("முழு முகவரி *", height=85)
-                            new_nominee = st.text_input("நாமினி பெயர்")
-                            new_relation = st.text_input("உறவுமுறை")
+                            new_nominee = st.text_input("நாமினி பெயர் *")
+                            new_relation = st.text_input("உறவுமுறை *")
                             new_addr_doc = st.file_uploader("3. முகவரி சான்று ஆவணம் *", type=["jpg", "jpeg", "png", "pdf"])
 
                         if st.form_submit_button("வாடிக்கையாளரைப் பதிவு செய்து ஒப்புதலுக்கு அனுப்புக", type="primary"):
-                            if new_name.strip() and new_mob1.strip() and new_address.strip():
+                            # 🌟 அனைத்து முக்கியப் புலங்களும் நிரப்பப்பட்டுள்ளதா எனச் சரிபார்த்தல்
+                            if not all([new_name.strip(), new_guardian.strip(), new_mob1.strip(), new_id_no.strip(), new_address.strip(), new_nominee.strip(), new_relation.strip()]):
+                                st.error("⚠️ தயவுசெய்து அனைத்து கட்டாயப் புலங்களையும் (*) நிரப்பவும்!")
+                            elif not new_photo or not new_id_doc or not new_addr_doc:
+                                st.error("⚠️ தயவுசெய்து தேவையான அனைத்துப் புகைப்படங்கள் மற்றும் ஆவணங்களைப் பதிவேற்றவும்!")
+                            else:
                                 photo_url = upload_single_file(new_photo, "customer_photos")
                                 id_doc_url = upload_single_file(new_id_doc, "customer_id_proofs")
                                 addr_doc_url = upload_single_file(new_addr_doc, "customer_address_proofs")
