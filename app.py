@@ -3851,9 +3851,8 @@ if st.session_state.get("logged_in", False):
                             is_checked = section in current_perms
                             # ஒவ்வொரு செக்பாக்ஸிற்கும் தனிப்பயன் key கொடுப்பது அவசியம்
                             if st.checkbox(
-                                section,
-                                value=is_checked,
-                                key=f"perm_chk_{curr_user['id']}_{section}",
+                                "அனுமதி",
+                                key=f"perm_chk_{item['id']}_{selected_section}",  # அல்லது row index
                             ):
                                 updated_perms.append(section)
                         # ----------------------------------------------------------------
