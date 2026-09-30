@@ -5584,21 +5584,21 @@ if allowed_sections:
             ex_denoms = ex.get("denomination_details") or {}
             ex_items = []
             if isinstance(ex_denoms, dict) and ex_denoms:
-            for k, v in ex_denoms.items():
+              for k, v in ex_denoms.items():
                 try:
-                count = int(float(v)) if v not in (None, "", " ") else 0
-                if count > 0:
-                    ex_items.append(f"**₹{k}:** {count}")
+                 count = int(float(v)) if v not in (None, "", " ") else 0
+                 if count > 0:
+                   ex_items.append(f"**₹{k}:** {count}")
                 except (ValueError, TypeError):
-                continue
+                  continue
             
             # இந்த வரி for லூப்புக்கு வெளியே, ஆனால் if-க்கு உட்பட்டு இருக்க வேண்டும்
-            ex_denom_text = " | ".join(ex_items)
-            st.info(
-                ex_denom_text if ex_denom_text else "டினாமினேஷன் விவரம் இல்லை"
+              ex_denom_text = " | ".join(ex_items)
+              st.info(
+                  ex_denom_text if ex_denom_text else "டினாமினேஷன் விவரம் இல்லை"
             )
             else:
-            st.json(ex_denoms)
+              st.json(ex_denoms)
 
             current_user = st.session_state.get("username", "Admin")
             col_ex1, col_ex2 = st.columns(2)
