@@ -8404,11 +8404,6 @@ if st.session_state.get("logged_in", False):
                                     st.rerun()
         else:
 
-
-        # The transaction/payment flow below is kept inside its own suite.
-        # This also prevents the login form's `else` branch from being
-        # followed by an orphaned `elif`.
-        if True:
             # ---------------------------------------------------------------------
             # படி 2: வணிக நடவடிக்கைகள் சேர்த்தல் (TRANSACTIONS)
             # ---------------------------------------------------------------------
