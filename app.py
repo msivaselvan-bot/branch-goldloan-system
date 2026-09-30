@@ -2019,7 +2019,7 @@ def generate_next_gl_number(branch_id):
 # -------------------------------------------------------------
 
 
-ddef get_current_display_gl_number(branch_id):
+def get_current_display_gl_number(branch_id):
     """branch_loan_sequences அட்டவணையில் உள்ள prefix மற்றும் last_number-ஐ நேரடியாக எடுத்து AVL/1754 என உருவாக்கும்"""
     try:
         clean_b_id = int(branch_id)
