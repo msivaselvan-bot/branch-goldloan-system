@@ -6101,12 +6101,12 @@ if allowed_sections:
 
                 # 🌟 ஏற்கனவே கேட்கப்பட்ட விளக்கங்கள் மற்றும் கிளை கொடுத்த பதில்கள் இருந்தால் காட்டவும்
                 if hist_remarks and hist_remarks != "Auditor Approved":
-                st.markdown(
+                  st.markdown(
                     "##### 📜 முந்தைய விளக்கம் & பதில்களின் வரலாறு (Communication"
                     " Trail):"
-                )
-                st.info(hist_remarks)
-                st.markdown("---")
+                  )
+                  st.info(hist_remarks)
+                  st.markdown("---")
 
                 if item.get("transactions"):
                 st.markdown("##### 🛒 பரிவர்த்தனைகள்:")
