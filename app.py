@@ -7950,77 +7950,77 @@ if st.session_state.get("logged_in", False):
                                                         "nominee_name": rd_meta.get("nominee") or rd_meta.get("nominee_name", "-"),
                                                         "nominee_relation": rd_meta.get("relation") or rd_meta.get("nominee_relation", "-"),
                                                         "status": "Active"
+                                                    }
+                                                    supabase.table("recurring_deposits").insert(rd_insert_data).execute()
+                                                except Exception as rd_err:
+                                                    st.error(f"⚠️ recurring_deposits அட்டவணையில் சேமிப்பதில் பிழை: {rd_err}")
+
+                                            try:
+                                                general_txn = {
+                                                    "visit_id": new_visit_id,
+                                                    "branch_id": b_id,
+                                                    "customer_id": c_id,
+                                                    "customer_name": visit.get("customer_name"),
+                                                    "mobile": visit.get("mobile"),
+                                                    "transaction_type": t_type,
+                                                    "staff_name": s_name,
+                                                    "amount": float(item.get("amount", 0.0) or (p_amt if p_amt > 0 else r_amt)),
+                                                    "paid_amount": p_amt,
+                                                    "received_amount": r_amt,
+                                                    "gross_weight": float(item.get("total_weight", 0.0) or item.get("gross_weight", 0.0) or 0.0),
+                                                    "net_weight": float(item.get("net_weight", 0.0) or 0.0),
+                                                    "item_details": item.get("ornament_details", ""),
+                                                    "remarks": item.get("remarks", ""),
+                                                    "transaction_details": item.get("extra_meta_data") or item,
+                                                    "status": "Pending"
                                                 }
-                                                supabase.table("recurring_deposits").insert(rd_insert_data).execute()
-                                            except Exception as rd_err:
-                                                st.error(f"⚠️ recurring_deposits அட்டவணையில் சேமிப்பதில் பிழை: {rd_err}")
+                                                supabase.table("transactions").insert(general_txn).execute()
+                                            except Exception as txn_err:
+                                                st.error(f"⚠️ transactions அட்டவணையில் சேமிப்பதில் பிழை: {txn_err}")
+
+                                        pledge_items = [i for i in st.session_state.transactions_cart if "Pledge" in str(i.get("transaction_type", ""))]
+                                        if pledge_items:
+                                            try:
+                                                res = supabase.table("branch_loan_sequences").select("last_number").eq("branch_id", b_id).execute()
+                                                current_db_last = int(res.data[0]["last_number"]) if res.data else 0
+                                                new_db_last = current_db_last + len(pledge_items)
+                                                supabase.table("branch_loan_sequences").update({"last_number": new_db_last}).eq("branch_id", b_id).execute()
+                                            except Exception:
+                                                pass
 
                                         try:
-                                            general_txn = {
-                                                "visit_id": new_visit_id,
-                                                "branch_id": b_id,
-                                                "customer_id": c_id,
-                                                "customer_name": visit.get("customer_name"),
-                                                "mobile": visit.get("mobile"),
-                                                "transaction_type": t_type,
-                                                "staff_name": s_name,
-                                                "amount": float(item.get("amount", 0.0) or (p_amt if p_amt > 0 else r_amt)),
-                                                "paid_amount": p_amt,
-                                                "received_amount": r_amt,
-                                                "gross_weight": float(item.get("total_weight", 0.0) or item.get("gross_weight", 0.0) or 0.0),
-                                                "net_weight": float(item.get("net_weight", 0.0) or 0.0),
-                                                "item_details": item.get("ornament_details", ""),
-                                                "remarks": item.get("remarks", ""),
-                                                "transaction_details": item.get("extra_meta_data") or item,
-                                                "status": "Pending"
-                                            }
-                                            supabase.table("transactions").insert(general_txn).execute()
-                                        except Exception as txn_err:
-                                            st.error(f"⚠️ transactions அட்டவணையில் சேமிப்பதில் பிழை: {txn_err}")
-
-                                    pledge_items = [i for i in st.session_state.transactions_cart if "Pledge" in str(i.get("transaction_type", ""))]
-                                    if pledge_items:
-                                        try:
-                                            res = supabase.table("branch_loan_sequences").select("last_number").eq("branch_id", b_id).execute()
-                                            current_db_last = int(res.data[0]["last_number"]) if res.data else 0
-                                            new_db_last = current_db_last + len(pledge_items)
-                                            supabase.table("branch_loan_sequences").update({"last_number": new_db_last}).eq("branch_id", b_id).execute()
+                                            supabase.table("otp_bypass_requests").update({"status": "Used"}).eq("customer_id", c_id).eq("status", "Approved").execute()
                                         except Exception:
                                             pass
 
-                                    try:
-                                        supabase.table("otp_bypass_requests").update({"status": "Used"}).eq("customer_id", c_id).eq("status", "Approved").execute()
-                                    except Exception:
-                                        pass
+                                        st.session_state["last_saved_visit"] = {
+                                            "visit_no": current_v_no,
+                                            "customer_name": visit.get("customer_name", "-"),
+                                            "txn_count": len(st.session_state.transactions_cart),
+                                            "total_paid": float(visit.get("total_paid", 0.0) or 0.0),
+                                            "total_received": float(visit.get("total_received", 0.0) or 0.0)
+                                        }
 
-                                    st.session_state["last_saved_visit"] = {
-                                        "visit_no": current_v_no,
-                                        "customer_name": visit.get("customer_name", "-"),
-                                        "txn_count": len(st.session_state.transactions_cart),
-                                        "total_paid": float(visit.get("total_paid", 0.0) or 0.0),
-                                        "total_received": float(visit.get("total_received", 0.0) or 0.0)
-                                    }
+                                        st.session_state.transactions_cart = []
+                                        st.session_state.current_visit = None
+                                        st.session_state.otp_cleared = False
+                                        st.session_state.otp_verified = False
+                                        st.session_state.otp_already_sent = False
+                                        st.session_state.generated_otp = None
+                                        st.session_state.current_declaration = None
+                                        st.session_state.declaration_gl_no = None
+                                        if "otp_bypass_requested" in st.session_state:
+                                            st.session_state.otp_bypass_requested = False
+                                        if "form_reset_counter" in st.session_state:
+                                            st.session_state.form_reset_counter += 1
 
-                                    st.session_state.transactions_cart = []
-                                    st.session_state.current_visit = None
-                                    st.session_state.otp_cleared = False
-                                    st.session_state.otp_verified = False
-                                    st.session_state.otp_already_sent = False
-                                    st.session_state.generated_otp = None
-                                    st.session_state.current_declaration = None
-                                    st.session_state.declaration_gl_no = None
-                                    if "otp_bypass_requested" in st.session_state:
-                                        st.session_state.otp_bypass_requested = False
-                                    if "form_reset_counter" in st.session_state:
-                                        st.session_state.form_reset_counter += 1
+                                        st.success(f"🎉 வருகை {current_v_no} வெற்றிகரமாக நிறைவுபெற்றது! (ஆப்பரேஷன்ஸ் ஒப்புதலுக்கு அனுப்பப்பட்டது)")
+                                        st.balloons()
+                                        st.rerun()
 
-                                    st.success(f"🎉 வருகை {current_v_no} வெற்றிகரமாக நிறைவுபெற்றது! (ஆப்பரேஷன்ஸ் ஒப்புதலுக்கு அனுப்பப்பட்டது)")
-                                    st.balloons()
-                                    st.rerun()
-
-                            except Exception as save_err:
-                                st.error(f"❌ வருகையைச் சேமிப்பதில் பிழை ஏற்பட்டது: {save_err}")
-                                st.warning("⚠️ மேலே உள்ள எரரைச் சரிபார்க்கவும். உங்கள் கார்ட்டில் உள்ள தரவுகள் அழியாமல் அப்படியே உள்ளன.")
+                                except Exception as save_err:
+                                    st.error(f"❌ வருகையைச் சேமிப்பதில் பிழை ஏற்பட்டது: {save_err}")
+                                    st.warning("⚠️ மேலே உள்ள எரரைச் சரிபார்க்கவும். உங்கள் கார்ட்டில் உள்ள தரவுகள் அழியாமல் அப்படியே உள்ளன.")
 
 
         elif selected_section == "📁 கிளை ஆவணங்கள் பதிவேற்றம்":
