@@ -3779,99 +3779,99 @@ if st.session_state.get("logged_in", False):
 
                     # பணியாளர் திருத்தும் ஃபார்ம்
                     with st.form("admin_edit_user_form"):
-                    edit_name = st.text_input("பெயர்", value=curr_user["name"])
-                    edit_pass = st.text_input(
-                        "புதிய கடவுச்சொல் (விரும்பினால் மட்டும்)", type="password"
-                    )
-                    roles_list = [
-                        "Branch Head / Cashier",
-                        "Staff",
-                        "Operations",
-                        "Auditor",
-                        "Admin",
-                    ]
-                    edit_role = st.selectbox(
-                        "பணி நிலை",
-                        roles_list,
-                        index=(
-                            roles_list.index(curr_user["role"])
-                            if curr_user["role"] in roles_list
-                            else 0
-                        ),
-                    )
-                    edit_status = st.radio(
-                        "நிலை",
-                        ["Active", "Inactive"],
-                        index=0 if curr_user.get("is_active", True) else 1,
-                    )
-
-                    # --- 🌟 குறிப்பிட்ட பணியாளருக்கான பிரிவுகள் செக்பாக்ஸ்கள் ---
-                    st.markdown("---")
-                    st.write(f"**{curr_user['name']}** அவர்களுக்கான பிரிவு அனுமதிகள்:")
-
-                    current_perms = curr_user.get("permissions", [])
-                    if not isinstance(current_perms, list):
-                        current_perms = []
-
-                    # நிறுவனத்தின் தனித்துவமான நிர்வாகப் பிரிவுகள் (Duplicate பெயர்கள் நீக்கப்பட்டுள்ளன)
-                    all_admin_sections = [
-                        "🏢 நேரடி கல்லா & தினசரி வணிகம்",
-                        "📦 பாக்கெட் & லாக்கர் மேலாண்மை",
-                        "🏢 கிளைகள்",
-                        "👥 பணியாளர்கள்",
-                        "📋 ஸ்கீம்கள் மேலாண்மை (Pledge, FD, RD)",
-                        "🎯 இன்சென்டிவ் & புள்ளி விதிகள்",
-                        "📥 மொத்தப் பதிவேற்றம்",
-                        "🗂️ வாடிக்கையாளர் மேலாண்மை",
-                        "📊 வருகை & பரிவர்த்தனை திருத்தம்",
-                        "💰 கிளை துவக்க இருப்பு & கல்லா",
-                        "🏦 தலைமையக பணப் பரிமாற்றம்",
-                        "📈 காரணப் பணியாளர் அறிக்கை",
-                        "🪙 நகைக் கடன் மேலாண்மை",
-                        "📤 பல்க் RD / FD பதிவேற்றம்",
-                        "🛒 கவுண்ட்டர் வருகை & OTP",
-                        "📁 கிளை ஆவணங்கள் பதிவேற்றம்",
-                        "⚠️ விளக்கங்கள்",
-                        "💼 கிளை கல்லா",
-                        "🏦 HO பணப் பரிமாற்றம்",
-                        "📦 நகைப் பாக்கெட்கள் மேலாண்மை",
-                        "🏦 நிதிப் பரிமாற்ற ஒப்புதல்",
-                        "👤 புதிய வாடிக்கையாளர் KYC",
-                        "📝 விவரத் திருத்தக் கோரிக்கைகள்",
-                        "🔔 பரிவர்த்தனை அழைப்பு சரிபார்ப்பு",
-                        "🛡️ OTP விலக்கு அனுமதி",
-                        "🔍 தணிக்கையர் பணிப்பாய்வு",
-                    ]
-
-                    updated_perms = []
-                    # ஒவ்வொரு செக்பாக்ஸுக்கும் தனித்துவமான key கொடுக்க `curr_user['id']` மற்றும் லூப் இன்டெக்ஸ் (`i`) பயன்படுத்தப்பட்டுள்ளது
-                    for idx, section in enumerate(all_admin_sections):
-                        is_checked = section in current_perms
-                        if st.checkbox(
-                            section,
-                            value=is_checked,
-                            key=f"perm_chk_{curr_user['id']}_{idx}",
-                        ):
-                        updated_perms.append(section)
-                    # ----------------------------------------------------------------
-
-                    if st.form_submit_button("புதுப்பி & அனுமதிகளைச் சேமி"):
-                        up_data = {
-                            "name": edit_name.strip(),
-                            "role": edit_role,
-                            "is_active": edit_status == "Active",
-                            "permissions": updated_perms,
-                        }
-                        if edit_pass.strip():
-                        up_data["password_hash"] = edit_pass.strip()
-
-                        supabase.table("users").update(up_data).eq(
-                            "id", curr_user["id"]
-                        ).execute()
-                        st.success(
-                            "பணியாளர் விவரங்களும் அனுமதிகளும் வெற்றிகரமாகப் புதுப்பிக்கப்பட்டன!"
+                        edit_name = st.text_input("பெயர்", value=curr_user["name"])
+                        edit_pass = st.text_input(
+                            "புதிய கடவுச்சொல் (விரும்பினால் மட்டும்)", type="password"
                         )
-                        st.rerun()
+                        roles_list = [
+                            "Branch Head / Cashier",
+                            "Staff",
+                            "Operations",
+                            "Auditor",
+                            "Admin",
+                        ]
+                        edit_role = st.selectbox(
+                            "பணி நிலை",
+                            roles_list,
+                            index=(
+                                roles_list.index(curr_user["role"])
+                                if curr_user["role"] in roles_list
+                                else 0
+                            ),
+                        )
+                        edit_status = st.radio(
+                            "நிலை",
+                            ["Active", "Inactive"],
+                            index=0 if curr_user.get("is_active", True) else 1,
+                        )
+
+                        # --- 🌟 குறிப்பிட்ட பணியாளருக்கான பிரிவுகள் செக்பாக்ஸ்கள் ---
+                        st.markdown("---")
+                        st.write(f"**{curr_user['name']}** அவர்களுக்கான பிரிவு அனுமதிகள்:")
+
+                        current_perms = curr_user.get("permissions", [])
+                        if not isinstance(current_perms, list):
+                            current_perms = []
+
+                        # நிறுவனத்தின் தனித்துவமான நிர்வாகப் பிரிவுகள் (Duplicate பெயர்கள் நீக்கப்பட்டுள்ளன)
+                        all_admin_sections = [
+                            "🏢 நேரடி கல்லா & தினசரி வணிகம்",
+                            "📦 பாக்கெட் & லாக்கர் மேலாண்மை",
+                            "🏢 கிளைகள்",
+                            "👥 பணியாளர்கள்",
+                            "📋 ஸ்கீம்கள் மேலாண்மை (Pledge, FD, RD)",
+                            "🎯 இன்சென்டிவ் & புள்ளி விதிகள்",
+                            "📥 மொத்தப் பதிவேற்றம்",
+                            "🗂️ வாடிக்கையாளர் மேலாண்மை",
+                            "📊 வருகை & பரிவர்த்தனை திருத்தம்",
+                            "💰 கிளை துவக்க இருப்பு & கல்லா",
+                            "🏦 தலைமையக பணப் பரிமாற்றம்",
+                            "📈 காரணப் பணியாளர் அறிக்கை",
+                            "🪙 நகைக் கடன் மேலாண்மை",
+                            "📤 பல்க் RD / FD பதிவேற்றம்",
+                            "🛒 கவுண்ட்டர் வருகை & OTP",
+                            "📁 கிளை ஆவணங்கள் பதிவேற்றம்",
+                            "⚠️ விளக்கங்கள்",
+                            "💼 கிளை கல்லா",
+                            "🏦 HO பணப் பரிமாற்றம்",
+                            "📦 நகைப் பாக்கெட்கள் மேலாண்மை",
+                            "🏦 நிதிப் பரிமாற்ற ஒப்புதல்",
+                            "👤 புதிய வாடிக்கையாளர் KYC",
+                            "📝 விவரத் திருத்தக் கோரிக்கைகள்",
+                            "🔔 பரிவர்த்தனை அழைப்பு சரிபார்ப்பு",
+                            "🛡️ OTP விலக்கு அனுமதி",
+                            "🔍 தணிக்கையர் பணிப்பாய்வு",
+                        ]
+
+                        updated_perms = []
+                        # ஒவ்வொரு செக்பாக்ஸுக்கும் தனித்துவமான key கொடுக்க `curr_user['id']` மற்றும் லூப் இன்டெக்ஸ் (`i`) பயன்படுத்தப்பட்டுள்ளது
+                        for idx, section in enumerate(all_admin_sections):
+                            is_checked = section in current_perms
+                            if st.checkbox(
+                                section,
+                                value=is_checked,
+                                key=f"perm_chk_{curr_user['id']}_{idx}",
+                            ):
+                                updated_perms.append(section)
+                        # ----------------------------------------------------------------
+
+                        if st.form_submit_button("புதுப்பி & அனுமதிகளைச் சேமி"):
+                            up_data = {
+                                "name": edit_name.strip(),
+                                "role": edit_role,
+                                "is_active": edit_status == "Active",
+                                "permissions": updated_perms,
+                            }
+                            if edit_pass.strip():
+                                up_data["password_hash"] = edit_pass.strip()
+
+                            supabase.table("users").update(up_data).eq(
+                                "id", curr_user["id"]
+                            ).execute()
+                            st.success(
+                                "பணியாளர் விவரங்களும் அனுமதிகளும் வெற்றிகரமாகப் புதுப்பிக்கப்பட்டன!"
+                            )
+                            st.rerun()
         # -----------------------------------------------------------------
         # tab3: ஸ்கீம்கள் மேலாண்மை (Pledge RPG, FD, RD)
         # -----------------------------------------------------------------
