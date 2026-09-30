@@ -4457,7 +4457,7 @@ if st.session_state.get("logged_in", False):
                 ):
                     st.markdown("##### 🛒 இந்த வருகையில் மேற்கொள்ளப்பட்ட நடவடிக்கைகள்:")
                     if b_txns:
-                    for idx, t in enumerate(b_txns, 1):
+                      for idx, t in enumerate(b_txns, 1):
                         st.markdown(
                             f"**{idx}. {t.get('transaction_type', '-')}** | காரணப்"
                             f" பணியாளர்: `{t.get('staff_name', '-')}`"
