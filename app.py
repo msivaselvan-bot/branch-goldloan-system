@@ -6504,7 +6504,6 @@ if st.session_state.get("logged_in", False):
                     st.error(f"❌ கோப்பைப் பதிவேற்றுவதில் பிழை: {upload_err}")
 
         elif selected_section == "🛒 கவுண்ட்டர் வருகை & OTP":
-            with branch_tab1:
                 staff_res = supabase.table("users").select("name").eq("branch_id", st.session_state.branch_id).eq("is_active", True).execute()
                 current_staff_list = ["Walk-in (நேரடி வருகை)"] + [s["name"] for s in staff_res.data] if staff_res.data else ["Walk-in (நேரடி வருகை)"]
                 
