@@ -6090,8 +6090,8 @@ if allowed_sections:
             st.info("✅ தணிக்கைக்கு நிலுவையில் உள்ள வருகைகள் எதுவும் இல்லை.")
         else:
             for item in pending_visits:
-            c_data = item.get("customers", {}) or {}
-            hist_remarks = item.get("verification_remarks")
+                c_data = item.get("customers", {}) or {}
+                hist_remarks = item.get("verification_remarks")
 
             with st.expander(
                 f"வருகை எண்: {item['visit_no']} | வாடிக்கையாளர்:"
