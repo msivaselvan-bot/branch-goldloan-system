@@ -6807,8 +6807,10 @@ if st.session_state.get("logged_in", False):
                         if cur_rpg > 0:
                             st.caption(f"💰 அதிகபட்ச கடன் தகுதி (RPG ₹{cur_rpg:,.2f}): **₹{max_eligible:,.2f}**")
 
-                    ornament_details = st.text_area("நகை விபரம்", key=f"orn_det_{fc}")
-                    ornament_file = st.file_uploader("நகை படம்", type=["jpg", "jpeg", "png"], key=f"orn_file_{fc}")
+                    # 🌟 கட்டாயமான நகை விவரம் மற்றும் படம்
+                    ornament_details = st.text_area("நகை விபரம் (Ornament Details) *", key=f"orn_det_{fc}")
+                    ornament_file = st.file_uploader("நகை படம் (Ornament Photo) *", type=["jpg", "jpeg", "png"], key=f"orn_file_{fc}")
+                    
                     detail_summary = [
                         f"GL: {new_gl_no}", 
                         f"ஸ்கீம்: {selected_scheme}", 
@@ -7330,6 +7332,13 @@ if st.session_state.get("logged_in", False):
                 # கார்ட்டில் சேர்க்கும் பட்டன் (GP அல்லாத பிற நடவடிக்கைகளுக்கு மட்டும்)
                 if txn_category != "GP (Gold Purchase)":
                     if st.button("➕ பட்டியலில் சேர் (Add to Cart)", type="primary", key="btn_add_to_cart_main"):
+                        
+                        # 🌟 கட்டாயப் புலங்கள் சரிபார்ப்பு (Mandatory Validation for Pledge & Others)
+                        if "Pledge" in txn_category:
+                            if total_weight <= 0 or net_weight <= 0 or paid_amt <= 0 or not ornament_details.strip() or not ornament_file:
+                                st.error("⚠️ தயவுசெய்து எடை, கடன் தொகை, நகை விவரம் மற்றும் நகை படம் ஆகிய அனைத்து கட்டாயப் புலங்களையும் பூர்த்தி செய்யவும்!")
+                                st.stop()
+
                         if "Pledge" in txn_category:
                             actual_paid_amt = max(0.0, float(paid_amt) - float(other_charges)) if 'paid_amt' in locals() else 0.0
                         else:
@@ -7376,34 +7385,29 @@ if st.session_state.get("logged_in", False):
                                 "extra_meta_data": extra_meta_data if 'extra_meta_data' in locals() else {}
                             }
 
-                            if "மீட்டல்" in txn_category or "Release" in txn_category:
-                                cart_entry["closed_gl_no"] = selected_gl_no if 'selected_gl_no' in locals() else ""
-                                cart_entry["closed_loan_id"] = selected_loan_db_id if 'selected_loan_db_id' in locals() else None
+                            # 🌟 கார்ட்டில் ஒரே ஒருமுறை மட்டும் சேர்க்கப்படுவதை உறுதி செய்தல்
+                            st.session_state.transactions_cart.append(cart_entry)
 
-                            # 🌟 ஒரே ஒருமுறை மட்டும் கார்ட்டில் சேர்க்க உறுதி செய்யப்பட்டுள்ளது
-                            # 🌟 கார்ட்டில் ஒரே ஒருமுறை மட்டும் என்ட்ரியைச் சேர்த்தல்
-                        st.session_state.transactions_cart.append(cart_entry)
+                            if "Pledge" in txn_category:
+                                decl_payload = {
+                                    "customer_name": visit.get("customer_name", ""),
+                                    "address": visit.get("address", ""),
+                                    "contact_number": visit.get("mobile", ""),
+                                    "branch_name": st.session_state.get("branch_name", st.session_state.get("branch", "Keezhamanakudi")),
+                                    "pledge_date": datetime.now().strftime("%d-%m-%Y"),
+                                    "loan_number": new_gl_no if 'new_gl_no' in locals() else "",
+                                    "loan_amount": paid_amt if 'paid_amt' in locals() else 0.0,
+                                    "current_date": datetime.now().strftime("%d-%m-%Y")
+                                }
+                                st.session_state.declaration_gl_no = new_gl_no if 'new_gl_no' in locals() else "GL"
+                                st.session_state.current_declaration = generate_declaration_html(decl_payload)
 
-                        if "Pledge" in txn_category:
-                            decl_payload = {
-                                "customer_name": visit.get("customer_name", ""),
-                                "address": visit.get("address", ""),
-                                "contact_number": visit.get("mobile", ""),
-                                "branch_name": st.session_state.get("branch_name", st.session_state.get("branch", "Keezhamanakudi")),
-                                "pledge_date": datetime.now().strftime("%d-%m-%Y"),
-                                "loan_number": new_gl_no if 'new_gl_no' in locals() else "",
-                                "loan_amount": paid_amt if 'paid_amt' in locals() else 0.0,
-                                "current_date": datetime.now().strftime("%d-%m-%Y")
-                            }
-                            st.session_state.declaration_gl_no = new_gl_no if 'new_gl_no' in locals() else "GL"
-                            st.session_state.current_declaration = generate_declaration_html(decl_payload)
+                            if "Pledge" in txn_category and 'next_seq_num' in locals():
+                                commit_next_gl_number(st.session_state.branch_id, next_seq_num)
 
-                        if "Pledge" in txn_category and 'next_seq_num' in locals():
-                            commit_next_gl_number(st.session_state.branch_id, next_seq_num)
-
-                        st.session_state.form_reset_counter += 1
-                        st.success(f"'{txn_category}' வெற்றிகரமாகப் பட்டியலில் சேர்க்கப்பட்டது!")
-                        st.rerun()
+                            st.session_state.form_reset_counter += 1
+                            st.success(f"'{txn_category}' வெற்றிகரமாகப் பட்டியலில் சேர்க்கப்பட்டது!")
+                            st.rerun()
 
                 # உறுதி ஆவணப் பதிவிறக்கப் பகுதி
                 if st.session_state.get("current_declaration"):
