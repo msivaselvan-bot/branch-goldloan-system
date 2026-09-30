@@ -419,7 +419,7 @@ def upload_single_file(file_obj, folder_name):
         file=file_obj.getvalue(),
         file_options={"content-type": file_obj.type, "upsert": "true"},
     )
-    return supabase.storage.from_(bucket_name).get_public_url(file_path))
+    return supabase.storage.from_(bucket_name).get_public_url(file_path)
 
 
 # ==============================================================================
