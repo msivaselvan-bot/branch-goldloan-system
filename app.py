@@ -4424,86 +4424,88 @@ if st.session_state.get("logged_in", False):
         
         
         elif selected_section == "📁 கிளை ஆவணங்கள் பதிவேற்றம்":
-            st.subheader("📁 கிளை ஆவணங்கள் பதிவேற்றம் (Upload Docs Desk)")
-            st.caption(
-                "தணிக்கைக்கு அனுப்ப வேண்டிய வாடிக்கையாளர் வருகைகள் மற்றும் அவர்களின் வணிக"
-                " நடவடிக்கைகள்."
-            )
+          st.subheader("📁 கிளை ஆவணங்கள் பதிவேற்றம் (Upload Docs Desk)")
+          st.caption(
+              "தணிக்கைக்கு அனுப்ப வேண்டிய வாடிக்கையாளர் வருகைகள் மற்றும் அவர்களின் வணிக"
+              " நடவடிக்கைகள்."
+          )
 
-            branch_pending = (
-                supabase.table("customer_visits")
-                .select("*, customers(name, mobile), transactions(*)")
-                .eq("branch_id", st.session_state.branch_id)
-                .in_("status", ["Pending_Branch_Docs", "Pending_Calling_Verification"])
-                .order("id", desc=True)
-                .execute()
-                .data
-                or []
-            )
+          branch_pending = (
+              supabase.table("customer_visits")
+              .select("*, customers(name, mobile), transactions(*)")
+              .eq("branch_id", st.session_state.branch_id)
+              .in_(
+                  "status", ["Pending_Branch_Docs", "Pending_Calling_Verification"]
+              )
+              .order("id", desc=True)
+              .execute()
+              .data
+              or []
+          )
 
-            if not branch_pending:
-                st.info("தற்போது ஆவணங்கள் ஏற்ற வேண்டிய வருகைகள் எதுவும் இல்லை.")
-            else:
-                for b_item in branch_pending:
-                c_info = b_item.get("customers", {}) or {}
-                b_txns = b_item.get("transactions", []) or []
+          if not branch_pending:
+              st.info("தற்போது ஆவணங்கள் ஏற்ற வேண்டிய வருகைகள் எதுவும் இல்லை.")
+          else:
+              for b_item in branch_pending:
+              c_info = b_item.get("customers", {}) or {}
+              b_txns = b_item.get("transactions", []) or []
 
-                with st.expander(
-                    f"📄 வருகை எண்: {b_item['visit_no']} | வாடிக்கையாளர்:"
-                    f" {c_info.get('name', '-')} (📞 {c_info.get('mobile', '-')}) |"
-                    f" நிகரத் தொகை: ₹{float(b_item.get('net_cash_amount', 0)):,.2f}"
-                ):
-                    st.markdown("##### 🛒 இந்த வருகையில் மேற்கொள்ளப்பட்ட நடவடிக்கைகள்:")
-                    if b_txns:
-                    for idx, t in enumerate(b_txns, 1):
-                        st.markdown(
-                            f"**{idx}. {t.get('transaction_type', '-')}** | காரணப்"
-                            f" பணியாளர்: `{t.get('staff_name', '-')}`"
-                        )
-                        st.write(
-                            f" • பட்டுவாடா: ₹{float(t.get('paid_amount', 0)):,.2f} |"
-                            f" வரவு: ₹{float(t.get('received_amount', 0)):,.2f}"
-                        )
-                        st.write(f" • குறிப்பு / விவரம்: {t.get('remarks', '-')}")
-                        st.markdown("")
-                    else:
-                    st.warning(
-                        "⚠️ இந்த வருகையில் நடவடிக்கைகள் எதுவும் பதிவாகவில்லை."
-                    )
+              with st.expander(
+                  f"📄 வருகை எண்: {b_item['visit_no']} | வாடிக்கையாளர்:"
+                  f" {c_info.get('name', '-')} (📞 {c_info.get('mobile', '-')}) |"
+                  f" நிகரத் தொகை: ₹{float(b_item.get('net_cash_amount', 0)):,.2f}"
+              ):
+                  st.markdown("##### 🛒 இந்த வருகையில் மேற்கொள்ளப்பட்ட நடவடிக்கைகள்:")
+                  if b_txns:
+                  for idx, t in enumerate(b_txns, 1):
+                      st.markdown(
+                          f"**{idx}. {t.get('transaction_type', '-')}** | காரணப்"
+                          f" பணியாளர்: `{t.get('staff_name', '-')}`"
+                      )
+                      st.write(
+                          f" • பட்டுவாடா: ₹{float(t.get('paid_amount', 0)):,.2f} |"
+                          f" வரவு: ₹{float(t.get('received_amount', 0)):,.2f}"
+                      )
+                      st.write(f" • குறிப்பு / விவரம்: {t.get('remarks', '-')}")
+                      st.markdown("")
+                  else:
+                  st.warning(
+                      "⚠️ இந்த வருகையில் நடவடிக்கைகள் எதுவும் பதிவாகவில்லை."
+                  )
 
-                    st.markdown("---")
-                    up_docs = st.file_uploader(
-                        f"ஆவணங்களை இணைக்கவும் ({b_item['visit_no']})",
-                        accept_multiple_files=True,
-                        key=f"doc_up_{b_item['id']}",
-                    )
+                  st.markdown("---")
+                  up_docs = st.file_uploader(
+                      f"ஆவணங்களை இணைக்கவும் ({b_item['visit_no']})",
+                      accept_multiple_files=True,
+                      key=f"doc_up_{b_item['id']}",
+                  )
 
-                    if st.button(
-                        f"ஆவணங்களைச் சமர்ப்பித்து தணிக்கைக்கு அனுப்புக"
-                        f" ({b_item['visit_no']})",
-                        key=f"btn_sub_{b_item['id']}",
-                        type="primary",
-                    ):
-                    if up_docs:
-                        try:
-                        links = upload_files_to_supabase(up_docs, b_item["visit_no"])
-                        supabase.table("customer_visits").update(
-                            {"status": "Submitted_to_Auditor"}
-                        ).eq("id", b_item["id"]).execute()
-                        supabase.table("audit_records").insert({
-                            "visit_id": b_item["id"],
-                            "document_urls": links,
-                            "audit_status": "Pending",
-                        }).execute()
-                        st.success(
-                            "✅ ஆவணங்கள் வெற்றிகரமாகத் தணிக்கைக்கு"
-                            " அனுப்பப்பட்டுவிட்டன!"
-                        )
-                        st.rerun()
-                        except Exception as e:
-                        st.error(f"பிழை: {e}")
-                    else:
-                        st.warning("⚠️ தயவுசெய்து ஆவணங்களைப் பதிவேற்றம் செய்யவும்.")
+                  if st.button(
+                      f"ஆவணங்களைச் சமர்ப்பித்து தணிக்கைக்கு அனுப்புக"
+                      f" ({b_item['visit_no']})",
+                      key=f"btn_sub_{b_item['id']}",
+                      type="primary",
+                  ):
+                  if up_docs:
+                      try:
+                      links = upload_files_to_supabase(up_docs, b_item["visit_no"])
+                      supabase.table("customer_visits").update(
+                          {"status": "Submitted_to_Auditor"}
+                      ).eq("id", b_item["id"]).execute()
+                      supabase.table("audit_records").insert({
+                          "visit_id": b_item["id"],
+                          "document_urls": links,
+                          "audit_status": "Pending",
+                      }).execute()
+                      st.success(
+                          "✅ ஆவணங்கள் வெற்றிகரமாகத் தணிக்கைக்கு"
+                          " அனுப்பப்பட்டுவிட்டன!"
+                      )
+                      st.rerun()
+                      except Exception as e:
+                      st.error(f"பிழை: {e}")
+                  else:
+                      st.warning("⚠️ தயவுசெய்து ஆவணங்களைப் பதிவேற்றம் செய்யவும்.")
 
         elif selected_section == "⚠️ விளக்கங்கள்":
             st.subheader("⚠️ தலைமை அலுவலக விளக்கங்கள் & மறுப்புகள்")
