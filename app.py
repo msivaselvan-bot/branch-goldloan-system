@@ -5672,59 +5672,59 @@ if allowed_sections:
               st.success("அங்கீகரிக்கப்பட்டார்!")
               st.rerun()
                 
-        elif selected_section == "📝 விவரத் திருத்தக் கோரிக்கைகள்":
-        st.subheader(
-            "📝 வாடிக்கையாளர் விவரத் திருத்தக் கோரிக்கைகள் (Profile Update"
-            " Requests)"
-        )
-        pending_reqs = (
-            supabase.table("customer_update_requests")
-            .select("*, customers(*), branches(branch_name)")
-            .eq("status", "Pending_Approval")
-            .order("id", desc=True)
-            .execute()
-            .data
-            or []
-        )
-        if not pending_reqs:
-            st.info("✅ எந்த கோரிக்கைகளும் இல்லை.")
-        else:
-            for u_req in pending_reqs:
-            target_c = u_req.get("customers", {}) or {}
-            b_name = u_req.get("branches", {}).get("branch_name", "Branch")
-            new_d = u_req.get("updated_data", {}) or {}
-            with st.expander(
-                f"📌 {target_c.get('name')} | கிளை: {b_name} | காரணம்:"
-                f" {u_req.get('change_reason')}"
+    elif selected_section == "📝 விவரத் திருத்தக் கோரிக்கைகள்":
+      st.subheader(
+          "📝 வாடிக்கையாளர் விவரத் திருத்தக் கோரிக்கைகள் (Profile Update"
+          " Requests)"
+      )
+      pending_reqs = (
+          supabase.table("customer_update_requests")
+          .select("*, customers(*), branches(branch_name)")
+          .eq("status", "Pending_Approval")
+          .order("id", desc=True)
+          .execute()
+          .data
+          or []
+      )
+      if not pending_reqs:
+        st.info("✅ எந்த கோரிக்கைகளும் இல்லை.")
+      else:
+        for u_req in pending_reqs:
+          target_c = u_req.get("customers", {}) or {}
+          b_name = u_req.get("branches", {}).get("branch_name", "Branch")
+          new_d = u_req.get("updated_data", {}) or {}
+          with st.expander(
+              f"📌 {target_c.get('name')} | கிளை: {b_name} | காரணம்:"
+              f" {u_req.get('change_reason')}"
+          ):
+            comp_col1, comp_col2 = st.columns(2)
+            with comp_col1:
+              st.markdown("#### 🔴 பழைய விவரங்கள்")
+              st.write(f"பெயர்: {target_c.get('name')}")
+              st.write(f"மொபைல்: {target_c.get('mobile')}")
+              st.write(f"முகவரி: {target_c.get('address')}")
+            with comp_col2:
+              st.markdown("#### 🟢 புதிய விவரங்கள்")
+              st.write(f"பெயர்: {new_d.get('name')}")
+              st.write(f"மொபைல்: {new_d.get('mobile')}")
+              st.write(f"முகவரி: {new_d.get('address')}")
+
+            if st.button(
+                "✅ ஏற்றுக்கொள் & புதுப்பி",
+                key=f"app_u_{u_req['id']}",
+                type="primary",
             ):
-                comp_col1, comp_col2 = st.columns(2)
-                with comp_col1:
-                st.markdown("#### 🔴 பழைய விவரங்கள்")
-                st.write(f"பெயர்: {target_c.get('name')}")
-                st.write(f"மொபைல்: {target_c.get('mobile')}")
-                st.write(f"முகவரி: {target_c.get('address')}")
-                with comp_col2:
-                st.markdown("#### 🟢 புதிய விவரங்கள்")
-                st.write(f"பெயர்: {new_d.get('name')}")
-                st.write(f"மொபைல்: {new_d.get('mobile')}")
-                st.write(f"முகவரி: {new_d.get('address')}")
+              supabase.table("customers").update(new_d).eq(
+                  "id", target_c["id"]
+              ).execute()
+              supabase.table("customer_update_requests").update({
+                  "status": "Approved",
+                  "reviewed_by": st.session_state.username,
+              }).eq("id", u_req["id"]).execute()
+              st.success("மாற்றப்பட்டது!")
+              st.rerun()
 
-                if st.button(
-                    "✅ ஏற்றுக்கொள் & புதுப்பி",
-                    key=f"app_u_{u_req['id']}",
-                    type="primary",
-                ):
-                supabase.table("customers").update(new_d).eq(
-                    "id", target_c["id"]
-                ).execute()
-                supabase.table("customer_update_requests").update({
-                    "status": "Approved",
-                    "reviewed_by": st.session_state.username,
-                }).eq("id", u_req["id"]).execute()
-                st.success("மாற்றப்பட்டது!")
-                st.rerun()
-
-        elif selected_section == "🔔 பரிவர்த்தனை அழைப்பு சரிபார்ப்பு":
+    elif selected_section == "🔔 பரிவர்த்தனை அழைப்பு சரிபார்ப்பு":
       st.subheader(
           "📞 பரிவர்த்தனை அழைப்பு சரிபார்ப்பு (Transaction Call Verification)"
       )
