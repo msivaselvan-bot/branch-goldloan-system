@@ -4971,18 +4971,19 @@ if st.session_state.get("logged_in", False):
           " நடவடிக்கைகள்."
       )
 
-      branch_pending = (
-          supabase.table("customer_visits")
-          .select("*, customers(name, mobile), transactions(*)")
-          .eq("branch_id", st.session_state.branch_id)
-          .in_(
-              "status", ["Pending_Branch_Docs", "Pending_Calling_Verification"]
-          )
-          .order("id", desc=True)
-          .execute()
-          .data
-          or []
-      )
+        branch_pending = (
+            supabase.table("customer_visits")
+            .select("*, customers(name, mobile), transactions(*)")
+            .eq("branch_id", st.session_state.branch_id)
+            .in_(
+                "status", ["Pending_Branch_Docs",
+                    "Pending_Calling_Verification"]
+            )
+            .order("id", desc=True)
+            .execute()
+            .data
+            or []
+        )
 
       if not branch_pending:
         st.info("தற்போது ஆவணங்கள் ஏற்ற வேண்டிய வருகைகள் எதுவும் இல்லை.")
