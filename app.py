@@ -7412,9 +7412,15 @@ if st.session_state.get("logged_in", False):
                         today_str = today_dt.strftime("%d-%m-%Y")
                         due_date_str = (today_dt + relativedelta(months=3)).strftime("%d-%m-%Y")
 
-                        amt_val = float(decl_info.get("principal_amount", 0.0) or decl_info.get("paid_amount", 0.0) or decl_info.get("amount", 0.0))
-                        tot_wt = float(decl_info.get("total_weight", 0.0))
-                        net_wt = float(decl_info.get("net_weight", 0.0))
+                        # 🌟 decl_info டிக்னரியா அல்லது ஸ்ட்ரிங்கான எனச் சரிபார்த்து மதிப்பை எடுத்தல்
+                        if isinstance(decl_info, dict):
+                            amt_val = float(decl_info.get("principal_amount", 0.0) or decl_info.get("paid_amount", 0.0) or decl_info.get("amount", 0.0))
+                            tot_wt = float(decl_info.get("total_weight", 0.0) or 0.0)
+                            net_wt = float(decl_info.get("net_weight", 0.0) or 0.0)
+                        else:
+                            amt_val = 0.0
+                            tot_wt = 0.0
+                            net_wt = 0.0
 
                         html_template = f"""<!DOCTYPE html>
                         <html>
