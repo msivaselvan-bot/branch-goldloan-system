@@ -8403,26 +8403,7 @@ if st.session_state.get("logged_in", False):
                                     )
                                     st.rerun()
         else:
-            # ==========================================================
-            # 👆 லாகின் செய்யாத போது அல்லது 'வெளியேறு' கொடுத்த பிறகு:
-            # ==========================================================
-            st.markdown(
-                "<h3 style='text-align: center;'>Muthusise Gold Product Data Center</h3>",
-                unsafe_allow_html=True,
-            )
-        st.markdown(
-            "<h3 style='text-align: center;'>Muthusise Gold Product Data Center</h3>",
-            unsafe_allow_html=True,
-        )
-    st.markdown(
-        "<p style='text-align: center;'>பணியாளர் பாதுகாப்பான உள்நுழைவு</p>",
-        unsafe_allow_html=True,
-    )
 
-    with st.form("login_form"):
-        username_input = st.text_input("பயனர் பெயர் (Username)")
-        password_input = st.text_input("கடவுச்சொல் (Password)", type="password")
-        submit_btn = st.form_submit_button("உள்நுழை (Login)")
 
         # The transaction/payment flow below is kept inside its own suite.
         # This also prevents the login form's `else` branch from being
