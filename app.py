@@ -6074,122 +6074,122 @@ if allowed_sections:
                 st.warning("கோரிக்கை நிராகரிக்கப்பட்டது.")
                 st.rerun()
 
-        elif selected_section == "🔍 தணிக்கையர் பணிப்பாய்வு" or st.session_state.get("user_role") == "Auditor":
-            st.header("🔍 தணிக்கையர் பணிப்பாய்வு (Auditor Verification)")
-            pending_visits = (
-                supabase.table("customer_visits")
-                .select("*, customers(*), transactions(*), audit_records(*)")
-                .eq("status", "Submitted_to_Auditor")
-                .order("id", desc=True)
-                .execute()
-                .data
-                or []
-            )
+    elif selected_section == "🔍 தணிக்கையர் பணிப்பாய்வு" or st.session_state.get("user_role") == "Auditor":
+        st.header("🔍 தணிக்கையர் பணிப்பாய்வு (Auditor Verification)")
+        pending_visits = (
+            supabase.table("customer_visits")
+            .select("*, customers(*), transactions(*), audit_records(*)")
+            .eq("status", "Submitted_to_Auditor")
+            .order("id", desc=True)
+            .execute()
+            .data
+            or []
+        )
 
-            if not pending_visits:
-                st.info("✅ தணிக்கைக்கு நிலுவையில் உள்ள வருகைகள் எதுவும் இல்லை.")
-            else:
-                for item in pending_visits:
-                c_data = item.get("customers", {}) or {}
-                hist_remarks = item.get("verification_remarks")
+        if not pending_visits:
+            st.info("✅ தணிக்கைக்கு நிலுவையில் உள்ள வருகைகள் எதுவும் இல்லை.")
+        else:
+            for item in pending_visits:
+            c_data = item.get("customers", {}) or {}
+            hist_remarks = item.get("verification_remarks")
 
-                with st.expander(
-                    f"வருகை எண்: {item['visit_no']} | வாடிக்கையாளர்:"
-                    f" {c_data.get('name', '-')} | நிகரத் தொகை:"
-                    f" ₹{float(item.get('net_cash_amount', 0)):,.2f}"
+            with st.expander(
+                f"வருகை எண்: {item['visit_no']} | வாடிக்கையாளர்:"
+                f" {c_data.get('name', '-')} | நிகரத் தொகை:"
+                f" ₹{float(item.get('net_cash_amount', 0)):,.2f}"
+            ):
+
+                # 🌟 ஏற்கனவே கேட்கப்பட்ட விளக்கங்கள் மற்றும் கிளை கொடுத்த பதில்கள் இருந்தால் காட்டவும்
+                if hist_remarks and hist_remarks != "Auditor Approved":
+                st.markdown(
+                    "##### 📜 முந்தைய விளக்கம் & பதில்களின் வரலாறு (Communication"
+                    " Trail):"
+                )
+                st.info(hist_remarks)
+                st.markdown("---")
+
+                if item.get("transactions"):
+                st.markdown("##### 🛒 பரிவர்த்தனைகள்:")
+                st.dataframe(pd.DataFrame(item["transactions"]))
+
+                audit_recs = item.get("audit_records", [])
+                if audit_recs and audit_recs[0].get("document_urls"):
+                st.markdown("##### 📄 இணைக்கப்பட்ட ஆவணங்கள்:")
+                for doc_url in audit_recs[0]["document_urls"]:
+                    st.markdown(f"- 🔗 [ஆவணத்தைப் பார்க்க]({doc_url})")
+
+                st.markdown("---")
+
+                # புதிய குறிப்பு அல்லது கூடுதல் விளக்கம் கேட்பதற்கான இடம்
+                aud_remarks = st.text_area(
+                    "புதிய குறிப்பு / கூடுதல் விளக்கம் (தேவைப்பட்டால் மட்டும்):",
+                    placeholder=(
+                        "கூடுதல் விளக்கம் கேட்க வேண்டுமெனில் மட்டும் இங்கு எழுதவும்..."
+                    ),
+                    key=f"aud_rem_{item['id']}",
+                )
+
+                btn_c1, btn_c2 = st.columns(2)
+                with btn_c1:
+                if st.button(
+                    "✅ திருப்திகரமாக உள்ளது - அங்கீகரி (Approve)",
+                    key=f"aud_app_{item['id']}",
+                    type="primary",
+                    use_container_width=True,
                 ):
-
-                    # 🌟 ஏற்கனவே கேட்கப்பட்ட விளக்கங்கள் மற்றும் கிளை கொடுத்த பதில்கள் இருந்தால் காட்டவும்
-                    if hist_remarks and hist_remarks != "Auditor Approved":
-                    st.markdown(
-                        "##### 📜 முந்தைய விளக்கம் & பதில்களின் வரலாறு (Communication"
-                        " Trail):"
-                    )
-                    st.info(hist_remarks)
-                    st.markdown("---")
-
-                    if item.get("transactions"):
-                    st.markdown("##### 🛒 பரிவர்த்தனைகள்:")
-                    st.dataframe(pd.DataFrame(item["transactions"]))
-
-                    audit_recs = item.get("audit_records", [])
-                    if audit_recs and audit_recs[0].get("document_urls"):
-                    st.markdown("##### 📄 இணைக்கப்பட்ட ஆவணங்கள்:")
-                    for doc_url in audit_recs[0]["document_urls"]:
-                        st.markdown(f"- 🔗 [ஆவணத்தைப் பார்க்க]({doc_url})")
-
-                    st.markdown("---")
-
-                    # புதிய குறிப்பு அல்லது கூடுதல் விளக்கம் கேட்பதற்கான இடம்
-                    aud_remarks = st.text_area(
-                        "புதிய குறிப்பு / கூடுதல் விளக்கம் (தேவைப்பட்டால் மட்டும்):",
-                        placeholder=(
-                            "கூடுதல் விளக்கம் கேட்க வேண்டுமெனில் மட்டும் இங்கு எழுதவும்..."
-                        ),
-                        key=f"aud_rem_{item['id']}",
+                    now_str = datetime.now().strftime("%d-%m-%Y %I:%M %p")
+                    final_notes = (
+                        f"{hist_remarks}\n\n✅ [Auditor Approved at {now_str}]"
+                        if hist_remarks
+                        else "Auditor Approved"
                     )
 
-                    btn_c1, btn_c2 = st.columns(2)
-                    with btn_c1:
-                    if st.button(
-                        "✅ திருப்திகரமாக உள்ளது - அங்கீகரி (Approve)",
-                        key=f"aud_app_{item['id']}",
-                        type="primary",
-                        use_container_width=True,
-                    ):
-                        now_str = datetime.now().strftime("%d-%m-%Y %I:%M %p")
-                        final_notes = (
-                            f"{hist_remarks}\n\n✅ [Auditor Approved at {now_str}]"
-                            if hist_remarks
-                            else "Auditor Approved"
-                        )
+                    supabase.table("customer_visits").update({
+                        "status": "Approved",
+                        "verification_remarks": final_notes,
+                    }).eq("id", item["id"]).execute()
+                    supabase.table("audit_records").update(
+                        {"audit_status": "Approved"}
+                    ).eq("visit_id", item["id"]).execute()
+                    st.success("✅ முழுமையாக அங்கீகரிக்கப்பட்டது!")
+                    st.rerun()
 
-                        supabase.table("customer_visits").update({
-                            "status": "Approved",
-                            "verification_remarks": final_notes,
-                        }).eq("id", item["id"]).execute()
-                        supabase.table("audit_records").update(
-                            {"audit_status": "Approved"}
-                        ).eq("visit_id", item["id"]).execute()
-                        st.success("✅ முழுமையாக அங்கீகரிக்கப்பட்டது!")
-                        st.rerun()
+                with btn_c2:
+                if st.button(
+                    "⚠️ மீண்டும் கூடுதல் விளக்கம் கேட்க",
+                    key=f"aud_clar_{item['id']}",
+                    type="secondary",
+                    use_container_width=True,
+                ):
+                    if not aud_remarks.strip():
+                    st.error(
+                        "⚠️ தயவுசெய்து என்ன கூடுதல் விளக்கம் வேண்டும் என்பதை"
+                        " உள்ளிடவும்!"
+                    )
+                    else:
+                    now_str = datetime.now().strftime("%d-%m-%Y %I:%M %p")
+                    new_query = (
+                        f"❓ [Auditor Query ({now_str}) -"
+                        f" {st.session_state.username}]:\n{aud_remarks.strip()}"
+                    )
 
-                    with btn_c2:
-                    if st.button(
-                        "⚠️ மீண்டும் கூடுதல் விளக்கம் கேட்க",
-                        key=f"aud_clar_{item['id']}",
-                        type="secondary",
-                        use_container_width=True,
-                    ):
-                        if not aud_remarks.strip():
-                        st.error(
-                            "⚠️ தயவுசெய்து என்ன கூடுதல் விளக்கம் வேண்டும் என்பதை"
-                            " உள்ளிடவும்!"
-                        )
-                        else:
-                        now_str = datetime.now().strftime("%d-%m-%Y %I:%M %p")
-                        new_query = (
-                            f"❓ [Auditor Query ({now_str}) -"
-                            f" {st.session_state.username}]:\n{aud_remarks.strip()}"
-                        )
+                    updated_hist = (
+                        f"{hist_remarks}\n\n{new_query}"
+                        if hist_remarks
+                        else new_query
+                    )
 
-                        updated_hist = (
-                            f"{hist_remarks}\n\n{new_query}"
-                            if hist_remarks
-                            else new_query
-                        )
-
-                        supabase.table("customer_visits").update({
-                            "status": "Needs_Clarification",
-                            "verification_remarks": updated_hist,
-                        }).eq("id", item["id"]).execute()
-                        supabase.table("audit_records").update({
-                            "audit_status": "Clarification_Requested"
-                        }).eq("visit_id", item["id"]).execute()
-                        st.warning(
-                            "⚠️ கூடுதல் விளக்கம் கேட்டு கிளைக்கு அனுப்பப்பட்டது!"
-                        )
-                        st.rerun()
+                    supabase.table("customer_visits").update({
+                        "status": "Needs_Clarification",
+                        "verification_remarks": updated_hist,
+                    }).eq("id", item["id"]).execute()
+                    supabase.table("audit_records").update({
+                        "audit_status": "Clarification_Requested"
+                    }).eq("visit_id", item["id"]).execute()
+                    st.warning(
+                        "⚠️ கூடுதல் விளக்கம் கேட்டு கிளைக்கு அனுப்பப்பட்டது!"
+                    )
+                    st.rerun()
     
     # ----------------------------------------------------
     # D. கிளை செயல்பாடுகள் திரை (BRANCH FLOW)
