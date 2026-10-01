@@ -2031,37 +2031,26 @@ def generate_next_gl_number(branch_id):
 # -------------------------------------------------------------
 
 
-def get_current_display_gl_number(branch_id=None, extra_offset=0):
-    """கடைசி எண்ணுடன் கார்ட் மற்றும் வரிசை (fc) எண்ணிக்கையைக் கூட்டி அடுத்த எண்ணை வழங்கும்"""
+def get_current_display_gl_number(branch_id=None):
+    """டேட்டாபேஸ் கடைசி எண் மற்றும் கார்ட்டில் உள்ள பொருட்களின் எண்ணிக்கையைக் கணக்கிட்டு அடுத்த துல்லியமான எண்ணை வழங்கும்"""
     try:
         if not branch_id or int(branch_id) == 0:
             branch_id = st.session_state.get("branch_id") or st.session_state.get("branch") or 11
         
         clean_b_id = int(branch_id)
 
+        # 1. Prefix பெறுதல்
         seq_res = (
             supabase.table("branch_loan_sequences")
             .select("prefix")
             .eq("branch_id", clean_b_id)
             .execute()
         )
-
         prefix = "KMK"
         if seq_res.data and seq_res.data[0].get("prefix"):
             prefix = str(seq_res.data[0].get("prefix")).strip().rstrip("/-")
-        else:
-            try:
-                b_res = (
-                    supabase.table("branches")
-                    .select("branch_code")
-                    .eq("id", clean_b_id)
-                    .execute()
-                )
-                if b_res.data and b_res.data[0].get("branch_code"):
-                    prefix = str(b_res.data[0].get("branch_code")).strip().rstrip("/-")
-            except Exception:
-                pass
 
+        # 2. gold_loans அட்டவணையில் உள்ள அதிகபட்ச எண் (Base Max)
         loans_res = (
             supabase.table("gold_loans")
             .select("gl_number")
@@ -2082,19 +2071,25 @@ def get_current_display_gl_number(branch_id=None, extra_offset=0):
                         continue
 
         if max_num == 0 and seq_res.data:
-            max_num = int(seq_res.data[0].get("last_number", 0))
+            max_num = int(seq_res.data[0].get("last_number", 0) - 1)
 
-        # கார்ட்டில் உள்ள கூடுதல் Pledge எண்ணிக்கைகள்
-        cart_pledge_extra = 0
-        if "cart" in st.session_state and isinstance(st.session_state["cart"], list):
-            for item in st.session_state["cart"]:
-                if isinstance(item, dict) and "Pledge" in str(item.get("transaction_type", "")):
-                    cart_pledge_extra += 1
+        # 3. கார்ட்டில் (Cart) உள்ள Pledge பரிவர்த்தனைகளின் எண்ணிக்கையைக் கண்டறிதல்
+        cart_items_count = 0
+        for key in ["cart", "transactions", "items_cart", "pending_cart"]:
+            if key in st.session_state and isinstance(st.session_state[key], list):
+                for item in st.session_state[key]:
+                    if isinstance(item, dict):
+                        t_type = str(item.get("transaction_type", ""))
+                        if "Pledge" in t_type or "நகைக்கடன்" in t_type:
+                            cart_items_count += 1
+                break
 
-        # 🌟 உண்மையான கடைசி எண் + கார்ட் எண்ணிக்கை + தற்போதைய வரிசை எண் (extra_offset / fc)
-        next_num = max_num + 1 + cart_pledge_extra + extra_offset
+        # 4. அடுத்த எண் = Base Max + கார்ட்டில் உள்ள கூடுதல் பொருட்கள் + 1
+        base = max_num if max_num > 0 else 1237
+        next_num = base + cart_items_count + 1
         display_num = next_num
 
+        # 5. வடிவமைப்பு (எ.கா: KMK/1238, KMK/1239...)
         suggested_gl_no = (
             f"{prefix}/{display_num:04d}"
             if display_num < 1000
