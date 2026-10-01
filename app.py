@@ -2032,11 +2032,11 @@ def generate_next_gl_number(branch_id):
 
 
 def get_current_display_gl_number(branch_id):
-    """gold_loans அட்டவணையில் உள்ள உண்மையான கடைசி எண்ணைக் கண்டறிந்து அடுத்த எண்ணை வழங்கும்"""
+    """gold_loans அட்டவணையில் உள்ள உண்மையான கடைசி எண்ணைக் கண்டறிந்து, அதற்கு அடுத்த எண்ணை வழங்கும்"""
     try:
         clean_b_id = int(branch_id)
 
-        # 1. branch_loan_sequences அட்டவணையில் இருந்து prefix-ஐ மட்டும் எடுத்தல்
+        # 1. Prefix-ஐப் பெறுதல்
         seq_res = (
             supabase.table("branch_loan_sequences")
             .select("prefix")
@@ -2045,8 +2045,8 @@ def get_current_display_gl_number(branch_id):
         )
 
         prefix = "KMK"
-        if seq_res.data:
-            prefix = str(seq_res.data[0].get("prefix") or "KMK").strip().rstrip("/-")
+        if seq_res.data and seq_res.data[0].get("prefix"):
+            prefix = str(seq_res.data[0].get("prefix")).strip().rstrip("/-")
         else:
             try:
                 b_res = (
@@ -2061,7 +2061,7 @@ def get_current_display_gl_number(branch_id):
             except Exception:
                 prefix = "KMK"
 
-        # 2. 🌟 gold_loans அட்டவணையில் அந்தக் கிளைக்கு ஏற்கனவே கொடுக்கப்பட்ட கடன் எண்களில் இருந்து மிக உயர்ந்த (Max) எண்ணைக் கண்டறிதல்
+        # 2. 🌟 மிக முக்கியமானது: gold_loans அட்டவணையில் அந்தக் கிளைக்குரிய மிக உயர்ந்த (Max) கடன் எண்ணைக் கண்டறிதல்
         loans_res = (
             supabase.table("gold_loans")
             .select("gl_number")
@@ -2081,11 +2081,15 @@ def get_current_display_gl_number(branch_id):
                     except ValueError:
                         continue
 
-        # 3. உண்மையான கடைசி எண்ணுடன் 1-ஐக் கூட்டுதல் (எ.கா: 1237 என்றால் அடுத்தது 1238)
+        # ஒருவேளை கடன்கள் எதுவும் இல்லையென்றால் sequence டேபிளில் உள்ளதைக் கொள்ளுதல்
+        if max_num == 0 and seq_res.data:
+            max_num = int(seq_res.data[0].get("last_number", 0))
+
+        # 3. உண்மையான கடைசி எண்ணுடன் 1-ஐக் கூட்டுதல் (எ.கா: 1237 + 1 = 1238)
         next_num = max_num + 1 if max_num > 0 else 1
         display_num = next_num
 
-        # 4. கடன் எண் உருவாக்குதல் (எ.கா: KMK/1238)
+        # 4. வடிவமைப்பு (எ.கா: KMK/1238)
         suggested_gl_no = (
             f"{prefix}/{display_num:04d}"
             if display_num < 1000
@@ -2096,14 +2100,6 @@ def get_current_display_gl_number(branch_id):
 
     except Exception:
         return "KMK/1", 1
-
-def commit_next_gl_number(branch_id, used_number):
-    try:
-        supabase.table("branch_loan_sequences").upsert(
-            {"branch_id": int(branch_id), "last_number": int(used_number)}
-        ).execute()
-    except Exception:
-        pass
 
 
 # -----------------------------------------------------------------------------------------
