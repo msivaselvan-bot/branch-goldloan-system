@@ -6734,10 +6734,12 @@ if st.session_state.get("logged_in", False):
                     with pl_col1:
                         suggested_gl, next_seq_num = get_current_display_gl_number(st.session_state.branch_id)
                         
+                        # 🌟 key-ல் suggested_gl-ஐ இணைப்பதன் மூலம் Streamlit ஒவ்வொரு முறையும் புதிய எண்ணை உடனுக்குடன் காட்டும்
                         new_gl_no = st.text_input(
                             "கடன் எண் (Auto Generated GL No) *", 
                             value=suggested_gl, 
-                            disabled=True
+                            disabled=True, 
+                            key=f"pledge_gl_box_{suggested_gl}"
                         )
                         
                         scheme_options = list(scheme_map.keys()) if scheme_map else ["Standard Gold Loan"]
