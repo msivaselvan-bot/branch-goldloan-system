@@ -1997,8 +1997,8 @@ def get_active_loan_schemes():
 # 🔢 கிளை வாரியான நகைக் கடன் எண்ணை உருவாக்கும் நேரடி முறை (FD / RD முறையைப் போல)
 # -------------------------------------------------------------
 
-def get_current_display_gl_number(branch_id=None):
-    """RD மற்றும் FD முறையைப் போல டேட்டாபேஸ் சீக்வென்ஸ் அட்டவணையில் இருந்து அடுத்த எண்ணை நேரடியாக வழங்கும்"""
+def get_current_display_gl_number(branch_id=None, extra_offset=0):
+    """டேட்டாபேஸ் சீக்வென்ஸ் அட்டவணையில் இருந்து அடுத்த எண்ணை துல்லியமாக வழங்கும்"""
     try:
         if not branch_id or int(branch_id) == 0:
             branch_id = st.session_state.get("branch_id") or st.session_state.get("branch") or 11
@@ -2014,7 +2014,7 @@ def get_current_display_gl_number(branch_id=None):
         )
 
         prefix = "KMK"
-        last_no = 1237  # ஒருவேளை டேட்டா இல்லையென்றால் ஆரம்ப எண்
+        last_no = 1237  # இயல்புநிலை ஆரம்ப எண்
 
         if res.data:
             rec = res.data[0]
@@ -2023,23 +2023,15 @@ def get_current_display_gl_number(branch_id=None):
             if rec.get("last_number") is not None:
                 last_no = int(rec.get("last_number"))
 
-        # 2. கார்ட்டில் (transactions_cart) தற்போது தற்காலிகமாக சேர்க்கப்பட்டுள்ள Pledge எண்ணிக்கையைக் கூட்டுதல்
-        cart_items_count = 0
-        if "transactions_cart" in st.session_state and isinstance(st.session_state["transactions_cart"], list):
-            for item in st.session_state["transactions_cart"]:
-                if isinstance(item, dict):
-                    t_type = str(item.get("transaction_type", ""))
-                    if "Pledge" in t_type or "நகைக்கடன்" in t_type:
-                        cart_items_count += 1
+        # 2. அடுத்த எண் = டேட்டாபேஸ் கடைசி எண் + 1 + வரிசை offset (fc)
+        next_num = last_no + 1 + extra_offset
+        display_num = next_num
 
-        # 3. அடுத்த எண் = டேட்டாபேஸ் கடைசி எண் + கார்ட் எண்ணிக்கை + 1
-        next_num = last_no + cart_items_count + 1
-
-        # 4. வடிவமைப்பு (எ.கா: KMK/1238, KMK/1239...)
+        # 3. வடிவமைப்பு (எ.கா: KMK/1238, KMK/1239...)
         suggested_gl_no = (
-            f"{prefix}/{next_num:04d}"
-            if next_num < 1000
-            else f"{prefix}/{next_num}"
+            f"{prefix}/{display_num:04d}"
+            if display_num < 1000
+            else f"{prefix}/{display_num}"
         )
 
         return suggested_gl_no, next_num
@@ -6724,13 +6716,12 @@ if st.session_state.get("logged_in", False):
                     pl_col1, pl_col2, pl_col3 = st.columns(3)
 
                     with pl_col1:
-                        suggested_gl, next_seq_num = get_current_display_gl_number(st.session_state.branch_id)
+                        suggested_gl, next_seq_num = get_current_display_gl_number(st.session_state.branch_id, extra_offset=fc)
                         
                         new_gl_no = st.text_input(
                             "கடன் எண் (Auto Generated GL No) *", 
                             value=suggested_gl, 
-                            disabled=True, 
-                            key=f"gl_no_box_{suggested_gl}"
+                            disabled=True
                         )
                         
                         scheme_options = list(scheme_map.keys()) if scheme_map else ["Standard Gold Loan"]
