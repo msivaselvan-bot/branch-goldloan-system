@@ -2051,17 +2051,17 @@ def get_current_display_gl_number(branch_id):
             try:
                 b_res = (
                     supabase.table("branches")
-                    .select("branch_code, name")
+                    .select("branch_code")
                     .eq("id", clean_b_id)
                     .execute()
                 )
                 if b_res.data:
                     b_rec = b_res.data[0]
-                    prefix = str(b_rec.get("branch_code") or b_rec.get("name") or "KMK").strip().rstrip("/-")
+                    prefix = str(b_rec.get("branch_code") or "KMK").strip().rstrip("/-")
             except Exception:
                 prefix = "KMK"
 
-        # 2. 🌟 மிக முக்கியமானது: gold_loans அட்டவணையில் அந்தக் கிளைக்குரிய மிக உயர்ந்த (Max) கடன் எண்ணைக் கண்டறிதல்
+        # 2. gold_loans அட்டவணையில் அந்தக் கிளைக்குரிய மிக உயர்ந்த (Max) கடன் எண்ணைக் கண்டறிதல்
         loans_res = (
             supabase.table("gold_loans")
             .select("gl_number")
@@ -2081,15 +2081,12 @@ def get_current_display_gl_number(branch_id):
                     except ValueError:
                         continue
 
-        # ஒருவேளை கடன்கள் எதுவும் இல்லையென்றால் sequence டேபிளில் உள்ளதைக் கொள்ளுதல்
         if max_num == 0 and seq_res.data:
             max_num = int(seq_res.data[0].get("last_number", 0))
 
-        # 3. உண்மையான கடைசி எண்ணுடன் 1-ஐக் கூட்டுதல் (எ.கா: 1237 + 1 = 1238)
         next_num = max_num + 1 if max_num > 0 else 1
         display_num = next_num
 
-        # 4. வடிவமைப்பு (எ.கா: KMK/1238)
         suggested_gl_no = (
             f"{prefix}/{display_num:04d}"
             if display_num < 1000
@@ -2100,6 +2097,16 @@ def get_current_display_gl_number(branch_id):
 
     except Exception:
         return "KMK/1", 1
+
+
+def commit_next_gl_number(branch_id, used_number):
+    """கடன் வழங்கப்பட்ட பிறகு அடுத்த வரிசை எண்ணை டேட்டாபேஸில் பதிவு செய்தல்"""
+    try:
+        supabase.table("branch_loan_sequences").upsert(
+            {"branch_id": int(branch_id), "last_number": int(used_number)}
+        ).execute()
+    except Exception:
+        pass
 
 
 # -----------------------------------------------------------------------------------------
@@ -6765,7 +6772,7 @@ if st.session_state.get("logged_in", False):
                     scheme_map = {s["scheme_name"]: s for s in db_schemes} if db_schemes else {}
                     
                     pl_col1, pl_col2, pl_col3 = st.columns(3)
-            
+
                     with pl_col1:
                         suggested_gl, next_seq_num = get_current_display_gl_number(st.session_state.branch_id)
                         
@@ -6817,7 +6824,6 @@ if st.session_state.get("logged_in", False):
                         f"RPG: ₹{cur_rpg:,.2f}", 
                         f"எடை: {net_weight:.3f}g"
                     ]
-
                 # 2. அடமானம் மீட்டல் (GL Release)
                 elif txn_category == "GL Release (அடமானம் மீட்டல்)":
                     v_info = st.session_state.get("current_visit", {}) or (visit if 'visit' in locals() else {})
