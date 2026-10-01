@@ -6779,7 +6779,7 @@ if st.session_state.get("logged_in", False):
 
                     with pl_col1:
                         # 🌟 இங்கு fc மதிப்பை extra_offset ஆக அனுப்பவும்
-                        suggested_gl, next_seq_num = get_current_display_gl_number(st.session_state.branch_id, extra_offset=fc)
+                        suggested_gl, next_seq_num = get_current_display_gl_number(st.session_state.branch_id)
                         
                         new_gl_no = st.text_input(
                             "கடன் எண் (Auto Generated GL No) *", 
