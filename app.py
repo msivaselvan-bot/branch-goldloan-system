@@ -2032,57 +2032,60 @@ def generate_next_gl_number(branch_id):
 
 
 def get_current_display_gl_number(branch_id):
-    """branch_loan_sequences அட்டவணையில் உள்ள prefix மற்றும் last_number-ஐ நேரடியாக எடுத்து AVL/1754 என உருவாக்கும்"""
+    """gold_loans அட்டவணையில் உள்ள உண்மையான கடைசி எண்ணைக் கண்டறிந்து அடுத்த எண்ணை வழங்கும்"""
     try:
         clean_b_id = int(branch_id)
 
-        # 1. branch_loan_sequences அட்டவணையில் இருந்து prefix மற்றும் last_number எடுத்தல்
+        # 1. branch_loan_sequences அட்டவணையில் இருந்து prefix-ஐ மட்டும் எடுத்தல்
         seq_res = (
             supabase.table("branch_loan_sequences")
-            .select("*")
+            .select("prefix")
             .eq("branch_id", clean_b_id)
             .execute()
         )
 
-        prefix = "AVL"
-        last_num = 0
-
+        prefix = "KMK"
         if seq_res.data:
-            rec = seq_res.data[0]
-            prefix = str(rec.get("prefix") or "AVL").strip().rstrip("/-")
-            last_num = int(rec.get("last_number") or 0)
+            prefix = str(seq_res.data[0].get("prefix") or "KMK").strip().rstrip("/-")
         else:
             try:
                 b_res = (
                     supabase.table("branches")
-                    .select("*")
+                    .select("branch_code, name")
                     .eq("id", clean_b_id)
                     .execute()
                 )
                 if b_res.data:
                     b_rec = b_res.data[0]
-                    prefix = (
-                        str(
-                            b_rec.get("branch_code")
-                            or b_rec.get("prefix")
-                            or b_rec.get("name")
-                            or "AVL"
-                        )
-                        .strip()
-                        .rstrip("/-")
-                    )
+                    prefix = str(b_rec.get("branch_code") or b_rec.get("name") or "KMK").strip().rstrip("/-")
             except Exception:
-                prefix = "AVL"
+                prefix = "KMK"
 
-        # 2. அடுத்த வரிசை எண் கணக்கீடு (Data base last_num + 1)
-        next_num = last_num + 1
+        # 2. 🌟 gold_loans அட்டவணையில் அந்தக் கிளைக்கு ஏற்கனவே கொடுக்கப்பட்ட கடன் எண்களில் இருந்து மிக உயர்ந்த (Max) எண்ணைக் கண்டறிதல்
+        loans_res = (
+            supabase.table("gold_loans")
+            .select("gl_number")
+            .eq("branch_id", clean_b_id)
+            .execute()
+        )
 
-        # 🌟 குறிப்பு: கார்ட் கவுண்ட் (cart_pledge_count) டெபாக்சிங் செய்யும் போது 
-        # இரட்டிப்பாகக் கூட்டுவதைத் தவிர்க்க இது விலக்கப்படலாம் அல்லது கவனமாகக் கையாளப்பட வேண்டும்.
-        # டேட்டாபேஸ் சீக்வென்ஸ் மட்டுமே போதுமானது என்பதால் கார்ட் கவுண்டை நீக்குவது பாதுகாப்பானது.
+        max_num = 0
+        if loans_res.data:
+            for row in loans_res.data:
+                g_no = str(row.get("gl_number", ""))
+                if "/" in g_no:
+                    try:
+                        num_part = int(g_no.split("/")[-1])
+                        if num_part > max_num:
+                            max_num = num_part
+                    except ValueError:
+                        continue
+
+        # 3. உண்மையான கடைசி எண்ணுடன் 1-ஐக் கூட்டுதல் (எ.கா: 1237 என்றால் அடுத்தது 1238)
+        next_num = max_num + 1 if max_num > 0 else 1
         display_num = next_num
 
-        # 3. கடன் எண் உருவாக்குதல் (எ.கா: AVL/1754)
+        # 4. கடன் எண் உருவாக்குதல் (எ.கா: KMK/1238)
         suggested_gl_no = (
             f"{prefix}/{display_num:04d}"
             if display_num < 1000
@@ -2092,7 +2095,7 @@ def get_current_display_gl_number(branch_id):
         return suggested_gl_no, next_num
 
     except Exception:
-        return "AVL/1754", 1754
+        return "KMK/1", 1
 
 def commit_next_gl_number(branch_id, used_number):
     try:
