@@ -2031,15 +2031,14 @@ def generate_next_gl_number(branch_id):
 # -------------------------------------------------------------
 
 
-def get_current_display_gl_number(branch_id=None):
-    """gold_loans அட்டவணை மற்றும் கார்ட்டில் உள்ள நிலுவை எண்களைக் கணக்கிட்டு அடுத்த துல்லியமான எண்ணை வழங்கும்"""
+def get_current_display_gl_number(branch_id=None, extra_offset=0):
+    """கடைசி எண்ணுடன் கார்ட் மற்றும் வரிசை (fc) எண்ணிக்கையைக் கூட்டி அடுத்த எண்ணை வழங்கும்"""
     try:
         if not branch_id or int(branch_id) == 0:
             branch_id = st.session_state.get("branch_id") or st.session_state.get("branch") or 11
         
         clean_b_id = int(branch_id)
 
-        # 1. Prefix-ஐப் பெறுதல்
         seq_res = (
             supabase.table("branch_loan_sequences")
             .select("prefix")
@@ -2063,7 +2062,6 @@ def get_current_display_gl_number(branch_id=None):
             except Exception:
                 pass
 
-        # 2. gold_loans அட்டவணையில் உள்ள அதிகபட்ச எண்
         loans_res = (
             supabase.table("gold_loans")
             .select("gl_number")
@@ -2086,18 +2084,17 @@ def get_current_display_gl_number(branch_id=None):
         if max_num == 0 and seq_res.data:
             max_num = int(seq_res.data[0].get("last_number", 0))
 
-        # 3. 🌟 மிக முக்கியமானது: கார்ட்டில் (Cart / Pending List) ஏற்கனவே சேர்க்கப்பட்ட Pledge எண்ணிக்கையைக் கணக்கிடுதல்
+        # கார்ட்டில் உள்ள கூடுதல் Pledge எண்ணிக்கைகள்
         cart_pledge_extra = 0
         if "cart" in st.session_state and isinstance(st.session_state["cart"], list):
             for item in st.session_state["cart"]:
                 if isinstance(item, dict) and "Pledge" in str(item.get("transaction_type", "")):
                     cart_pledge_extra += 1
 
-        # 4. உண்மையான கடைசி எண் + கார்ட்டில் உள்ள கூடுதல் எண்ணிக்கைகள்
-        next_num = max_num + 1 + cart_pledge_extra
+        # 🌟 உண்மையான கடைசி எண் + கார்ட் எண்ணிக்கை + தற்போதைய வரிசை எண் (extra_offset / fc)
+        next_num = max_num + 1 + cart_pledge_extra + extra_offset
         display_num = next_num
 
-        # 5. வடிவமைப்பு (எ.கா: KMK/1238, KMK/1239...)
         suggested_gl_no = (
             f"{prefix}/{display_num:04d}"
             if display_num < 1000
@@ -6786,9 +6783,9 @@ if st.session_state.get("logged_in", False):
                     pl_col1, pl_col2, pl_col3 = st.columns(3)
 
                     with pl_col1:
-                        suggested_gl, next_seq_num = get_current_display_gl_number(st.session_state.branch_id)
+                        # 🌟 இங்கு fc மதிப்பை extra_offset ஆக அனுப்பவும்
+                        suggested_gl, next_seq_num = get_current_display_gl_number(st.session_state.branch_id, extra_offset=fc)
                         
-                        # 🌟 key-ஐ நீக்கிவிட்டதால், கார்ட்டில் சேர்க்கும்போதோ அல்லது மாற்றும்போதோ எண் உடனடியாக அப்டேட் ஆகும்
                         new_gl_no = st.text_input(
                             "கடன் எண் (Auto Generated GL No) *", 
                             value=suggested_gl, 
