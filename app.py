@@ -3184,78 +3184,115 @@ if st.session_state.get("logged_in", False):
             # -------------------------------------------------------------------------
             # டேப் 1: கிளைகளிலிருந்து அனுப்பப்பட்ட பாக்கெட்களைப் பெற்று சரிபார்த்தல்
             # -------------------------------------------------------------------------
+            # -------------------------------------------------------------------------
+            # டேப் 1: கிளைகளிலிருந்து அனுப்பப்பட்ட பாக்கெட்களைப் பெற்று சரிபார்த்தல் (Bulk Receive Support)
+            # -------------------------------------------------------------------------
             with p_tab1:
-                st.markdown(
-                    "##### 📥 கிளைகளிலிருந்து வழியில் உள்ள பாக்கெட்கள் (In Transit to HQ)"
-                )
+                st.markdown("##### 📥 கிளைகளிலிருந்து வழியில் உள்ள பாக்கெட்கள் (In Transit to HQ - Bulk Receive)")
+                
                 transit_loans = [
-                    p
-                    for p in all_loan_pkts
-                    if p.get("packet_location") == "IN_TRANSIT_TO_HQ"
+                    p for p in all_loan_pkts if p.get("packet_location") == "IN_TRANSIT_TO_HQ"
                 ]
                 transit_gps = [
-                    g
-                    for g in all_gp_pkts
-                    if g.get("packet_location") == "IN_TRANSIT_TO_HQ"
+                    g for g in all_gp_pkts if g.get("packet_location") == "IN_TRANSIT_TO_HQ"
                 ]
 
                 if not transit_loans and not transit_gps:
                     st.info("தற்போது கிளைகளிலிருந்து வழியில் எந்த பாக்கெட்களும் இல்லை.")
                 else:
+                    # 1. நகைக்கடன் பாக்கெட்டுகளுக்கான Bulk Receive அமைப்பு
                     if transit_loans:
-                        st.write(
-                            f"🪙 **நகைக்கடன் பாக்கெட்கள் ({len(transit_loans)}):**"
+                        st.write(f"🪙 **நகைக்கடன் பாக்கெட்கள் ({len(transit_loans)}):**")
+                        
+                        # டேட்டாவை DataFrame-ஆக மாற்றுதல்
+                        df_loans = pd.DataFrame(transit_loans)
+                        # செக்பாக்ஸ் காலமை சேர்த்தல்
+                        df_loans.insert(0, "Select", False)
+                        
+                        # தேவையான தூண்களை மட்டும் தேர்ந்தெடுத்தல் (அட்டவணை நேர்த்தியாக இருக்க)
+                        show_cols_l = ["Select", "loan_no", "branch_id", "gross_weight", "ornament_details"]
+                        available_l = [c for c in show_cols_l if c in df_loans.columns]
+                        
+                        edited_loans_df = st.data_editor(
+                            df_loans[available_l],
+                            column_config={
+                                "Select": st.column_config.CheckboxColumn("Select", help="பெற வேண்டியதை டிக் செய்யவும்"),
+                                "loan_no": st.column_config.TextColumn("கடன் எண் (Loan No)", disabled=True),
+                                "branch_id": st.column_config.SelectboxColumn("கிளை", options=list(b_map_name.keys()), format_func=lambda x: b_map_name.get(x, "-"), disabled=True),
+                                "gross_weight": st.column_config.NumberColumn("எடை (g)", disabled=True),
+                                "ornament_details": st.column_config.TextColumn("நகை விவரம்", disabled=True),
+                            },
+                            hide_index=True,
+                            use_container_width=True,
+                            key="bulk_receive_loans_editor"
                         )
-                        for tl in transit_loans:
-                            c_a, c_b, c_c, c_d = st.columns([2, 3, 2, 2])
-                            c_a.write(f"🏷️ **{tl['loan_no']}**")
-                            c_b.write(
-                                f"கிளை: {b_map_name.get(tl['branch_id'], '-')} | எடை: {tl['gross_weight']}g"
-                            )
-                            c_c.write(f"நகை: {tl.get('ornament_details', '-')}")
-                            if c_d.button(
-                                "✅ பெற்றுக்கொள் (Accept)", key=f"acc_l_{tl['id']}"
-                            ):
-                                supabase.table("gold_loans").update(
-                                    {
-                                        "packet_location": "AT_HQ_VAULT",
-                                        "packet_received_by": st.session_state.get(
-                                            "username", "Admin"
-                                        ),
-                                        "packet_updated_at": datetime.now().isoformat(),
-                                    }
-                                ).eq("id", tl["id"]).execute()
-                                st.success(
-                                    f"{tl['loan_no']} HQ பெட்டகத்தில் சேர்க்கப்பட்டது!"
-                                )
+                        
+                        selected_loans = edited_loans_df[edited_loans_df["Select"] == True]
+                        
+                        if st.button("📥 தேர்வு செய்த நகைக்கடன் பாக்கெட்டுகளை மட்டும் பெறு", type="primary", key="btn_bulk_accept_loans"):
+                            if selected_loans.empty:
+                                st.warning("⚠️ தயவுசெய்து குறைந்தபட்சம் ஒரு நகைக்கடன் பாக்கெட்டையாவது டிக் செய்யவும்!")
+                            else:
+                                count_l = 0
+                                for idx, row in selected_loans.iterrows():
+                                    # ஒரிஜினல் டிக்ட் ஐடியைக் கண்டறிந்து அப்டேட் செய்தல்
+                                    orig_id = df_loans.loc[idx, "id"]
+                                    supabase.table("gold_loans").update(
+                                        {
+                                            "packet_location": "AT_HQ_VAULT",
+                                            "packet_received_by": st.session_state.get("username", "Admin"),
+                                            "packet_updated_at": datetime.now().isoformat(),
+                                        }
+                                    ).eq("id", orig_id).execute()
+                                    count_l += 1
+                                
+                                st.success(f"🎉 வெற்றிகரமாக {count_l} நகைக்கடன் பாக்கெட்டுகள் HQ பெட்டகத்தில் பெறப்பட்டன!")
                                 st.rerun()
 
+                    st.markdown("---")
+
+                    # 2. GP கொள்முதல் பாக்கெட்டுகளுக்கான Bulk Receive அமைப்பு
                     if transit_gps:
-                        st.write(
-                            f"✨ **ஜிபி நகை வாங்குதல் பாக்கெட்கள் ({len(transit_gps)}):**"
+                        st.write(f"✨ **ஜிபி நகை வாங்குதல் பாக்கெட்கள் ({len(transit_gps)}):**")
+                        
+                        df_gps = pd.DataFrame(transit_gps)
+                        df_gps.insert(0, "Select", False)
+                        
+                        show_cols_g = ["Select", "gp_no", "branch_id", "gross_weight"]
+                        available_g = [c for c in show_cols_g if c in df_gps.columns]
+                        
+                        edited_gps_df = st.data_editor(
+                            df_gps[available_g],
+                            column_config={
+                                "Select": st.column_config.CheckboxColumn("Select", help="பெற வேண்டியதை டிக் செய்யவும்"),
+                                "gp_no": st.column_config.TextColumn("GP எண்", disabled=True),
+                                "branch_id": st.column_config.SelectboxColumn("கிளை", options=list(b_map_name.keys()), format_func=lambda x: b_map_name.get(x, "-"), disabled=True),
+                                "gross_weight": st.column_config.NumberColumn("எடை (g)", disabled=True),
+                            },
+                            hide_index=True,
+                            use_container_width=True,
+                            key="bulk_receive_gps_editor"
                         )
-                        for tg in transit_gps:
-                            g_a, g_b, g_c, g_d = st.columns([2, 3, 2, 2])
-                            g_a.write(f"🧾 **{tg['gp_no']}**")
-                            g_b.write(
-                                f"கிளை: {b_map_name.get(tg['branch_id'], '-')} | எடை: {tg['gross_weight']}g"
-                            )
-                            g_c.write("வகை: GP கொள்முதல்")
-                            if g_d.button(
-                                "✅ பெற்றுக்கொள் (Accept)", key=f"acc_g_{tg['id']}"
-                            ):
-                                supabase.table("gold_purchases").update(
-                                    {
-                                        "packet_location": "AT_HQ_VAULT",
-                                        "packet_received_by": st.session_state.get(
-                                            "username", "Admin"
-                                        ),
-                                        "packet_updated_at": datetime.now().isoformat(),
-                                    }
-                                ).eq("id", tg["id"]).execute()
-                                st.success(
-                                    f"{tg['gp_no']} HQ பெட்டகத்தில் சேர்க்கப்பட்டது!"
-                                )
+                        
+                        selected_gps = edited_gps_df[edited_gps_df["Select"] == True]
+                        
+                        if st.button("📥 தேர்வு செய்த ஜிபி பாக்கெட்டுகளை மட்டும் பெறு", type="primary", key="btn_bulk_accept_gps"):
+                            if selected_gps.empty:
+                                st.warning("⚠️ தயவுசெய்து குறைந்தபட்சம் ஒரு ஜிபி பாக்கெட்டையாவது டிக் செய்யவும்!")
+                            else:
+                                count_g = 0
+                                for idx, row in selected_gps.iterrows():
+                                    orig_id = df_gps.loc[idx, "id"]
+                                    supabase.table("gold_purchases").update(
+                                        {
+                                            "packet_location": "AT_HQ_VAULT",
+                                            "packet_received_by": st.session_state.get("username", "Admin"),
+                                            "packet_updated_at": datetime.now().isoformat(),
+                                        }
+                                    ).eq("id", orig_id).execute()
+                                    count_g += 1
+                                
+                                st.success(f"🎉 வெற்றிகரமாக {count_g} ஜிபி பாக்கெட்டுகள் HQ பெட்டகத்தில் பெறப்பட்டன!")
                                 st.rerun()
 
             # -------------------------------------------------------------------------
