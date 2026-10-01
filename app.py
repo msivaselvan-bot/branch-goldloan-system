@@ -7347,9 +7347,12 @@ if st.session_state.get("logged_in", False):
                                 "extra_meta_data": extra_meta_data if 'extra_meta_data' in locals() else {}
                             }
 
-                            # 🌟 கார்ட்டில் ஒரே ஒருமுறை மட்டும் சேர்க்கப்படுவதை உறுதி செய்தல்
+                            # 🌟 கார்ட்டில் ஒரே ஒருமுறை மட்டும் சரியாகச் சேர்த்தல்
+                            if "transactions_cart" not in st.session_state:
+                                st.session_state.transactions_cart = []
                             st.session_state.transactions_cart.append(cart_entry)
 
+                            # 🌟 Pledge என்றால் உறுதி ஆவணம் (Declaration Form) தயாரித்தல்
                             if "Pledge" in txn_category:
                                 decl_payload = {
                                     "customer_name": visit.get("customer_name", ""),
@@ -7364,13 +7367,13 @@ if st.session_state.get("logged_in", False):
                                 st.session_state.declaration_gl_no = new_gl_no if 'new_gl_no' in locals() else "GL"
                                 st.session_state.current_declaration = generate_declaration_html(decl_payload)
 
-                            if "Pledge" in txn_category and 'next_seq_num' in locals():
-                                commit_next_gl_number(st.session_state.branch_id, next_seq_num)
-
+                            # 🌟 படிவத்தை ரீசெட் கவுண்டரை கூட்டுதல் மற்றும் திரையைப் புதுப்பித்தல்
+                            if "form_reset_counter" not in st.session_state:
+                                st.session_state.form_reset_counter = 0
                             st.session_state.form_reset_counter += 1
+
                             st.success(f"'{txn_category}' வெற்றிகரமாகப் பட்டியலில் சேர்க்கப்பட்டது!")
                             st.rerun()
-
                 # உறுதி ஆவணப் பதிவிறக்கப் பகுதி
                 if st.session_state.get("current_declaration"):
                     decl_info = st.session_state.current_declaration
