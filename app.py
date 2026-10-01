@@ -1997,8 +1997,8 @@ def get_active_loan_schemes():
 # 🔢 கிளை வாரியான நகைக் கடன் எண்ணை உருவாக்கும் நேரடி முறை (FD / RD முறையைப் போல)
 # -------------------------------------------------------------
 
-def get_current_display_gl_number(branch_id=None, extra_offset=0):
-    """டேட்டாபேஸ் சீக்வென்ஸ் அட்டவணையில் இருந்து அடுத்த எண்ணை துல்லியமாக வழங்கும்"""
+def get_current_display_gl_number(branch_id=None):
+    """RD மற்றும் FD முறையைப் போல டேட்டாபேஸ் சீக்வென்ஸ் அட்டவணையில் இருந்து அடுத்த எண்ணை நேரடியாக வழங்கும்"""
     try:
         if not branch_id or int(branch_id) == 0:
             branch_id = st.session_state.get("branch_id") or st.session_state.get("branch") or 11
@@ -2023,8 +2023,8 @@ def get_current_display_gl_number(branch_id=None, extra_offset=0):
             if rec.get("last_number") is not None:
                 last_no = int(rec.get("last_number"))
 
-        # 2. அடுத்த எண் = டேட்டாபேஸ் கடைசி எண் + 1 + வரிசை offset (fc)
-        next_num = last_no + 1 + extra_offset
+        # 2. அடுத்த எண் = டேட்டாபேஸ் கடைசி எண் + 1 (RD/FD போல நேர்மையான முறை)
+        next_num = last_no + 1
         display_num = next_num
 
         # 3. வடிவமைப்பு (எ.கா: KMK/1238, KMK/1239...)
@@ -6716,7 +6716,7 @@ if st.session_state.get("logged_in", False):
                     pl_col1, pl_col2, pl_col3 = st.columns(3)
 
                     with pl_col1:
-                        suggested_gl, next_seq_num = get_current_display_gl_number(st.session_state.branch_id, extra_offset=fc)
+                        suggested_gl, next_seq_num = get_current_display_gl_number(st.session_state.branch_id)
                         
                         new_gl_no = st.text_input(
                             "கடன் எண் (Auto Generated GL No) *", 
