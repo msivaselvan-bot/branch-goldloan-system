@@ -1997,31 +1997,54 @@ def get_active_loan_schemes():
 # 🔢 கிளை வாரியான நகைக் கடன் எண்ணை உருவாக்கும் நேரடி முறை (FD / RD முறையைப் போல)
 # -------------------------------------------------------------
 
-def generate_pledge_gl_number(branch_id):
-    """RD மற்றும் FD முறையைப் போல டேட்டாபேஸ் சீக்வென்ஸில் இருந்து நேரடியாக அடுத்த எண்ணைப் பெறும் முறை"""
+def get_current_display_gl_number(branch_id=None):
+    """RD மற்றும் FD முறையைப் போல டேட்டாபேஸில் இருந்து அடுத்த நகைக் கடன் எண்ணை நேரடியாக வழங்கும்"""
     try:
-        clean_b_id = int(branch_id or 11)
+        if not branch_id or int(branch_id) == 0:
+            branch_id = st.session_state.get("branch_id") or st.session_state.get("branch") or 11
+        
+        clean_b_id = int(branch_id)
+
+        # 1. branch_loan_sequences அட்டவணையில் இருந்து கடைசி எண்ணைப் பெறுதல்
         res = (
             supabase.table("branch_loan_sequences")
             .select("prefix, last_number")
             .eq("branch_id", clean_b_id)
             .execute()
         )
-        
+
         prefix = "KMK"
-        last_no = 1237  # இயல்புநிலை ஆரம்ப எண்
-        
+        last_no = 1237  # ஆரம்ப எண்
+
         if res.data:
             rec = res.data[0]
             if rec.get("prefix"):
                 prefix = str(rec.get("prefix")).strip().rstrip("/-")
             if rec.get("last_number") is not None:
                 last_no = int(rec.get("last_number"))
-        
-        next_no = last_no + 1
-        formatted_gl = f"{prefix}/{next_no:04d}" if next_no < 1000 else f"{prefix}/{next_no}"
-        
-        return formatted_gl, next_no
+
+        # 2. கார்ட்டில் (transactions_cart) தற்போது தற்காலிகமாக உள்ள Pledge எண்ணிக்கையைக் கூட்டுதல்
+        cart_items_count = 0
+        if "transactions_cart" in st.session_state and isinstance(st.session_state["transactions_cart"], list):
+            for item in st.session_state["transactions_cart"]:
+                if isinstance(item, dict):
+                    t_type = str(item.get("transaction_type", ""))
+                    if "Pledge" in t_type or "நகைக்கடன்" in t_type:
+                        cart_items_count += 1
+
+        # 3. அடுத்த எண் = டேட்டாபேஸ் கடைசி எண் + கார்ட் எண்ணிக்கை + 1
+        next_num = last_no + cart_items_count + 1
+        display_num = next_num
+
+        # 4. வடிவமைப்பு (எ.கா: KMK/1238, KMK/1239...)
+        suggested_gl_no = (
+            f"{prefix}/{display_num:04d}"
+            if display_num < 1000
+            else f"{prefix}/{display_num}"
+        )
+
+        return suggested_gl_no, next_num
+
     except Exception as e:
         return "KMK/1238", 1238
 
@@ -6702,13 +6725,13 @@ if st.session_state.get("logged_in", False):
                     pl_col1, pl_col2, pl_col3 = st.columns(3)
 
                     with pl_col1:
-                        auto_gl, next_seq_num = generate_pledge_gl_number(st.session_state.branch_id)
+                        suggested_gl, next_seq_num = get_current_display_gl_number(st.session_state.branch_id)
                         
                         new_gl_no = st.text_input(
                             "கடன் எண் (Auto Generated GL No) *", 
-                            value=auto_gl, 
+                            value=suggested_gl, 
                             disabled=True, 
-                            key=f"pledge_gl_box_{auto_gl}"
+                            key=f"pledge_gl_box_{suggested_gl}"
                         )
                         
                         scheme_options = list(scheme_map.keys()) if scheme_map else ["Standard Gold Loan"]
@@ -7323,28 +7346,7 @@ if st.session_state.get("logged_in", False):
                                 st.session_state.transactions_cart = []
                             st.session_state.transactions_cart.append(cart_entry)
 
-                            # Pledge என்றால் உறுதி ஆவணம் (Declaration Form) தயாரித்தல்
-                            if "Pledge" in txn_category:
-                                decl_payload = {
-                                    "customer_name": visit.get("customer_name", ""),
-                                    "address": visit.get("address", ""),
-                                    "contact_number": visit.get("mobile", ""),
-                                    "branch_name": st.session_state.get("branch_name", st.session_state.get("branch", "Keezhamanakudi")),
-                                    "pledge_date": datetime.now().strftime("%d-%m-%Y"),
-                                    "loan_number": new_gl_no if 'new_gl_no' in locals() else "",
-                                    "loan_amount": paid_amt if 'paid_amt' in locals() else 0.0,
-                                    "current_date": datetime.now().strftime("%d-%m-%Y")
-                                }
-                                st.session_state.declaration_gl_no = new_gl_no if 'new_gl_no' in locals() else "GL"
-                                st.session_state.current_declaration = generate_declaration_html(decl_payload)
-
-                            if "form_reset_counter" not in st.session_state:
-                                st.session_state.form_reset_counter = 0
-                            st.session_state.form_reset_counter += 1
-
-                            st.success(f"'{txn_category}' வெற்றிகரமாகப் பட்டியலில் சேர்க்கப்பட்டது!")
-                            st.rerun()
-                            # 🌟 Pledge என்றால் உறுதி ஆவணம் (Declaration Form) தயாரித்தல்
+                            # 🌟 Pledge என்றால் உறுதி ஆவணம் (Declaration Form) தயாரித்தல் (ஒரே ஒருமுறை மட்டும்)
                             if "Pledge" in txn_category:
                                 decl_payload = {
                                     "customer_name": visit.get("customer_name", ""),
