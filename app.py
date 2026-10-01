@@ -6788,15 +6788,11 @@ if st.session_state.get("logged_in", False):
                     with pl_col1:
                         suggested_gl, next_seq_num = get_current_display_gl_number(st.session_state.branch_id)
                         
-                        # 🌟 Streamlit key-ல் பழைய மதிப்பு தேங்குவதைத் தவிர்க்க இதைச் சேர்க்கவும்:
-                        if f"gl_no_in_{fc}" in st.session_state:
-                            st.session_state[f"gl_no_in_{fc}"] = suggested_gl
-
+                        # 🌟 key-ஐ நீக்கிவிட்டதால், கார்ட்டில் சேர்க்கும்போதோ அல்லது மாற்றும்போதோ எண் உடனடியாக அப்டேட் ஆகும்
                         new_gl_no = st.text_input(
                             "கடன் எண் (Auto Generated GL No) *", 
                             value=suggested_gl, 
-                            disabled=True, 
-                            key=f"gl_no_in_{fc}"
+                            disabled=True
                         )
                         
                         scheme_options = list(scheme_map.keys()) if scheme_map else ["Standard Gold Loan"]
