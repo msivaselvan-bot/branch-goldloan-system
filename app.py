@@ -2031,7 +2031,7 @@ def generate_next_gl_number(branch_id):
 # -------------------------------------------------------------
 
 def get_current_display_gl_number(branch_id=None):
-    """டேட்டாபேஸ் கடைசி எண் மற்றும் கார்ட்டில் உள்ள பொருட்களின் எண்ணிக்கையைக் கணக்கிட்டு அடுத்த துல்லியமான எண்ணை வழங்கும்"""
+    """டேட்டாபேஸ் கடைசி எண் மற்றும் transactions_cart-ல் உள்ள பொருட்களின் எண்ணிக்கையைக் கணக்கிட்டு அடுத்த எண்ணை வழங்கும்"""
     try:
         if not branch_id or int(branch_id) == 0:
             branch_id = st.session_state.get("branch_id") or st.session_state.get("branch") or 11
@@ -2049,7 +2049,7 @@ def get_current_display_gl_number(branch_id=None):
         if seq_res.data and seq_res.data[0].get("prefix"):
             prefix = str(seq_res.data[0].get("prefix")).strip().rstrip("/-")
 
-        # 2. gold_loans அட்டவணையில் உள்ள அதிகபட்ச எண் (Base Max)
+        # 2. gold_loans அட்டவணையில் உள்ள அதிகபட்ச எண்
         loans_res = (
             supabase.table("gold_loans")
             .select("gl_number")
@@ -2072,18 +2072,16 @@ def get_current_display_gl_number(branch_id=None):
         if max_num == 0 and seq_res.data:
             max_num = int(seq_res.data[0].get("last_number", 0) - 1)
 
-        # 3. கார்ட்டில் (Cart) உள்ள Pledge பரிவர்த்தனைகளின் எண்ணிக்கையைக் கண்டறிதல்
+        # 3. 🌟 மிக முக்கியமானது: transactions_cart-ல் உள்ள Pledge பரிவர்த்தனைகளின் எண்ணிக்கையைக் கணக்கிடுதல்
         cart_items_count = 0
-        for key in ["cart", "transactions", "items_cart", "pending_cart"]:
-            if key in st.session_state and isinstance(st.session_state[key], list):
-                for item in st.session_state[key]:
-                    if isinstance(item, dict):
-                        t_type = str(item.get("transaction_type", ""))
-                        if "Pledge" in t_type or "நகைக்கடன்" in t_type:
-                            cart_items_count += 1
-                break
+        if "transactions_cart" in st.session_state and isinstance(st.session_state["transactions_cart"], list):
+            for item in st.session_state["transactions_cart"]:
+                if isinstance(item, dict):
+                    t_type = str(item.get("transaction_type", ""))
+                    if "Pledge" in t_type or "நகைக்கடன்" in t_type:
+                        cart_items_count += 1
 
-        # 4. அடுத்த எண் = Base Max + கார்ட்டில் உள்ள கூடுதல் பொருட்கள் + 1
+        # 4. அடுத்த எண் கணக்கீடு
         base = max_num if max_num > 0 else 1237
         next_num = base + cart_items_count + 1
         display_num = next_num
