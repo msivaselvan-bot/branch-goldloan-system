@@ -1998,36 +1998,52 @@ def get_active_loan_schemes():
 # -------------------------------------------------------------
 
 def get_current_display_gl_number(branch_id=None):
-    """RD மற்றும் FD முறையைப் போல டேட்டாபேஸ் சீக்வென்ஸ் அட்டவணையில் இருந்து அடுத்த எண்ணை நேரடியாக வழங்கும்"""
+    """டேட்டாபேஸ் கடைசி எண் மற்றும் கார்ட்டில் உள்ள தற்காலிகப் பொருட்களின் எண்ணிக்கையைக் கணக்கிட்டு வழங்கும்"""
     try:
         if not branch_id or int(branch_id) == 0:
             branch_id = st.session_state.get("branch_id") or st.session_state.get("branch") or 11
         
         clean_b_id = int(branch_id)
 
-        # 1. branch_loan_sequences அட்டவணையில் இருந்து கடைசி எண்ணைப் பெறுதல்
-        res = (
-            supabase.table("branch_loan_sequences")
-            .select("prefix, last_number")
-            .eq("branch_id", clean_b_id)
-            .execute()
-        )
-
+        # 1. Prefix பெறுதல்
+        seq_res = supabase.table("branch_loan_sequences").select("prefix").eq("branch_id", clean_b_id).execute()
         prefix = "KMK"
-        last_no = 1237  # இயல்புநிலை ஆரம்ப எண்
+        if seq_res.data and seq_res.data[0].get("prefix"):
+            prefix = str(seq_res.data[0].get("prefix")).strip().rstrip("/-")
 
-        if res.data:
-            rec = res.data[0]
-            if rec.get("prefix"):
-                prefix = str(rec.get("prefix")).strip().rstrip("/-")
-            if rec.get("last_number") is not None:
-                last_no = int(rec.get("last_number"))
+        # 2. gold_loans அட்டவணையில் உள்ள அதிகபட்ச எண்
+        loans_res = supabase.table("gold_loans").select("gl_number").eq("branch_id", clean_b_id).execute()
+        max_num = 0
+        if loans_res.data:
+            for row in loans_res.data:
+                g_no = str(row.get("gl_number", ""))
+                if "/" in g_no:
+                    try:
+                        num_part = int(g_no.split("/")[-1])
+                        if num_part > max_num:
+                            max_num = num_part
+                    except ValueError:
+                        continue
 
-        # 2. அடுத்த எண் = டேட்டாபேஸ் கடைசி எண் + 1 (RD/FD போல நேர்மையான முறை)
-        next_num = last_no + 1
+        if max_num == 0:
+            seq_all = supabase.table("branch_loan_sequences").select("last_number").eq("branch_id", clean_b_id).execute()
+            if seq_all.data:
+                max_num = int(seq_all.data[0].get("last_number", 1237))
+
+        # 3. கார்ட்டில் (transactions_cart) தற்போதுள்ள Pledge பொருட்களின் எண்ணிக்கையைக் கணக்கிடுதல்
+        cart_items_count = 0
+        if "transactions_cart" in st.session_state and isinstance(st.session_state["transactions_cart"], list):
+            for item in st.session_state["transactions_cart"]:
+                if isinstance(item, dict):
+                    t_type = str(item.get("transaction_type", ""))
+                    if "Pledge" in t_type or "நகைக்கடன்" in t_type:
+                        cart_items_count += 1
+
+        # 4. அடுத்த எண் = அதிகபட்ச எண் + கார்ட்டில் உள்ள பொருட்கள் + 1
+        next_num = max_num + cart_items_count + 1
         display_num = next_num
 
-        # 3. வடிவமைப்பு (எ.கா: KMK/1238, KMK/1239...)
+        # 5. வடிவமைப்பு (எ.கா: KMK/1238, KMK/1239...)
         suggested_gl_no = (
             f"{prefix}/{display_num:04d}"
             if display_num < 1000
