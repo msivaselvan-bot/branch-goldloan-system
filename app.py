@@ -6788,6 +6788,10 @@ if st.session_state.get("logged_in", False):
                     with pl_col1:
                         suggested_gl, next_seq_num = get_current_display_gl_number(st.session_state.branch_id)
                         
+                        # 🌟 Streamlit key-ல் பழைய மதிப்பு தேங்குவதைத் தவிர்க்க இதைச் சேர்க்கவும்:
+                        if f"gl_no_in_{fc}" in st.session_state:
+                            st.session_state[f"gl_no_in_{fc}"] = suggested_gl
+
                         new_gl_no = st.text_input(
                             "கடன் எண் (Auto Generated GL No) *", 
                             value=suggested_gl, 
