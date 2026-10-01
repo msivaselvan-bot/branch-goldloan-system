@@ -11,6 +11,7 @@ import pytz
 import time  # 👈 இணைப்பு துண்டிப்பைச் சரிசெய்ய சேர்க்கப்பட்டுள்ளது
 import re
 from dateutil.relativedelta import relativedelta
+import branch_report
 
 # 1. பக்க வடிவமைப்பு
 st.set_page_config(page_title="Branch Operations System", layout="wide")
@@ -58,6 +59,27 @@ try:
 except Exception:
     # ClientOptions அமைப்பதில் சிக்கல் வந்தால் நேரடி இணைப்பிற்கு மாறும்:
     supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+
+
+is_admin = st.session_state.get("role") == "Admin" or st.session_state.get("is_admin", False) or st.session_state.get("username") == "admin"
+
+# 2. மெனு உருவாக்கம்
+menu_options = ["🏠 பரிவர்த்தனைகள் & கார்ட் (Transactions)"]
+
+if is_admin:
+    menu_options.append("📊 கிளை தினசரி ரிப்போர்ட் (Daily Report)")
+
+# சைடுபாரில் மெனுவைக் காட்டுவது
+selected_page = st.sidebar.selectbox("🧭 மெனு (Navigation)", menu_options)
+
+# 3. ஒருவேளை அட்மின் "கிளை தினசரி ரிப்போர்ட்"-ஐத் தேர்வு செய்தால்:
+if selected_page == "📊 கிளை தினசரி ரிப்போர்ட் (Daily Report)":
+    # தனி ஃபைலில் உள்ள ரிப்போர்ட்டைக் காட்டுதல்
+    branch_report.show_branch_daily_transaction_report(supabase)
+    
+    # மிக முக்கியமானது: ரிப்போர்ட் பக்கம் மட்டும் தெரிய வேண்டும், 
+    # கீழே உள்ள வழக்கமான பரிவர்த்தனைப் பக்கம் தெரியக்கூடாது என்பதற்காக இதை நிறுத்தவும்:
+    st.stop()
 
 # ==============================================================================
 # ⚡ அதிவேக கேச்சிங் ஃபங்க்ஷன்கள் (Cache Data with TTL)
