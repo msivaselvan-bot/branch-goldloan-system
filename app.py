@@ -1997,61 +1997,31 @@ def get_active_loan_schemes():
 # 🔢 கிளை வாரியான நகைக் கடன் எண்ணை உருவாக்கும் நேரடி முறை (FD / RD முறையைப் போல)
 # -------------------------------------------------------------
 
-def get_current_display_gl_number(branch_id=None):
-    """டேட்டாபேஸ் கடைசி எண் மற்றும் கார்ட்டில் உள்ள தற்காலிகப் பொருட்களின் எண்ணிக்கையைக் கணக்கிட்டு வழங்கும்"""
+def generate_pledge_gl_number(branch_id):
+    """RD மற்றும் FD முறையைப் போல டேட்டாபேஸ் சீக்வென்ஸில் இருந்து நேரடியாக அடுத்த எண்ணைப் பெறும் முறை"""
     try:
-        if not branch_id or int(branch_id) == 0:
-            branch_id = st.session_state.get("branch_id") or st.session_state.get("branch") or 11
-        
-        clean_b_id = int(branch_id)
-
-        # 1. Prefix பெறுதல்
-        seq_res = supabase.table("branch_loan_sequences").select("prefix").eq("branch_id", clean_b_id).execute()
-        prefix = "KMK"
-        if seq_res.data and seq_res.data[0].get("prefix"):
-            prefix = str(seq_res.data[0].get("prefix")).strip().rstrip("/-")
-
-        # 2. gold_loans அட்டவணையில் உள்ள அதிகபட்ச எண்
-        loans_res = supabase.table("gold_loans").select("gl_number").eq("branch_id", clean_b_id).execute()
-        max_num = 0
-        if loans_res.data:
-            for row in loans_res.data:
-                g_no = str(row.get("gl_number", ""))
-                if "/" in g_no:
-                    try:
-                        num_part = int(g_no.split("/")[-1])
-                        if num_part > max_num:
-                            max_num = num_part
-                    except ValueError:
-                        continue
-
-        if max_num == 0:
-            seq_all = supabase.table("branch_loan_sequences").select("last_number").eq("branch_id", clean_b_id).execute()
-            if seq_all.data:
-                max_num = int(seq_all.data[0].get("last_number", 1237))
-
-        # 3. கார்ட்டில் (transactions_cart) தற்போதுள்ள Pledge பொருட்களின் எண்ணிக்கையைக் கணக்கிடுதல்
-        cart_items_count = 0
-        if "transactions_cart" in st.session_state and isinstance(st.session_state["transactions_cart"], list):
-            for item in st.session_state["transactions_cart"]:
-                if isinstance(item, dict):
-                    t_type = str(item.get("transaction_type", ""))
-                    if "Pledge" in t_type or "நகைக்கடன்" in t_type:
-                        cart_items_count += 1
-
-        # 4. அடுத்த எண் = அதிகபட்ச எண் + கார்ட்டில் உள்ள பொருட்கள் + 1
-        next_num = max_num + cart_items_count + 1
-        display_num = next_num
-
-        # 5. வடிவமைப்பு (எ.கா: KMK/1238, KMK/1239...)
-        suggested_gl_no = (
-            f"{prefix}/{display_num:04d}"
-            if display_num < 1000
-            else f"{prefix}/{display_num}"
+        clean_b_id = int(branch_id or 11)
+        res = (
+            supabase.table("branch_loan_sequences")
+            .select("prefix, last_number")
+            .eq("branch_id", clean_b_id)
+            .execute()
         )
-
-        return suggested_gl_no, next_num
-
+        
+        prefix = "KMK"
+        last_no = 1237  # இயல்புநிலை ஆரம்ப எண்
+        
+        if res.data:
+            rec = res.data[0]
+            if rec.get("prefix"):
+                prefix = str(rec.get("prefix")).strip().rstrip("/-")
+            if rec.get("last_number") is not None:
+                last_no = int(rec.get("last_number"))
+        
+        next_no = last_no + 1
+        formatted_gl = f"{prefix}/{next_no:04d}" if next_no < 1000 else f"{prefix}/{next_no}"
+        
+        return formatted_gl, next_no
     except Exception as e:
         return "KMK/1238", 1238
 
@@ -6732,14 +6702,13 @@ if st.session_state.get("logged_in", False):
                     pl_col1, pl_col2, pl_col3 = st.columns(3)
 
                     with pl_col1:
-                        suggested_gl, next_seq_num = get_current_display_gl_number(st.session_state.branch_id)
+                        auto_gl, next_seq_num = generate_pledge_gl_number(st.session_state.branch_id)
                         
-                        # 🌟 key-ல் suggested_gl-ஐ இணைப்பதன் மூலம் Streamlit ஒவ்வொரு முறையும் புதிய எண்ணை உடனுக்குடன் காட்டும்
                         new_gl_no = st.text_input(
                             "கடன் எண் (Auto Generated GL No) *", 
-                            value=suggested_gl, 
+                            value=auto_gl, 
                             disabled=True, 
-                            key=f"pledge_gl_box_{suggested_gl}"
+                            key=f"pledge_gl_box_{auto_gl}"
                         )
                         
                         scheme_options = list(scheme_map.keys()) if scheme_map else ["Standard Gold Loan"]
@@ -7354,6 +7323,27 @@ if st.session_state.get("logged_in", False):
                                 st.session_state.transactions_cart = []
                             st.session_state.transactions_cart.append(cart_entry)
 
+                            # Pledge என்றால் உறுதி ஆவணம் (Declaration Form) தயாரித்தல்
+                            if "Pledge" in txn_category:
+                                decl_payload = {
+                                    "customer_name": visit.get("customer_name", ""),
+                                    "address": visit.get("address", ""),
+                                    "contact_number": visit.get("mobile", ""),
+                                    "branch_name": st.session_state.get("branch_name", st.session_state.get("branch", "Keezhamanakudi")),
+                                    "pledge_date": datetime.now().strftime("%d-%m-%Y"),
+                                    "loan_number": new_gl_no if 'new_gl_no' in locals() else "",
+                                    "loan_amount": paid_amt if 'paid_amt' in locals() else 0.0,
+                                    "current_date": datetime.now().strftime("%d-%m-%Y")
+                                }
+                                st.session_state.declaration_gl_no = new_gl_no if 'new_gl_no' in locals() else "GL"
+                                st.session_state.current_declaration = generate_declaration_html(decl_payload)
+
+                            if "form_reset_counter" not in st.session_state:
+                                st.session_state.form_reset_counter = 0
+                            st.session_state.form_reset_counter += 1
+
+                            st.success(f"'{txn_category}' வெற்றிகரமாகப் பட்டியலில் சேர்க்கப்பட்டது!")
+                            st.rerun()
                             # 🌟 Pledge என்றால் உறுதி ஆவணம் (Declaration Form) தயாரித்தல்
                             if "Pledge" in txn_category:
                                 decl_payload = {
