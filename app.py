@@ -2034,13 +2034,11 @@ def generate_next_gl_number(branch_id):
 def get_current_display_gl_number(branch_id=None):
     """gold_loans அட்டவணையில் உள்ள உண்மையான கடைசி எண்ணைக் கண்டறிந்து அடுத்த எண்ணை வழங்கும்"""
     try:
-        # 🌟 branch_id வராத பட்சத்தில் session_state-ல் இருந்து எடுத்தல்
         if not branch_id or int(branch_id) == 0:
             branch_id = st.session_state.get("branch_id") or st.session_state.get("branch") or 11
         
         clean_b_id = int(branch_id)
 
-        # 1. Prefix-ஐப் பெறுதல்
         seq_res = (
             supabase.table("branch_loan_sequences")
             .select("prefix")
@@ -2064,7 +2062,6 @@ def get_current_display_gl_number(branch_id=None):
             except Exception:
                 pass
 
-        # 2. 🌟 gold_loans அட்டவணையில் அந்தக் கிளைக்குரிய மிக உயர்ந்த (Max) கடன் எண்ணைக் கண்டறிதல்
         loans_res = (
             supabase.table("gold_loans")
             .select("gl_number")
@@ -2084,15 +2081,12 @@ def get_current_display_gl_number(branch_id=None):
                     except ValueError:
                         continue
 
-        # ஒருவேளை கடன்கள் எதுவும் இல்லையென்றால் sequence டேபிளில் உள்ளதைக் கொள்ளுதல்
         if max_num == 0 and seq_res.data:
             max_num = int(seq_res.data[0].get("last_number", 0))
 
-        # 3. உண்மையான கடைசி எண்ணுடன் 1-ஐக் கூட்டுதல் (எ.கா: 1237 + 1 = 1238)
         next_num = max_num + 1 if max_num > 0 else 1
         display_num = next_num
 
-        # 4. வடிவமைப்பு (எ.கா: KMK/1238)
         suggested_gl_no = (
             f"{prefix}/{display_num:04d}"
             if display_num < 1000
@@ -2102,8 +2096,18 @@ def get_current_display_gl_number(branch_id=None):
         return suggested_gl_no, next_num
 
     except Exception as e:
-        # பிழை ஏற்பட்டால் கடைசி அறியപ്പെട്ട எண்ணைக் காட்டுவது (KMK/1238)
         return "KMK/1238", 1238
+
+
+# 🌟 இந்த ஃபங்ஷனை சரியாக இதற்கு கீழே ஒட்டவும்:
+def commit_next_gl_number(branch_id, used_number):
+    """கடன் வழங்கப்பட்ட பிறகு அடுத்த வரிசை எண்ணை டேட்டாபேஸில் பதிவு செய்தல்"""
+    try:
+        supabase.table("branch_loan_sequences").upsert(
+            {"branch_id": int(branch_id), "last_number": int(used_number)}
+        ).execute()
+    except Exception:
+        pass
 
 
 # -----------------------------------------------------------------------------------------
