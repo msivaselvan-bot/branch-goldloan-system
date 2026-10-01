@@ -61,6 +61,11 @@ except Exception:
     supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 
+# ==========================================
+# 🌟 2. இப்போது இந்த மெனு கோடை இங்கே ஒட்டவும்:
+# ==========================================
+
+# 1. அட்மின் அனுமதி சரிபார்ப்பு
 is_admin = st.session_state.get("role") == "Admin" or st.session_state.get("is_admin", False) or st.session_state.get("username") == "admin"
 
 # 2. மெனு உருவாக்கம்
