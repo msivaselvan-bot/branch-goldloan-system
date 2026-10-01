@@ -8867,7 +8867,7 @@ if st.session_state.get("logged_in", False):
             # -----------------------------------------------------------------
             with sub_bp1:
                 st.markdown(
-                    "##### 🚚 கிளையில் உள்ள பாக்கெட்களை தலைமையகத்திற்கு அனுப்புதல்"
+                    "##### 🚚 கிளையில் உள்ள பாக்கெட்களை தலைமையகத்திற்கு அனுப்புதல் (Bulk Dispatch)"
                 )
                 loans_to_send = [
                     l
@@ -8882,59 +8882,96 @@ if st.session_state.get("logged_in", False):
 
                 if not loans_to_send and not gps_to_send:
                     st.info(
-                        "தற்போது கிளையில் தலைமையகத்திற்கு அனுப்ப வேண்டிய பாக்கெட்கள்"
-                        " ஏதும் இல்லை."
+                        "தற்போது கிளையில் தலைமையகத்திற்கு அனுப்ப வேண்டிய பாக்கெட்கள் ஏதும் இல்லை."
                     )
                 else:
+                    # 1. நகைக்கடன் பாக்கெட்டுகளை பல்க் அனுப்பும் வசதி
                     if loans_to_send:
-                        st.write(
-                            f"🪙 **நகைக்கடன் பாக்கெட்கள் ({len(loans_to_send)}):**"
+                        st.write(f"🪙 **நகைக்கடன் பாக்கெட்கள் ({len(loans_to_send)}):**")
+                        
+                        df_b_loans = pd.DataFrame(loans_to_send)
+                        df_b_loans.insert(0, "Select", False)
+                        
+                        show_cols_bl = ["Select", "loan_no", "gross_weight", "ornament_details"]
+                        avail_bl = [c for c in show_cols_bl if c in df_b_loans.columns]
+                        
+                        edited_b_loans = st.data_editor(
+                            df_b_loans[avail_bl],
+                            column_config={
+                                "Select": st.column_config.CheckboxColumn("Select", help="அனுப்ப வேண்டியதைத் டிக் செய்யவும்"),
+                                "loan_no": st.column_config.TextColumn("கடன் எண்", disabled=True),
+                                "gross_weight": st.column_config.NumberColumn("எடை (g)", disabled=True),
+                                "ornament_details": st.column_config.TextColumn("நகை விவரம்", disabled=True),
+                            },
+                            hide_index=True,
+                            use_container_width=True,
+                            key="branch_bulk_disp_loans"
                         )
-                        for l in loans_to_send:
-                            c1, c2, c3 = st.columns([3, 4, 3])
-                            c1.write(f"🏷️ **{l['loan_no']}**")
-                            c2.write(
-                                f"எடை: **{l['gross_weight']}g** |"
-                                f" {l.get('ornament_details', '-')}"
-                            )
-                            if c3.button(
-                                "🚚 HQ-க்கு அனுப்பி வை",
-                                key=f"br_disp_l_{l['id']}",
-                            ):
-                                supabase.table("gold_loans").update(
-                                    {
-                                        "packet_location": "IN_TRANSIT_TO_HQ",
-                                        "packet_dispatched_by": staff_uname,
-                                        "packet_updated_at": datetime.now().isoformat(),
-                                    }
-                                ).eq("id", l["id"]).execute()
-                                st.success(
-                                    f"{l['loan_no']} தலைமையகத்திற்கு அனுப்பப்பட்டது!"
-                                )
+                        
+                        selected_b_loans = edited_b_loans[edited_b_loans["Select"] == True]
+                        
+                        if st.button("🚚 தேர்வு செய்த நகைக்கடன் பாக்கெட்டுகளை HQ-க்கு அனுப்பு", type="primary", key="btn_br_bulk_l"):
+                            if selected_b_loans.empty:
+                                st.warning("⚠️ தயவுசெய்து குறைந்தபட்சம் ஒரு பாக்கெட்டையாவது டிக் செய்யவும்!")
+                            else:
+                                count_l = 0
+                                for idx, row in selected_b_loans.iterrows():
+                                    orig_id = df_b_loans.loc[idx, "id"]
+                                    supabase.table("gold_loans").update(
+                                        {
+                                            "packet_location": "IN_TRANSIT_TO_HQ",
+                                            "packet_dispatched_by": staff_uname,
+                                            "packet_updated_at": datetime.now().isoformat(),
+                                        }
+                                    ).eq("id", orig_id).execute()
+                                    count_l += 1
+                                
+                                st.success(f"🎉 வெற்றிகரமாக {count_l} நகைக்கடன் பாக்கெட்டுகள் தலைமையகத்திற்கு அனுப்பப்பட்டன!")
                                 st.rerun()
 
+                    st.markdown("---")
+
+                    # 2. GP கொள்முதல் பாக்கெட்டுகளை பல்க் அனுப்பும் வசதி
                     if gps_to_send:
-                        st.write(
-                            f"✨ **ஜிபி நகை வாங்குதல் பாக்கெட்கள் ({len(gps_to_send)}):**"
+                        st.write(f"✨ **ஜிபி நகை வாங்குதல் பாக்கெட்கள் ({len(gps_to_send)}):**")
+                        
+                        df_b_gps = pd.DataFrame(gps_to_send)
+                        df_b_gps.insert(0, "Select", False)
+                        
+                        show_cols_bg = ["Select", "gp_no", "gross_weight"]
+                        avail_bg = [c for c in show_cols_bg if c in df_b_gps.columns]
+                        
+                        edited_b_gps = st.data_editor(
+                            df_b_gps[avail_bg],
+                            column_config={
+                                "Select": st.column_config.CheckboxColumn("Select", help="அனுப்ப வேண்டியதைத் டிக் செய்யவும்"),
+                                "gp_no": st.column_config.TextColumn("GP எண்", disabled=True),
+                                "gross_weight": st.column_config.NumberColumn("எடை (g)", disabled=True),
+                            },
+                            hide_index=True,
+                            use_container_width=True,
+                            key="branch_bulk_disp_gps"
                         )
-                        for g in gps_to_send:
-                            gc1, gc2, gc3 = st.columns([3, 4, 3])
-                            gc1.write(f"🧾 **{g['gp_no']}**")
-                            gc2.write(f"எடை: **{g['gross_weight']}g** (GP கொள்முதல்)")
-                            if gc3.button(
-                                "🚚 HQ-க்கு அனுப்பி வை",
-                                key=f"br_disp_g_{g['id']}",
-                            ):
-                                supabase.table("gold_purchases").update(
-                                    {
-                                        "packet_location": "IN_TRANSIT_TO_HQ",
-                                        "packet_dispatched_by": staff_uname,
-                                        "packet_updated_at": datetime.now().isoformat(),
-                                    }
-                                ).eq("id", g["id"]).execute()
-                                st.success(
-                                    f"{g['gp_no']} தலைமையகத்திற்கு அனுப்பப்பட்டது!"
-                                )
+                        
+                        selected_b_gps = edited_b_gps[edited_b_gps["Select"] == True]
+                        
+                        if st.button("🚚 தேர்வு செய்த GP பாக்கெட்டுகளை HQ-க்கு அனுப்பு", type="primary", key="btn_br_bulk_g"):
+                            if selected_b_gps.empty:
+                                st.warning("⚠️ தயவுசெய்து குறைந்தபட்சம் ஒரு GP பாக்கெட்டையாவது டிக் செய்யவும்!")
+                            else:
+                                count_g = 0
+                                for idx, row in selected_b_gps.iterrows():
+                                    orig_id = df_b_gps.loc[idx, "id"]
+                                    supabase.table("gold_purchases").update(
+                                        {
+                                            "packet_location": "IN_TRANSIT_TO_HQ",
+                                            "packet_dispatched_by": staff_uname,
+                                            "packet_updated_at": datetime.now().isoformat(),
+                                        }
+                                    ).eq("id", orig_id).execute()
+                                    count_g += 1
+                                
+                                st.success(f"🎉 வெற்றிகரமாக {count_g} GP பாக்கெட்டுகள் தலைமையகத்திற்கு அனுப்பப்பட்டன!")
                                 st.rerun()
 
             # -----------------------------------------------------------------
