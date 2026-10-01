@@ -16,7 +16,7 @@ def show_branch_daily_transaction_report(supabase_client):
         try:
             formatted_date = report_date.strftime("%Y-%m-%d")
             
-            # Supabase-ல் இருந்து தரவுகளை எடுத்தல்
+            # Supabase-ல் இருந்து  தரவுகளை எடுத்தல்
             res = (
                 supabase_client.table("transactions") # உங்கள் டேட்டாபேஸ் அட்டவணைப் பெயர்
                 .select("*")
