@@ -5527,11 +5527,18 @@ if st.session_state.get("logged_in", False):
                         # வாடிக்கையாளர் டேட்டாபேஸில் இருக்கிறாரா எனச் சரிபார்த்தல்
                         for idx, row in df_gl.iterrows():
                             try:
-                                # 🌟 எக்செல்/CSV-ல் உள்ள மொபைல் எண்ணைத் துல்லியமாகச் சுத்தம் செய்தல்
+                                # 1. கடன் எண் மற்றும் மொபைல் எண்ணை முதலில் எடுப்பது மற்றும் சுத்தம் செய்வது
+                                raw_lno = str(row.get("loan_no", "")).strip()
+                                
                                 raw_mob = str(row.get("mobile", "")).strip().split(".")[0]
                                 clean_mob = "".join(filter(str.isdigit, raw_mob))[-10:]
 
-                                # இப்போது cust_map-ல் தேடுதல்
+                                # 2. கடன் எண் காலியாக இருக்கிறதா எனச் சோதித்தல்
+                                if not raw_lno or raw_lno.lower() == "nan":
+                                    skipped_loans += 1
+                                    continue
+
+                                # 3. வாடிக்கையாளர் டேட்டாபேஸில் இருக்கிறாரா எனச் சரிபார்த்தல்
                                 c_id = cust_map.get(clean_mob)
 
                                 if not c_id:
