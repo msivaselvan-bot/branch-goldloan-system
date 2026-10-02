@@ -5613,7 +5613,7 @@ if st.session_state.get("logged_in", False):
 
                             except Exception as row_err:
                                 error_details.append(
-                                    f"கடன் எண் {row.get('loan_no')} பதிவேற்றுவதில் பிழை: {row_err}"
+                                    f"கடன் எண் {row.get('loan_no', 'Unknown')} பதிவேற்றுவதில் பிழை: {row_err}"
                                 )
 
                             progress_bar.progress((idx + 1) / len(df_gl))
