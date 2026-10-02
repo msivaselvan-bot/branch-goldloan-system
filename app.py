@@ -5523,40 +5523,24 @@ if st.session_state.get("logged_in", False):
                         success_loans = 0
                         skipped_loans = 0
                         error_details = []
-
+                                               
+                        # வாடிக்கையாளர் டேட்டாபேஸில் இருக்கிறாரா எனச் சரிபார்த்தல்
                         for idx, row in df_gl.iterrows():
                             try:
-                                raw_mob = (
-                                    str(row.get("mobile", "")).strip().split(".")[0]
-                                )
+                                # 🌟 எக்செல்/CSV-ல் உள்ள மொபைல் எண்ணைத் துல்லியமாகச் சுத்தம் செய்தல்
+                                raw_mob = str(row.get("mobile", "")).strip().split(".")[0]
                                 clean_mob = "".join(filter(str.isdigit, raw_mob))[-10:]
 
-                                raw_lno = str(row.get("loan_no", "")).strip()
-                                if not raw_lno or raw_lno.lower() == "nan":
+                                # இப்போது cust_map-ல் தேடுதல்
+                                c_id = cust_map.get(clean_mob)
+
+                                if not c_id:
                                     skipped_loans += 1
+                                    error_details.append(
+                                        f"கடன் எண் {raw_lno}: மொபைல் எண் {clean_mob} வாடிக்கையாளர் டேட்டாபேஸில் இல்லை. (பதிவேற்றப்படவில்லை)"
+                                    )
                                     continue
 
-                                if raw_lno in existing_loan_nos:
-                                    skipped_loans += 1
-                                    continue
-
-                        
-                                # வாடிக்கையாளர் டேட்டாபேஸில் இருக்கிறாரா எனச் சரிபார்த்தல்
-                                for idx, row in df_gl.iterrows():
-                                    try:
-                                        # 🌟 எக்செல்/CSV-ல் உள்ள மொபைல் எண்ணைத் துல்லியமாகச் சுத்தம் செய்தல்
-                                        raw_mob = str(row.get("mobile", "")).strip().split(".")[0]
-                                        clean_mob = "".join(filter(str.isdigit, raw_mob))[-10:]
-
-                                        # இப்போது cust_map-ல் தேடுதல்
-                                        c_id = cust_map.get(clean_mob)
-
-                                        if not c_id:
-                                            skipped_loans += 1
-                                            error_details.append(
-                                                f"கடன் எண் {raw_lno}: மொபைல் எண் {clean_mob} வாடிக்கையாளர் டேட்டாபேஸில் இல்லை. (பதிவேற்றப்படவில்லை)"
-                                            )
-                                            continue
                                 # தொகைகள் மற்றும் எடைகள்
                                 s_amt = float(row.get("sanctioned_amount") or 0.0)
                                 g_wt = float(row.get("gross_weight") or 0.0)
