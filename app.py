@@ -5484,15 +5484,34 @@ if st.session_state.get("logged_in", False):
                         progress_bar = st.progress(0)
                         status_text = st.empty()
 
-                        # 1. ஏற்கனவே உள்ள வாடிக்கையாளர்களைத் தேடுதல் (Mobile -> ID Map)
-                        cust_res = (
-                            supabase.table("customers").select("id, mobile").execute()
-                        )
-                        cust_map = {
-                            str(c["mobile"]).strip()[-10:]: c["id"]
-                            for c in (cust_res.data or [])
-                            if c.get("mobile")
-                        }
+                        # 🌟 1. Supabase-ல் உள்ள அனைத்து வாடிக்கையாளர்களையும் வரம்பு இல்லாமல் முழுமையாக எடுத்தல் (Pagination)
+                        all_customers = []
+                        page_size = 1000
+                        start = 0
+                        
+                        while True:
+                            res = (
+                                supabase.table("customers")
+                                .select("id, mobile, name, branch_id")
+                                .range(start, start + page_size - 1)
+                                .execute()
+                            )
+                            batch_data = res.data or []
+                            all_customers.extend(batch_data)
+                            
+                            if len(batch_data) < page_size:
+                                break
+                            start += page_size
+
+                        # 🌟 2. மொபைல் எண்களைச் சுத்தம் செய்து துல்லியமான Dictionary உருவாக்குதல்
+                        cust_map = {}
+                        for c in all_customers:
+                            m_val = c.get("mobile")
+                            if m_val:
+                                m_raw = str(m_val).strip().split(".")[0]
+                                m_clean = "".join(filter(str.isdigit, m_raw))[-10:]
+                                if len(m_clean) >= 10:
+                                    cust_map[m_clean] = c["id"]
 
                         # வாடிக்கையாளர் குறியீட்டுக்கான தற்போதைய வரிசை எண்
                         c_seq_res = (
@@ -5510,7 +5529,7 @@ if st.session_state.get("logged_in", False):
                         else:
                             cust_seq = 0
 
-                        # 2. ஏற்கனவே உள்ள கடன் எண்கள் (Duplicate தவிர்ப்பு)
+                        # 3. ஏற்கனவே உள்ள கடன் எண்கள் (Duplicate தவிர்ப்பு)
                         existing_loans_res = (
                             supabase.table("gold_loans").select("loan_no").execute()
                         )
@@ -5523,22 +5542,26 @@ if st.session_state.get("logged_in", False):
                         success_loans = 0
                         skipped_loans = 0
                         error_details = []
-                                               
-                        # வாடிக்கையாளர் டேட்டாபேஸில் இருக்கிறாரா எனச் சரிபார்த்தல்
+
+                        # 4. பல்க் அப்லோட் லூப்
                         for idx, row in df_gl.iterrows():
                             try:
-                                # 1. கடன் எண் மற்றும் மொபைல் எண்ணை முதலில் எடுப்பது மற்றும் சுத்தம் செய்வது
+                                # கடன் எண் மற்றும் மொபைல் எண்ணை எடுத்தல் மற்றும் சுத்தம் செய்தல்
                                 raw_lno = str(row.get("loan_no", "")).strip()
                                 
                                 raw_mob = str(row.get("mobile", "")).strip().split(".")[0]
                                 clean_mob = "".join(filter(str.isdigit, raw_mob))[-10:]
 
-                                # 2. கடன் எண் காலியாக இருக்கிறதா எனச் சோதித்தல்
+                                # கடன் எண் காலியாக அல்லது ஏற்கனவே இருக்கிறதா எனச் சோதித்தல்
                                 if not raw_lno or raw_lno.lower() == "nan":
                                     skipped_loans += 1
                                     continue
 
-                                # 3. வாடிக்கையாளர் டேட்டாபேஸில் இருக்கிறாரா எனச் சரிபார்த்தல்
+                                if raw_lno in existing_loan_nos:
+                                    skipped_loans += 1
+                                    continue
+
+                                # 🌟 வாடிக்கையாளர் டேட்டாபேஸில் இருக்கிறாரா எனத் துல்லியமாகச் சரிபார்த்தல்
                                 c_id = cust_map.get(clean_mob)
 
                                 if not c_id:
@@ -5575,7 +5598,7 @@ if st.session_state.get("logged_in", False):
                                     int(raw_items)
                                     if pd.notna(raw_items)
                                     and str(raw_items).strip() != ""
-                                    else 1
+                                    else 1`
                                 )
 
                                 # தரம் & பணியாளர் பெயர்
@@ -5633,7 +5656,7 @@ if st.session_state.get("logged_in", False):
                         )
                         if skipped_loans > 0:
                             st.info(
-                                f"ℹ️ ஏற்கனவே பதிவானதால் தவிர்க்கப்பட்டவை: **{skipped_loans}**"
+                                f"ℹ️ ஏற்கனவே பதிவானதால் / வாடிக்கையாளர் இல்லாததால் தவிர்க்கப்பட்டவை: **{skipped_loans}**"
                             )
                         if error_details:
                             with st.expander("⚠️ பிழை விவரங்களைக் காண்க"):
