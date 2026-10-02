@@ -5598,7 +5598,7 @@ if st.session_state.get("logged_in", False):
                                     int(raw_items)
                                     if pd.notna(raw_items)
                                     and str(raw_items).strip() != ""
-                                    else 1`
+                                    else 1
                                 )
 
                                 # தரம் & பணியாளர் பெயர்
