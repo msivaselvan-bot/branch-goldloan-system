@@ -5542,21 +5542,26 @@ if st.session_state.get("logged_in", False):
 
                         
                                 # வாடிக்கையாளர் டேட்டாபேஸில் இருக்கிறாரா எனச் சரிபார்த்தல்
-                                # 1. டேட்டாபேஸில் உள்ள மொபைல் எண்களைத் துல்லியமாக சுத்தம் செய்து Map செய்தல்
-                                # 1. மொபைல் எண்ணை சுத்தம் செய்தல்
-                                raw_mob = str(row.get("mobile", "")).strip().split(".")[0]
-                                clean_mob = "".join(filter(str.isdigit, raw_mob))[-10:]
+                                # 1. டேட்டாபேஸில் உள்ள அனைத்து வாடிக்கையாளர்களையும் தெளிவாக எடுத்தல்
+                                cust_res = (
+                                    supabase.table("customers")
+                                    .select("id, mobile, name, branch_id")
+                                    .execute()
+                                )
+                                
+                                # 2. மொபைல் எண்களைச் சுத்தம் செய்து துல்லியமான Dictionary உருவாக்குதல்
+                                cust_map = {}
+                                for c in (cust_res.data or []):
+                                    m_val = c.get("mobile")
+                                    if m_val:
+                                        # டெசிமல், ஸ்பேஸ் மற்றும் பிளஸ் குறியீடுகளை நீக்கி கடைசி 10 இலக்கங்களை மட்டும் எடுத்தல்
+                                        m_raw = str(m_val).strip().split(".")[0]
+                                        m_clean = "".join(filter(str.isdigit, m_raw))[-10:]
+                                        if len(m_clean) >= 10:
+                                            cust_map[m_clean] = c["id"]
 
-                                # 2. வாடிக்கையாளர் டேட்டாபேஸில் இருக்கிறாரா எனச் சரிபார்த்தல்
-                                c_id = cust_map.get(clean_mob)
-
-                                if not c_id:
-                                    # மொபைல் எண் டேட்டாபேஸில் இல்லை என்றால் புதியதாக உருவாக்காமல் ஸ்கிப் செய்வது
-                                    skipped_loans += 1
-                                    error_details.append(
-                                        f"கடன் எண் {raw_lno}: மொபைல் எண் {clean_mob} வாடிக்கையாளர் டேட்டாபேஸில் இல்லை. (பதிவேற்றப்படவில்லை)"
-                                    )
-                                    continue
+                                # (டிரபக்கிங் செய்ய உதவும்: டேட்டாபேஸில் எத்தனை வாடிக்கையாளர்கள் லோட் ஆயினர் எனத் தெரிந்துகொள்ள)
+                                # st.write(f"லோடு செய்யப்பட்ட வாடிக்கையாளர்கள்: {len(cust_map)}")
 
                                 # தொகைகள் மற்றும் எடைகள்
                                 s_amt = float(row.get("sanctioned_amount") or 0.0)
