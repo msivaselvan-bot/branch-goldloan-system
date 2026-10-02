@@ -5540,37 +5540,17 @@ if st.session_state.get("logged_in", False):
                                     skipped_loans += 1
                                     continue
 
-                                # வாடிக்கையாளர் டேட்டாபேஸில் இல்லை என்றால் உடனே உருவாக்குதல்:
+                        
+                                # வாடிக்கையாளர் டேட்டாபேஸில் இருக்கிறாரா எனச் சரிபார்த்தல்
                                 c_id = cust_map.get(clean_mob)
+                                
                                 if not c_id:
-                                    cust_seq += 1
-                                    new_cust_code = f"{cur_b_code}-{cust_seq:03d}"
-                                    new_cust_payload = {
-                                        "branch_id": cur_b_id,
-                                        "customer_code": new_cust_code,
-                                        "name": (
-                                            f"Customer {clean_mob}"
-                                            if clean_mob
-                                            else f"Walk-in {cust_seq}"
-                                        ),
-                                        "mobile": (
-                                            clean_mob
-                                            if clean_mob
-                                            else f"99999{cust_seq:05d}"
-                                        ),
-                                        "address": sel_b_name,
-                                        "kyc_status": "Approved",
-                                        "is_active": True,
-                                    }
-                                    c_ins = (
-                                        supabase.table("customers")
-                                        .insert(new_cust_payload)
-                                        .execute()
+                                    # 🌟 மொபைல் எண் டேட்டாபேஸில் இல்லை என்றால், புதியதாக உருவாக்காமல் பிழையைப் பதிவு செய்து ஸ்கிப் செய்வது
+                                    skipped_loans += 1
+                                    error_details.append(
+                                        f"கடன் எண் {raw_lno}: மொபைல் எண் {clean_mob} வாடிக்கையாளர் டேட்டாபேஸில் இல்லை. (புதிய வாடிக்கையாளர் உருவாக்கப்படவில்லை)"
                                     )
-                                    if c_ins.data:
-                                        c_id = c_ins.data[0]["id"]
-                                        if clean_mob:
-                                            cust_map[clean_mob] = c_id
+                                    continue
 
                                 # தொகைகள் மற்றும் எடைகள்
                                 s_amt = float(row.get("sanctioned_amount") or 0.0)
