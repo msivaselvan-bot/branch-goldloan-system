@@ -3899,31 +3899,36 @@ if st.session_state.get("logged_in", False):
                                 updated_perms.append(section)
                         # ----------------------------------------------------------------
 
-                        if st.form_submit_button("புதுப்பி & அனுமதிகளைச் சேமி"):
-                            # தேர்ந்தெடுக்கப்பட்ட கிளைக்கான ID-ஐ கண்டறிதல்
-                            new_branch_id = branch_choices.get(edit_branch_name, curr_branch_id)
+                        # 1. ஃபார்மை சப்மிட் செய்யும் பட்டன் (இது ஃபார்முக்கு உள்ளே இருக்க வேண்டும்)
+                        form_submitted = st.form_submit_button("புதுப்பி & அனுமதிகளைச் சேமி", type="primary")
 
-                            up_data = {
-                                "name": edit_name.strip(),
-                                "role": edit_role,
-                                "branch_id": new_branch_id,  # 🌟 புதிய கிளை ID சேமிக்கப்படுகிறது
-                                "is_active": edit_status == "Active",
-                                "permissions": updated_perms,
-                            }
-                            if edit_pass.strip():
-                                up_data["password_hash"] = edit_pass.strip()
+                    # ==========================================
+                    # 🌟 ஃபார்முக்கு வெளியே (Outside the Form)
+                    # ==========================================
+                    if form_submitted:
+                        # தேர்ந்தெடுக்கப்பட்ட கிளைக்கான ID-ஐ கண்டறிதல்
+                        new_branch_id = branch_choices.get(edit_branch_name, curr_branch_id)
 
-                            supabase.table("users").update(up_data).eq(
-                                "id", curr_user["id"]
-                            ).execute()
+                        up_data = {
+                            "name": edit_name.strip(),
+                            "role": edit_role,
+                            "branch_id": new_branch_id,  # புதிய கிளை ID
+                            "is_active": edit_status == "Active",
+                            "permissions": updated_perms,
+                        }
+                        if edit_pass.strip():
+                            up_data["password_hash"] = edit_pass.strip()
 
-                            # 🌟 சேமித்தவுடன் அழகிய கன்ஃபர்மேஷன் பாப்-அப் மற்றும் பலூன்கள்
-                            st.balloons()
-                            st.success(f"🎉 '{edit_name.strip()}' பணியாளரின் விவரங்கள், கிளை மற்றும் அனுமதிகள் வெற்றிகரமாகப் புதுப்பிக்கப்பட்டன!")
-                            
-                            # சிறிது நேரம் கழித்து பக்கத்தைப் புதுப்பிக்க
-                            if st.button("🔄 திரையைப் புதுப்பி (Refresh)", key="refresh_user_edit"):
-                                st.rerun()
+                        supabase.table("users").update(up_data).eq(
+                            "id", curr_user["id"]
+                        ).execute()
+
+                        # கன்ஃபர்மேஷன் பாப்-அப் மற்றும் பலூன்கள்
+                        st.balloons()
+                        st.success(f"🎉 '{edit_name.strip()}' பணியாளரின் விவரங்கள், கிளை மற்றும் அனுமதிகள் வெற்றிகரமாகப் புதுப்பிக்கப்பட்டன!")
+                        
+                        # உடனடியாக பக்கத்தைப் புதுப்பிக்க st.rerun() பயன்படுத்துவது சிறந்தது
+                        st.rerun()
         # -----------------------------------------------------------------
         # tab3: ஸ்கீம்கள் மேலாண்மை (Pledge RPG, FD, RD)
         # -----------------------------------------------------------------
