@@ -8915,8 +8915,12 @@ if st.session_state.get("logged_in", False):
                                 st.warning("⚠️ தயவுசெய்து குறைந்தபட்சம் ஒரு பாக்கெட்டையாவது டிக் செய்யவும்!")
                             else:
                                 count_l = 0
+                                sent_loan_numbers = [] # கன்ஃபர்மேஷனுக்காக கடன் எண்களை சேமிக்க
+                                
                                 for idx, row in selected_b_loans.iterrows():
                                     orig_id = df_b_loans.loc[idx, "id"]
+                                    loan_number_str = df_b_loans.loc[idx, "loan_no"]
+                                    
                                     supabase.table("gold_loans").update(
                                         {
                                             "packet_location": "IN_TRANSIT_TO_HQ",
@@ -8924,10 +8928,18 @@ if st.session_state.get("logged_in", False):
                                             "packet_updated_at": datetime.now().isoformat(),
                                         }
                                     ).eq("id", orig_id).execute()
+                                    
                                     count_l += 1
+                                    sent_loan_numbers.append(str(loan_number_str))
                                 
+                                # 🌟 கன்ஃபர்மேஷன் மெசேஜ் மற்றும் பலூன் அனிமேஷன்
+                                st.balloons()
                                 st.success(f"🎉 வெற்றிகரமாக {count_l} நகைக்கடன் பாக்கெட்டுகள் தலைமையகத்திற்கு அனுப்பப்பட்டன!")
-                                st.rerun()
+                                st.info(f"📋 **அனுப்பப்பட்ட எண்கள்:** {', '.join(sent_loan_numbers)}")
+                                
+                                # சிறிது நேரம் கழித்து திரையைப் புதுப்பிக்க
+                                if st.button("🔄 திரையைப் புதுப்பி (Refresh Page)", key="ref_btn_l"):
+                                    st.rerun()
 
                     st.markdown("---")
 
@@ -8939,7 +8951,7 @@ if st.session_state.get("logged_in", False):
                         df_b_gps.insert(0, "Select", False)
                         
                         show_cols_bg = ["Select", "gp_no", "gross_weight"]
-                        avail_bg = [c for c in show_cols_bg if c in df_b_gps.columns]
+                        avail_bg = [c for c in show_cols_bg if c in df_b_gps.C] if False else [c for c in show_cols_bg if c in df_b_gps.columns]
                         
                         edited_b_gps = st.data_editor(
                             df_b_gps[avail_bg],
@@ -8960,8 +8972,12 @@ if st.session_state.get("logged_in", False):
                                 st.warning("⚠️ தயவுசெய்து குறைந்தபட்சம் ஒரு GP பாக்கெட்டையாவது டிக் செய்யவும்!")
                             else:
                                 count_g = 0
+                                sent_gp_numbers = []
+                                
                                 for idx, row in selected_b_gps.iterrows():
                                     orig_id = df_b_gps.loc[idx, "id"]
+                                    gp_number_str = df_b_gps.loc[idx, "gp_no"]
+                                    
                                     supabase.table("gold_purchases").update(
                                         {
                                             "packet_location": "IN_TRANSIT_TO_HQ",
@@ -8969,10 +8985,17 @@ if st.session_state.get("logged_in", False):
                                             "packet_updated_at": datetime.now().isoformat(),
                                         }
                                     ).eq("id", orig_id).execute()
+                                    
                                     count_g += 1
+                                    sent_gp_numbers.append(str(gp_number_str))
                                 
+                                # 🌟 கன்ஃபர்மேஷன் மெசேஜ் மற்றும் பலூன் அனிமேஷன்
+                                st.balloons()
                                 st.success(f"🎉 வெற்றிகரமாக {count_g} GP பாக்கெட்டுகள் தலைமையகத்திற்கு அனுப்பப்பட்டன!")
-                                st.rerun()
+                                st.info(f"📋 **அனுப்பப்பட்ட GP எண்கள்:** {', '.join(sent_gp_numbers)}")
+                                
+                                if st.button("🔄 திரையைப் புதுப்பி (Refresh Page)", key="ref_btn_g"):
+                                    st.rerun()
 
             # -----------------------------------------------------------------
             # நிலை 2: பாக்கெட்டைத் தேடி, குறிப்புடன் தலைமையகத்திடம் கோருதல்
