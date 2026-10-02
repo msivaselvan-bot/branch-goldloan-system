@@ -5542,15 +5542,17 @@ if st.session_state.get("logged_in", False):
 
                         
                                 # வாடிக்கையாளர் டேட்டாபேஸில் இருக்கிறாரா எனச் சரிபார்த்தல்
-                                c_id = cust_map.get(clean_mob)
-                                
-                                if not c_id:
-                                    # 🌟 மொபைல் எண் டேட்டாபேஸில் இல்லை என்றால், புதியதாக உருவாக்காமல் பிழையைப் பதிவு செய்து ஸ்கிப் செய்வது
-                                    skipped_loans += 1
-                                    error_details.append(
-                                        f"கடன் எண் {raw_lno}: மொபைல் எண் {clean_mob} வாடிக்கையாளர் டேட்டாபேஸில் இல்லை. (புதிய வாடிக்கையாளர் உருவாக்கப்படவில்லை)"
-                                    )
-                                    continue
+                                # 1. டேட்டாபேஸில் உள்ள மொபைல் எண்களைத் துல்லியமாக சுத்தம் செய்து Map செய்தல்
+                                cust_map = {}
+                                for c in (cust_res.data or []):
+                                    m_raw = str(c.get("mobile", "")).strip().split(".")[0]
+                                    m_clean = "".join(filter(str.isdigit, m_raw))[-10:]
+                                    if m_clean:
+                                        cust_map[m_clean] = c["id"]
+
+                                # 2. எக்செல்/CSV-ல் இருந்து எடுக்கும் மொபைல் எண்ணையும் அதேபோல சுத்தம் செய்தல்
+                                raw_mob = str(row.get("mobile", "")).strip().split(".")[0]
+                                clean_mob = "".join(filter(str.isdigit, raw_mob))[-10:]
 
                                 # தொகைகள் மற்றும் எடைகள்
                                 s_amt = float(row.get("sanctioned_amount") or 0.0)
