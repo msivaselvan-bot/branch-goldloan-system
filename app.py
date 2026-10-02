@@ -3104,30 +3104,33 @@ if st.session_state.get("logged_in", False):
             # =========================================================================
             # 3. தலைமை நிலவரக் கார்டுகள் (Top Status KPI Metrics)
             # =========================================================================
-            cnt_branch = sum(
-                1
-                for p in all_loan_pkts
-                if p.get("packet_location", "AT_BRANCH") == "AT_BRANCH"
-            ) + sum(
-                1
-                for g in all_gp_pkts
-                if g.get("packet_location", "AT_BRANCH") == "AT_BRANCH"
-            )
-            cnt_transit_hq = sum(
-                1
-                for p in all_loan_pkts
-                if p.get("packet_location") == "IN_TRANSIT_TO_HQ"
-            ) + sum(
-                1 for g in all_gp_pkts if g.get("packet_location") == "IN_TRANSIT_TO_HQ"
-            )
-            cnt_hq_vault = sum(
-                1 for p in all_loan_pkts if p.get("packet_location") == "AT_HQ_VAULT"
-            ) + sum(
-                1
-                for g in all_gp_pkts
-                if g.get("packet_location") == "AT_HQ_VAULT"
-                and g.get("disposal_type") == "PENDING"
-            )
+            # =========================================================================
+            # 3. தலைமை நிலவரக் கார்டுகள் (Top Status KPI Metrics) & எடைகள்/தொகைக் கணக்கீடு
+            # =========================================================================
+            
+            # 📍 கிளைகளில் உள்ளவை (At Branch) - பாக்கெட்டுகள், எடை, கடன் தொகை
+            branch_loans = [p for p in all_loan_pkts if p.get("packet_location", "AT_BRANCH") == "AT_BRANCH"]
+            branch_gps = [g for g in all_gp_pkts if g.get("packet_location", "AT_BRANCH") == "AT_BRANCH"]
+            cnt_branch = len(branch_loans) + len(branch_gps)
+            
+            branch_wt = sum(float(p.get("gross_weight", 0) or 0) for p in branch_loans) + sum(float(g.get("gross_weight", 0) or 0) for g in branch_gps)
+            branch_amt = sum(float(p.get("sanctioned_amount", 0) or 0) for p in branch_loans) + sum(float(g.get("purchase_amount", 0) or 0) for g in branch_gps)
+
+            # 🚚 HQ-க்கு வழியில் (In Transit to HQ)
+            transit_loans = [p for p in all_loan_pkts if p.get("packet_location") == "IN_TRANSIT_TO_HQ"]
+            transit_gps = [g for g in all_gp_pkts if g.get("packet_location") == "IN_TRANSIT_TO_HQ"]
+            cnt_transit_hq = len(transit_loans) + len(transit_gps)
+            
+            transit_wt = sum(float(p.get("gross_weight", 0) or 0) for p in transit_loans) + sum(float(g.get("gross_weight", 0) or 0) for g in transit_gps)
+            transit_amt = sum(float(p.get("sanctioned_amount", 0) or 0) for p in transit_loans) + sum(float(g.get("purchase_amount", 0) or 0) for g in transit_gps)
+
+            # 🏢 HQ பெட்டக இருப்பு (At HQ Vault)
+            hq_loans = [p for p in all_loan_pkts if p.get("packet_location") == "AT_HQ_VAULT"]
+            hq_gps = [g for g in all_gp_pkts if g.get("packet_location") == "AT_HQ_VAULT" and g.get("disposal_type") == "PENDING"]
+            cnt_hq_vault = len(hq_loans) + len(hq_gps)
+            
+            hq_wt = sum(float(p.get("gross_weight", 0) or 0) for p in hq_loans) + sum(float(g.get("gross_weight", 0) or 0) for g in hq_gps)
+            hq_amt = sum(float(p.get("sanctioned_amount", 0) or 0) for p in hq_loans) + sum(float(g.get("purchase_amount", 0) or 0) for g in hq_gps)
 
             repledge_pkts = [
                 p for p in all_loan_pkts if p.get("packet_location") == "IN_BANK_LOCKER"
@@ -3135,6 +3138,7 @@ if st.session_state.get("logged_in", False):
             tot_repledge_amt = sum(
                 float(p.get("repledge_amount", 0) or 0) for p in repledge_pkts
             )
+            repledge_wt = sum(float(p.get("gross_weight", 0) or 0) for p in repledge_pkts)
 
             # 🌟 கிளைகளின் மீட்புக் கோரிக்கைகள் & திருப்பி அனுப்ப அனுமதி கோரிய பாக்கெட்கள்:
             urgent_requests = [p for p in all_loan_pkts if p.get("release_requested")]
@@ -3145,15 +3149,31 @@ if st.session_state.get("logged_in", False):
             ]
             total_branch_alerts = len(urgent_requests) + len(ret_requests)
 
-            # 5 கார்டுகள் வரிசை
+            # 5 கார்டுகள் வரிசை (எடை மற்றும் தொகைகளுடன் மெட்ரிக்குகளைக் காட்டுதல்)
             k1, k2, k3, k4, k5 = st.columns(5)
-            k1.metric("📍 கிளைகளில் உள்ளவை", f"{cnt_branch} பாக்கெட்கள்")
-            k2.metric("🚚 HQ-க்கு வழியில்", f"{cnt_transit_hq} பாக்கெட்கள்")
-            k3.metric("🏢 HQ பெட்டக இருப்பு", f"{cnt_hq_vault} பாக்கெட்கள்")
+            
+            k1.metric(
+                "📍 கிளைகளில் உள்ளவை", 
+                f"{cnt_branch} பாக்கெட்கள்", 
+                f"எடை: {branch_wt:.1f}g | ₹{branch_amt:,.0f}"
+            )
+            
+            k2.metric(
+                "🚚 HQ-க்கு வழியில்", 
+                f"{cnt_transit_hq} பாக்கெட்கள்", 
+                f"எடை: {transit_wt:.1f}g | ₹{transit_amt:,.0f}"
+            )
+            
+            k3.metric(
+                "🏢 HQ பெட்டக இருப்பு", 
+                f"{cnt_hq_vault} பாக்கெட்கள்", 
+                f"எடை: {hq_wt:.1f}g | ₹{hq_amt:,.0f}"
+            )
+            
             k4.metric(
                 "🏦 வங்கி லாக்கரில்",
                 f"{len(repledge_pkts)} பாக்கெட்கள்",
-                f"கடன்: ₹{tot_repledge_amt:,.0f}",
+                f"எடை: {repledge_wt:.1f}g | கடன்: ₹{tot_repledge_amt:,.0f}",
             )
 
             # 🌟 5-வது கார்டு: மீட்பு + திருப்புதல் இரண்டையும் காட்டும் நேரடி அலர்ட்
