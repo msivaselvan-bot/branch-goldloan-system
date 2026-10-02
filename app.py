@@ -3792,6 +3792,17 @@ if st.session_state.get("logged_in", False):
             with sub_col2:
                 if users_res.data:
                     st.markdown("#### ✏️ பணியாளர் திருத்தம் & அனுமதி மேலாண்மை")
+                    
+                    # 1. கிளைகளின் விவரங்களை டேட்டாபேஸில் இருந்து எடுத்தல் (Branch Mapping)
+                    try:
+                        b_res = supabase.table("branches").select("id, branch_name").execute()
+                        branches_list = b_res.data or []
+                        branch_choices = {b["branch_name"]: b["id"] for b in branches_list}
+                        branch_names = list(branch_choices.keys())
+                    except Exception:
+                        branch_choices = {}
+                        branch_names = []
+
                     user_choices = {
                         f"{u['name']} (@{u['username']})": u for u in users_res.data
                     }
@@ -3803,6 +3814,18 @@ if st.session_state.get("logged_in", False):
                     # பணியாளர் திருத்தும் ஃபார்ம்
                     with st.form("admin_edit_user_form"):
                         edit_name = st.text_input("பெயர்", value=curr_user["name"])
+                        
+                        # 🌟 கிளை மாற்றும் வசதி (Branch Selection)
+                        # பணியாளர் தற்போது எந்தக் கிளையில் உள்ளார் என்பதைக் கண்டறிந்து அதனை default-ஆக காட்டுதல்
+                        curr_branch_id = curr_user.get("branch_id")
+                        default_branch_name = next((b_name for b_name, b_id in branch_choices.items() if b_id == curr_branch_id), branch_names[0] if branch_names else "")
+                        
+                        edit_branch_name = st.selectbox(
+                            "கிளையை மாற்றுக (Select Branch)",
+                            branch_names,
+                            index=branch_names.index(default_branch_name) if default_branch_name in branch_names else 0
+                        )
+
                         edit_pass = st.text_input(
                             "புதிய கடவுச்சொல் (விரும்பினால் மட்டும்)", type="password"
                         )
@@ -3836,7 +3859,6 @@ if st.session_state.get("logged_in", False):
                         if not isinstance(current_perms, list):
                             current_perms = []
 
-                        # நிறுவனத்தின் தனித்துவமான நிர்வாகப் பிரிவுகள் (Duplicate பெயர்கள் நீக்கப்பட்டுள்ளன)
                         all_admin_sections = [
                             "🏢 நேரடி கல்லா & தினசரி வணிகம்",
                             "📦 பாக்கெட் & லாக்கர் மேலாண்மை",
@@ -3867,7 +3889,6 @@ if st.session_state.get("logged_in", False):
                         ]
 
                         updated_perms = []
-                        # ஒவ்வொரு செக்பாக்ஸுக்கும் தனித்துவமான key கொடுக்க `curr_user['id']` மற்றும் லூப் இன்டெக்ஸ் (`i`) பயன்படுத்தப்பட்டுள்ளது
                         for idx, section in enumerate(all_admin_sections):
                             is_checked = section in current_perms
                             if st.checkbox(
@@ -3879,9 +3900,13 @@ if st.session_state.get("logged_in", False):
                         # ----------------------------------------------------------------
 
                         if st.form_submit_button("புதுப்பி & அனுமதிகளைச் சேமி"):
+                            # தேர்ந்தெடுக்கப்பட்ட கிளைக்கான ID-ஐ கண்டறிதல்
+                            new_branch_id = branch_choices.get(edit_branch_name, curr_branch_id)
+
                             up_data = {
                                 "name": edit_name.strip(),
                                 "role": edit_role,
+                                "branch_id": new_branch_id,  # 🌟 புதிய கிளை ID சேமிக்கப்படுகிறது
                                 "is_active": edit_status == "Active",
                                 "permissions": updated_perms,
                             }
@@ -3891,10 +3916,14 @@ if st.session_state.get("logged_in", False):
                             supabase.table("users").update(up_data).eq(
                                 "id", curr_user["id"]
                             ).execute()
-                            st.success(
-                                "பணியாளர் விவரங்களும் அனுமதிகளும் வெற்றிகரமாகப் புதுப்பிக்கப்பட்டன!"
-                            )
-                            st.rerun()
+
+                            # 🌟 சேமித்தவுடன் அழகிய கன்ஃபர்மேஷன் பாப்-அப் மற்றும் பலூன்கள்
+                            st.balloons()
+                            st.success(f"🎉 '{edit_name.strip()}' பணியாளரின் விவரங்கள், கிளை மற்றும் அனுமதிகள் வெற்றிகரமாகப் புதுப்பிக்கப்பட்டன!")
+                            
+                            # சிறிது நேரம் கழித்து பக்கத்தைப் புதுப்பிக்க
+                            if st.button("🔄 திரையைப் புதுப்பி (Refresh)", key="refresh_user_edit"):
+                                st.rerun()
         # -----------------------------------------------------------------
         # tab3: ஸ்கீம்கள் மேலாண்மை (Pledge RPG, FD, RD)
         # -----------------------------------------------------------------
