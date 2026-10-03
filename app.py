@@ -8895,12 +8895,12 @@ if st.session_state.get("logged_in", False):
             try:
                 b_gps_res = (
                     supabase.table("gold_purchases")
-                    .select("id, gp_no, gross_weight, packet_location, disposal_type")
+                    .select("*")  # 🌟 அனைத்து கால்களையும் (purchase_bill_no, item_details உட்பட) எடுக்க இது உதவும்
                     .eq("branch_id", curr_b_id)
                     .execute()
                 )
                 b_gps = b_gps_res.data or []
-            except Exception:
+            except Exception as e:
                 b_gps = []
 
             # உள்-டேப்கள் (3 நிலைகள்)
@@ -9070,7 +9070,6 @@ if st.session_state.get("logged_in", False):
                                 st.rerun()
 
                 st.markdown("---")
-
             # -----------------------------------------------------------------
             # நிலை 2: பாக்கெட்டைத் தேடி, குறிப்புடன் தலைமையகத்திடம் கோருதல்
             # -----------------------------------------------------------------
