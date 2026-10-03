@@ -2614,31 +2614,40 @@ if st.session_state.get("logged_in", False):
                         pledge_cnt += 1
 
                     # 2. கடன் அசல் vs வட்டி
-                    elif "interest" in t_type and not (
-                        "rd" in t_type or "fd" in t_type
-                    ):
-                        loan_int_rec += r_amt
-                    elif any(
-                        k in t_type
-                        for k in ["release", "close", "redemption", "part payment"]
-                    ):
-                        p_val = float(details.get("principal") or 0)
-                        i_val = float(details.get("interest") or 0)
-                        if p_val > 0 or i_val > 0:
+                    elif any(k in t_type for k in ["interest", "vattikattuthal", "வட்டி", "release", "close", "redemption", "part payment", "part"]):
+                        # பல்வேறு வடிவங்களில் வரும் அசல் மற்றும் வட்டி தொகைகளைத் துல்லியமாக எடுத்தல்
+                        p_val = float(details.get("principal") or details.get("principal_amount") or t.get("principal_amount") or 0)
+                        
+                        # வட்டி மற்றும் இதர கட்டணங்கள் (Interest + Other Charges / Release Interest)
+                        i_val = float(
+                            details.get("interest") 
+                            or details.get("interest_amount") 
+                            or details.get("interest_paid") 
+                            or t.get("interest_amount") 
+                            or 0
+                        )
+                        
+                        other_chg = float(
+                            details.get("other_charges") 
+                            or details.get("charges") 
+                            or 0
+                        )
+
+                        if p_val > 0 or i_val > 0 or other_chg > 0:
                             loan_prin_rec += p_val
-                            loan_int_rec += i_val + (
-                                r_amt - (p_val + i_val)
-                                if r_amt > (p_val + i_val)
+                            loan_int_rec += i_val + other_chg + (
+                                r_amt - (p_val + i_val + other_chg)
+                                if r_amt > (p_val + i_val + other_chg)
                                 else 0
                             )
-                        elif (
-                            t.get("principal_amount")
-                            and float(t.get("principal_amount") or 0) > 0
-                        ):
+                        elif "interest" in t_type or "வட்டி" in t_type or "vattikattuthal" in t_type:
+                            loan_int_rec += r_amt
+                        elif t.get("principal_amount") and float(t.get("principal_amount") or 0) > 0:
                             prin_db = float(t.get("principal_amount"))
                             loan_prin_rec += min(prin_db, r_amt)
                             loan_int_rec += max(0.0, r_amt - prin_db)
                         else:
+                            # விவரங்கள் இல்லாவிட்டால் முழு தொகையும் அசலாகச் செல்லாமல், டெம்ப்ளேட் அடிப்படையில் பிரித்தல்
                             loan_prin_rec += r_amt
 
                     # 3. RD வசூல்
