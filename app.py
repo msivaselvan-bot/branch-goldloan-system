@@ -9325,14 +9325,35 @@ if st.session_state.get("logged_in", False):
                                 use_container_width=True,
                             ):
                                 try:
+                                    # 1. நிலையை Approved என மாற்றுதல்
                                     supabase.table("branch_fund_transfers").update(
                                         {
                                             "status": "Approved",
                                             "approved_by": current_user,
                                         }
                                     ).eq("id", f_item["id"]).execute()
+
+                                    # 🌟 2. ஆப்பரேஷன்ஸ் ஒப்புதல் அளித்த பிறகு கிளை கல்லாவில் (Transactions) சேர்ப்பது / கழிப்பது
+                                    b_id = f_item.get("branch_id")
+                                    t_type = f_item.get("transfer_type")  # எ.கா: HO_TO_BRANCH அல்லது BRANCH_TO_HO
+                                    amt = float(f_item.get("amount", 0))
+                                    
+                                    # கல்லா கணக்கிற்கான என்ட்ரி தயாரித்தல்
+                                    # (HO_TO_BRANCH என்றால் கல்லாவில் வரவு/Cash In, BRANCH_TO_HO என்றால் செலவு/Cash Out)
+                                    trans_type_db = "Cash In" if "HO_TO_BRANCH" in str(t_type).upper() else "Cash Out"
+                                    desc_text = f"HQ Fund Transfer Approved ({t_type}) - Approv by {current_user}"
+
+                                    supabase.table("transactions").insert({
+                                        "branch_id": b_id,
+                                        "transaction_type": trans_type_db,
+                                        "amount": amt,
+                                        "description": desc_text,
+                                        "payment_mode": "Cash",
+                                        "staff_name": current_user
+                                    }).execute()
+
                                     st.success(
-                                        "✅ நிதிப் பரிமாற்றம் வெற்றிகரமாக அங்கீகரிக்கப்பட்டது!"
+                                        "✅ நிதிப் பரிமாற்றம் அங்கீகரிக்கப்பட்டு, கிளை கல்லாவில் வெற்றிகரமாகப் பதிவானது!"
                                     )
                                     st.rerun()
                                 except Exception as e:
