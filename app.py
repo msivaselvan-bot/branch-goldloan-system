@@ -8965,7 +8965,7 @@ if st.session_state.get("logged_in", False):
                                 st.warning("⚠️ தயவுசெய்து குறைந்தபட்சம் ஒரு பாக்கெட்டையாவது டிக் செய்யவும்!")
                             else:
                                 count_l = 0
-                                sent_loan_numbers = [] # கன்ஃபர்மேஷனுக்காக கடன் எண்களை சேமிக்க
+                                sent_loan_numbers = []
                                 
                                 for idx, row in selected_b_loans.iterrows():
                                     orig_id = df_b_loans.loc[idx, "id"]
@@ -8982,70 +8982,94 @@ if st.session_state.get("logged_in", False):
                                     count_l += 1
                                     sent_loan_numbers.append(str(loan_number_str))
                                 
-                                # 🌟 கன்ஃபர்மேஷன் மெசேஜ் மற்றும் பலூன் அனிமேஷன்
                                 st.balloons()
                                 st.success(f"🎉 வெற்றிகரமாக {count_l} நகைக்கடன் பாக்கெட்டுகள் தலைமையகத்திற்கு அனுப்பப்பட்டன!")
                                 st.info(f"📋 **அனுப்பப்பட்ட எண்கள்:** {', '.join(sent_loan_numbers)}")
                                 
-                                # சிறிது நேரம் கழித்து திரையைப் புதுப்பிக்க
                                 if st.button("🔄 திரையைப் புதுப்பி (Refresh Page)", key="ref_btn_l"):
                                     st.rerun()
 
+                # =========================================================================
+                # 🌟 2. ஜிபி (GP) கொள்முதல் பாக்கெட்டுகளை பல்க் அனுப்பும் வசதி (இதனை இங்கே இணைக்கவும்)
+                # =========================================================================
+                if gps_to_send:
                     st.markdown("---")
-
-                    # 2. GP கொள்முதல் பாக்கெட்டுகளை பல்க் அனுப்பும் வசதி
-                    if gps_to_send:
-                        st.write(f"✨ **ஜிபி நகை வாங்குதல் பாக்கெட்கள் ({len(gps_to_send)}):**")
-                        
-                        df_b_gps = pd.DataFrame(gps_to_send)
-                        df_b_gps.insert(0, "Select", False)
-                        
-                        show_cols_bg = ["Select", "gp_no", "gross_weight"]
-                        avail_bg = [c for c in show_cols_bg if c in df_b_gps.C] if False else [c for c in show_cols_bg if c in df_b_gps.columns]
-                        
-                        edited_b_gps = st.data_editor(
-                            df_b_gps[avail_bg],
-                            column_config={
-                                "Select": st.column_config.CheckboxColumn("Select", help="அனுப்ப வேண்டியதைத் டிக் செய்யவும்"),
-                                "gp_no": st.column_config.TextColumn("GP எண்", disabled=True),
-                                "gross_weight": st.column_config.NumberColumn("எடை (g)", disabled=True),
-                            },
-                            hide_index=True,
-                            use_container_width=True,
-                            key="branch_bulk_disp_gps"
+                    st.write(f"🪙 **ஜிபி (GP) கொள்முதல் பாக்கெட்கள் ({len(gps_to_send)}):**")
+                    
+                    gp_display_data = []
+                    for g in gps_to_send:
+                        gp_no_val = (
+                            g.get("purchase_bill_no")
+                            or g.get("gp_no")
+                            or g.get("gp_number")
+                            or g.get("voucher_no")
+                            or f"GP-{g.get('id', '')}"
                         )
-                        
-                        selected_b_gps = edited_b_gps[edited_b_gps["Select"] == True]
-                        
-                        if st.button("🚚 தேர்வு செய்த GP பாக்கெட்டுகளை HQ-க்கு அனுப்பு", type="primary", key="btn_br_bulk_g"):
-                            if selected_b_gps.empty:
-                                st.warning("⚠️ தயவுசெய்து குறைந்தபட்சம் ஒரு GP பாக்கெட்டையாவது டிக் செய்யவும்!")
-                            else:
-                                count_g = 0
-                                sent_gp_numbers = []
+                        orn_desc = (
+                            g.get("item_details")
+                            or g.get("ornament_details")
+                            or "Gold Purchase Item"
+                        )
+                        img_val = g.get("image_url") or g.get("photo") or g.get("img") or "படம் இல்லை"
+
+                        gp_display_data.append({
+                            "Select": False,
+                            "id": g.get("id"),
+                            "GP எண்": gp_no_val,
+                            "எடை (g)": float(g.get("gross_weight", 0) or 0),
+                            "நகை விவரம்": orn_desc,
+                            "படம்": img_val,
+                        })
+
+                    df_b_gps = pd.DataFrame(gp_display_data)
+                    show_cols_gp = ["Select", "GP எண்", "எடை (g)", "நகை விவரம்", "படம்"]
+                    
+                    edited_b_gps = st.data_editor(
+                        df_b_gps[show_cols_gp],
+                        column_config={
+                            "Select": st.column_config.CheckboxColumn("Select", help="அனுப்ப வேண்டியதைத் டிக் செய்யவும்"),
+                            "GP எண்": st.column_config.TextColumn("GP எண்", disabled=True),
+                            "எடை (g)": st.column_config.NumberColumn("எடை (g)", disabled=True),
+                            "நகை விவரம்": st.column_config.TextColumn("நகை விவரம்", disabled=True),
+                            "படம்": st.column_config.TextColumn("படம்", disabled=True),
+                        },
+                        hide_index=True,
+                        use_container_width=True,
+                        key="branch_bulk_disp_gps"
+                    )
+
+                    selected_b_gps = edited_b_gps[edited_b_gps["Select"] == True]
+
+                    if st.button("🚚 தேர்வு செய்த GP பாக்கெட்டுகளை HQ-க்கு அனுப்பு", type="primary", key="btn_br_bulk_gp"):
+                        if selected_b_gps.empty:
+                            st.warning("⚠️ தயவுசெய்து குறைந்தபட்சம் ஒரு GP பாக்கெட்டையாவது டிக் செய்யவும்!")
+                        else:
+                            count_gp = 0
+                            sent_gp_numbers = []
+                            
+                            for idx, row in selected_b_gps.iterrows():
+                                orig_id = df_b_gps.loc[idx, "id"]
+                                gp_number_str = df_b_gps.loc[idx, "GP எண்"]
                                 
-                                for idx, row in selected_b_gps.iterrows():
-                                    orig_id = df_b_gps.loc[idx, "id"]
-                                    gp_number_str = df_b_gps.loc[idx, "gp_no"]
-                                    
-                                    supabase.table("gold_purchases").update(
-                                        {
-                                            "packet_location": "IN_TRANSIT_TO_HQ",
-                                            "packet_dispatched_by": staff_uname,
-                                            "packet_updated_at": datetime.now().isoformat(),
-                                        }
-                                    ).eq("id", orig_id).execute()
-                                    
-                                    count_g += 1
-                                    sent_gp_numbers.append(str(gp_number_str))
+                                supabase.table("gold_purchases").update(
+                                    {
+                                        "packet_location": "IN_TRANSIT_TO_HQ",
+                                        "packet_dispatched_by": staff_uname,
+                                        "packet_updated_at": datetime.now().isoformat(),
+                                    }
+                                ).eq("id", orig_id).execute()
                                 
-                                # 🌟 கன்ஃபர்மேஷன் மெசேஜ் மற்றும் பலூன் அனிமேஷன்
-                                st.balloons()
-                                st.success(f"🎉 வெற்றிகரமாக {count_g} GP பாக்கெட்டுகள் தலைமையகத்திற்கு அனுப்பப்பட்டன!")
-                                st.info(f"📋 **அனுப்பப்பட்ட GP எண்கள்:** {', '.join(sent_gp_numbers)}")
-                                
-                                if st.button("🔄 திரையைப் புதுப்பி (Refresh Page)", key="ref_btn_g"):
-                                    st.rerun()
+                                count_gp += 1
+                                sent_gp_numbers.append(str(gp_number_str))
+                            
+                            st.balloons()
+                            st.success(f"🎉 வெற்றிகரமாக {count_gp} GP பாக்கெட்டுகள் தலைமையகத்திற்கு அனுப்பப்பட்டன!")
+                            st.info(f"📋 **அனுப்பப்பட்ட GP எண்கள்:** {', '.join(sent_gp_numbers)}")
+                            
+                            if st.button("🔄 திரையைப் புதுப்பி (Refresh)", key="ref_btn_gp"):
+                                st.rerun()
+
+                st.markdown("---")
 
             # -----------------------------------------------------------------
             # நிலை 2: பாக்கெட்டைத் தேடி, குறிப்புடன் தலைமையகத்திடம் கோருதல்
