@@ -2300,42 +2300,47 @@ if not st.session_state.logged_in:
 # ==========================================
 # 6. முதன்மை திரை
 # ==========================================
-else:
-    # 💵 பக்கவாட்டு மெனுவில் (Sidebar) நேரலை கல்லா இருப்பு
-    if st.session_state.get("branch_id"):
-        with st.sidebar:
-            st.markdown("---")
-            live_cash = get_branch_current_cash(st.session_state.branch_id)
-            st.metric("💵 நேரலை கல்லா இருப்பு", f"₹{live_cash:,.2f}")
-
-    top_col1, top_col2, top_col3, top_col4 = st.columns([2.5, 2, 1, 1])
-    with top_col1:
-        st.write(f"🏢 **கிளை:** {st.session_state.branch}")
-    with top_col2:
-        st.write(
-            f"👤 **பயனர்:** {st.session_state.username} ({st.session_state.user_role})"
-        )
-    with top_col3:
-        if st.button(
-            "🔄 Refresh",
-            use_container_width=True,
-            help="பக்கத்தை முழுமையாகப் புதுப்பிக்க",
-        ):
-            st.rerun()
-    with top_col4:
-        if st.button("வெளியேறு", use_container_width=True):
-            st.session_state.logged_in = False
-            st.session_state.user_role = None  # முக்கியம்: ரோலை அழிக்க வேண்டும்
-            # முக்கியம்: பயனர் பெயரை அழிக்க வேண்டும்
-            st.session_state.username = None
-            st.session_state.current_visit = None
-            st.session_state.transactions_cart = []
-            st.session_state.generated_otp = None
-            st.session_state.current_declaration = None
-            st.session_state.declaration_gl_no = None
-            st.rerun()
-
+with st.sidebar:
+    st.markdown("### 🧭 நிர்வாகப் பிரிவு (Navigation)")
+    
+    # 🌟 மெயின் ஸ்கிரீனில் இருந்த ரேடியோ பட்டனை சைட் மெனுவிற்கு மாற்றுதல்
+    selected_section = st.radio(
+        "பிரிவைத் தேர்ந்தெடுக்கவும்:",
+        [
+            "📊 நேரடி கல்லா & தினசரி வணிகம்",
+            "📦 பாக்கெட் & லாக்கர் மேலாண்மை",
+            "🏦 நிதிப் பரிமாற்ற ஒப்புதல்",
+            # உங்களது இதர மெனு பெயர்கள்...
+        ]
+    )
+    
     st.markdown("---")
+    if st.session_state.get("branch_id"):
+        live_cash = get_branch_current_cash(st.session_state.branch_id)
+        st.metric("💵 நேரலை கல்லா இருப்பு", f"₹{live_cash:,.2f}")
+
+# 🏢 பிரதான திரை மேற்பகுதி (Top Header Bar)
+top_col1, top_col2, top_col3, top_col4 = st.columns([2.5, 2, 1, 1])
+with top_col1:
+    st.write(f"🏢 **கிளை:** {st.session_state.branch}")
+with top_col2:
+    st.write(f"👤 **பயனர்:** {st.session_state.username} ({st.session_state.user_role})")
+with top_col3:
+    if st.button("🔄 Refresh", use_container_width=True, help="பக்கத்தை முழுமையாகப் புதுப்பிக்க"):
+        st.rerun()
+with top_col4:
+    if st.button("வெளியேறு", use_container_width=True):
+        st.session_state.logged_in = False
+        st.session_state.user_role = None 
+        st.session_state.username = None
+        st.session_state.current_visit = None
+        st.session_state.transactions_cart = []
+        st.session_state.generated_otp = None
+        st.session_state.current_declaration = None
+        st.session_state.declaration_gl_no = None
+        st.rerun()
+
+st.markdown("---")
 
 # ----------------------------------------------------
 # A. நிர்வாக மேலாண்மை திரை (ADMIN PANEL WITH PERMISSION FILTERING)
