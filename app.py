@@ -7507,6 +7507,42 @@ if st.session_state.get("logged_in", False):
                                 st.rerun()
 
                             # உறுதி ஆவணப் பதிவிறக்கப் பகுதி
+                            if "Pledge" in txn_category:
+                                actual_amt = float(paid_amt if 'paid_amt' in locals() and paid_amt else visit.get("amount", 0.0) or 0.0)
+                                actual_gross_wt = float(visit.get("gross_weight", 0.0) or 0.0)
+                                actual_net_wt = float(visit.get("net_weight", 0.0) or visit.get("net_pure_weight", 0.0) or 0.0)
+                                gl_number_val = new_gl_no if 'new_gl_no' in locals() else "GL"
+
+                                # மதிப்புகளை session_state-ல் பாதுகாப்பாகச் சேமித்தல்
+                                st.session_state.decl_amt = actual_amt
+                                st.session_state.decl_tot_wt = actual_gross_wt
+                                st.session_state.decl_net_wt = actual_net_wt
+                                st.session_state.declaration_gl_no = gl_number_val
+
+                                decl_payload = {
+                                    "customer_name": visit.get("customer_name", ""),
+                                    "address": visit.get("address", ""),
+                                    "contact_number": visit.get("mobile", ""),
+                                    "branch_name": st.session_state.get("branch_name", st.session_state.get("branch", "Keezhamanakudi")),
+                                    "pledge_date": datetime.now().strftime("%d-%m-%Y"),
+                                    "loan_number": gl_number_val,
+                                    "loan_amount": actual_amt,
+                                    "total_weight": actual_gross_wt,
+                                    "net_weight": actual_net_wt,
+                                    "current_date": datetime.now().strftime("%d-%m-%Y")
+                                }
+                                
+                                # 🌟 ஆவணத் தரவை டிக்ஷனரியாக அப்படியே session_state-ல் சேமித்தல் (பட்டன் தோன்றுவதற்கு இது அவசியம்)
+                                st.session_state.current_declaration = decl_payload
+
+                                if "form_reset_counter" not in st.session_state:
+                                    st.session_state.form_reset_counter = 0
+                                st.session_state.form_reset_counter += 1
+
+                                st.success(f"'{txn_category}' வெற்றிகரமாகப் பட்டியலில் சேர்க்கப்பட்டது!")
+                                st.rerun()
+
+                            # உறுதி ஆவணப் பதிவிறக்கப் பகுதி
                             if st.session_state.get("current_declaration"):
                                 decl_info = st.session_state.current_declaration
                                 gl_no_val = st.session_state.get("declaration_gl_no") or "GL"
@@ -7521,7 +7557,7 @@ if st.session_state.get("logged_in", False):
                                 today_str = today_dt.strftime("%d-%m-%Y")
                                 due_date_str = (today_dt + relativedelta(months=3)).strftime("%d-%m-%Y")
 
-                                # 🌟 நேரடியாக session_state அல்லது decl_info இலிருந்து தொகைகளையும் எடைகளையும் எடுத்தல்
+                                # மதிப்புகளை எடுப்பது
                                 amt_val = float(st.session_state.get("decl_amt", 0.0))
                                 tot_wt = float(st.session_state.get("decl_tot_wt", 0.0))
                                 net_wt = float(st.session_state.get("decl_net_wt", 0.0))
