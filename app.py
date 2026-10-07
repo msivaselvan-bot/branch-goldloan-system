@@ -7502,11 +7502,11 @@ if st.session_state.get("logged_in", False):
                 # உறுதி ஆவணப் பதிவிறக்கப் பகுதி
                 if st.session_state.get("current_declaration"):
                     decl_info = st.session_state.current_declaration
-                    gl_no_val = st.session_state.get("declaration_gl_no") or (decl_info.get("loan_number", "GL") if isinstance(decl_info, dict) else "GL")
+                    gl_no_val = st.session_state.get("declaration_gl_no") or "GL"
                     clean_gl_key = str(gl_no_val).replace("/", "_")
 
-                    v_info = st.session_state.get("current_visit", {}) or (visit if 'visit' in locals() else {})
-                    cust_name = v_info.get("customer_name") or v_info.get("name") or "Cyril Jenson"
+                    v_info = st.session_state.get("current_visit", {}) or {}
+                    cust_name = v_info.get("customer_name") or v_info.get("name") or "வாடிக்கையாளர்"
                     cust_mob = v_info.get("mobile") or v_info.get("customer_mobile") or v_info.get("phone") or "-"
                     branch_name = st.session_state.get("branch_name", "முத்துசிஸ் கோல்டு புரொடக்ட் பிரைவேட் லிமிடெட்")
                     
@@ -7514,15 +7514,28 @@ if st.session_state.get("logged_in", False):
                     today_str = today_dt.strftime("%d-%m-%Y")
                     due_date_str = (today_dt + relativedelta(months=3)).strftime("%d-%m-%Y")
 
-                    # 🌟 மதிப்புகளை நேரடியாக decl_info (payload) இலிருந்து பாதுகாப்பாக எடுத்தல்
-                    if isinstance(decl_info, dict):
+                    # 🌟 நேரடியாக Supabase டேட்டாபேஸில் இருந்து கடன் விவரங்களை (தொகை மற்றும் எடைகள்) எடுத்தல்
+                    amt_val = 0.0
+                    tot_wt = 0.0
+                    net_wt = 0.0
+                    
+                    try:
+                        loan_query = supabase.table("gold_loans").select("sanctioned_amount, amount, gross_weight, net_weight, net_pure_weight").eq("loan_no", gl_no_val).execute()
+                        if loan_query.data:
+                            loan_row = loan_query.data[0]
+                            amt_val = float(loan_row.get("sanctioned_amount") or loan_row.get("amount") or 0.0)
+                            tot_wt = float(loan_row.get("gross_weight") or 0.0)
+                            net_wt = float(loan_row.get("net_weight") or loan_row.get("net_pure_weight") or 0.0)
+                    except Exception:
+                        pass
+
+                    # டேட்டாபேஸில் கிடைக்கவில்லை எனിൽ decl_info அல்லது visit இலிருந்து எடுப்பது
+                    if amt_val == 0.0 and isinstance(decl_info, dict):
                         amt_val = float(decl_info.get("loan_amount", 0.0) or decl_info.get("principal_amount", 0.0) or 0.0)
-                        tot_wt = float(decl_info.get("total_weight", 0.0) or visit.get("gross_weight", 0.0) or 0.0)
-                        net_wt = float(decl_info.get("net_weight", 0.0) or visit.get("net_weight", 0.0) or 0.0)
-                    else:
-                        amt_val = float(paid_amt if 'paid_amt' in locals() else 0.0)
-                        tot_wt = float(visit.get("gross_weight", 0.0) if 'visit' in locals() else 0.0)
-                        net_wt = float(visit.get("net_weight", 0.0) if 'visit' in locals() else 0.0)
+                    if tot_wt == 0.0:
+                        tot_wt = float(v_info.get("gross_weight", 0.0) or 0.0)
+                    if net_wt == 0.0:
+                        net_wt = float(v_info.get("net_weight", 0.0) or 0.0)
 
                     html_template = f"""<!DOCTYPE html>
                     <html>
