@@ -7471,10 +7471,17 @@ if st.session_state.get("logged_in", False):
 
                             # 🌟 Pledge என்றால் உறுதி ஆவணம் (Declaration Form) தயாரித்தல் (ஒரே ஒருமுறை மட்டும்)
                             if "Pledge" in txn_category:
-                                # 🌟 கடன் தொகை மற்றும் எடைகள் சரியாக வருவதற்கு அவeleriப் பெறுதல்
+                                # 🌟 கடன் தொகை மற்றும் எடைகள் சரியாக வருவதற்கு மதிப்புகளைப் பெறுதல்
                                 actual_amt = float(paid_amt if 'paid_amt' in locals() and paid_amt else visit.get("amount", 0.0) or 0.0)
                                 actual_gross_wt = float(visit.get("gross_weight", 0.0) or 0.0)
                                 actual_net_wt = float(visit.get("net_weight", 0.0) or visit.get("net_pure_weight", 0.0) or 0.0)
+                                gl_number_val = new_gl_no if 'new_gl_no' in locals() else "GL"
+
+                                # 🌟 session_state-ல் நேரடியாகச் சேமித்தல் (டவுன்லோட் செய்யும்போது பயன்பட)
+                                st.session_state.decl_amt = actual_amt
+                                st.session_state.decl_tot_wt = actual_gross_wt
+                                st.session_state.decl_net_wt = actual_net_wt
+                                st.session_state.declaration_gl_no = gl_number_val
 
                                 decl_payload = {
                                     "customer_name": visit.get("customer_name", ""),
@@ -7482,13 +7489,13 @@ if st.session_state.get("logged_in", False):
                                     "contact_number": visit.get("mobile", ""),
                                     "branch_name": st.session_state.get("branch_name", st.session_state.get("branch", "Keezhamanakudi")),
                                     "pledge_date": datetime.now().strftime("%d-%m-%Y"),
-                                    "loan_number": new_gl_no if 'new_gl_no' in locals() else "",
-                                    "loan_amount": actual_amt,       # 👈 சரியாக கடன் தொகை செல்லும்
+                                    "loan_number": gl_number_val,
+                                    "loan_amount": actual_amt,      # 👈 சரியாக கடன் தொகை செல்லும்
                                     "total_weight": actual_gross_wt, # 👈 மொத்த எடை செல்லும்
                                     "net_weight": actual_net_wt,     # 👈 நிகர எடை செல்லும்
                                     "current_date": datetime.now().strftime("%d-%m-%Y")
                                 }
-                                st.session_state.declaration_gl_no = new_gl_no if 'new_gl_no' in locals() else "GL"
+                                
                                 st.session_state.current_declaration = generate_declaration_html(decl_payload) if 'generate_declaration_html' in globals() else decl_payload
 
                                 # 🌟 படிவத்தை ரீசெட் கவுண்டரை கூட்டுதல் மற்றும் திரையைப் புதுப்பித்தல்
@@ -7499,110 +7506,93 @@ if st.session_state.get("logged_in", False):
                                 st.success(f"'{txn_category}' வெற்றிகரமாகப் பட்டியலில் சேர்க்கப்பட்டது!")
                                 st.rerun()
 
-                # உறுதி ஆவணப் பதிவிறக்கப் பகுதி
-                if st.session_state.get("current_declaration"):
-                    decl_info = st.session_state.current_declaration
-                    gl_no_val = st.session_state.get("declaration_gl_no") or "GL"
-                    clean_gl_key = str(gl_no_val).replace("/", "_")
+                            # உறுதி ஆவணப் பதிவிறக்கப் பகுதி
+                            if st.session_state.get("current_declaration"):
+                                decl_info = st.session_state.current_declaration
+                                gl_no_val = st.session_state.get("declaration_gl_no") or "GL"
+                                clean_gl_key = str(gl_no_val).replace("/", "_")
 
-                    v_info = st.session_state.get("current_visit", {}) or {}
-                    cust_name = v_info.get("customer_name") or v_info.get("name") or "வாடிக்கையாளர்"
-                    cust_mob = v_info.get("mobile") or v_info.get("customer_mobile") or v_info.get("phone") or "-"
-                    branch_name = st.session_state.get("branch_name", "முத்துசிஸ் கோல்டு புரொடக்ட் பிரைவேட் லிமிடெட்")
-                    
-                    today_dt = datetime.now()
-                    today_str = today_dt.strftime("%d-%m-%Y")
-                    due_date_str = (today_dt + relativedelta(months=3)).strftime("%d-%m-%Y")
+                                v_info = st.session_state.get("current_visit", {}) or {}
+                                cust_name = v_info.get("customer_name") or v_info.get("name") or "வாடிக்கையாளர்"
+                                cust_mob = v_info.get("mobile") or v_info.get("customer_mobile") or v_info.get("phone") or "-"
+                                branch_name = st.session_state.get("branch_name", "முத்துசிஸ் கோல்டு புரொடக்ட் பிரைவேட் லிமிடெட்")
+                                
+                                today_dt = datetime.now()
+                                today_str = today_dt.strftime("%d-%m-%Y")
+                                due_date_str = (today_dt + relativedelta(months=3)).strftime("%d-%m-%Y")
 
-                    # 🌟 டேட்டாபேஸில் இருந்து கடன் விவரங்களை (தொகை மற்றும் எடைகள்) எடுப்பது
-                    amt_val = 0.0
-                    tot_wt = 0.0
-                    net_wt = 0.0
-                    
-                    try:
-                        # 1. முதலில் குறிப்பிட்ட loan_no மூலம் தேடுதல்
-                        loan_query = supabase.table("gold_loans").select("sanctioned_amount, amount, gross_weight, net_weight, net_pure_weight").eq("loan_no", gl_no_val).execute()
-                        
-                        # 2. ஒருவேளை கிடைக்கவில்லை எனில், சமீபத்திய (Latest) கடனை எடுத்தல்
-                        if not loan_query.data:
-                            loan_query = supabase.table("gold_loans").select("sanctioned_amount, amount, gross_weight, net_weight, net_pure_weight").order("id", desc=True).limit(1).execute()
+                                # 🌟 நேரடியாக session_state அல்லது decl_info இலிருந்து தொகைகளையும் எடைகளையும் எடுத்தல்
+                                amt_val = float(st.session_state.get("decl_amt", 0.0))
+                                tot_wt = float(st.session_state.get("decl_tot_wt", 0.0))
+                                net_wt = float(st.session_state.get("decl_net_wt", 0.0))
 
-                        if loan_query.data:
-                            loan_row = loan_query.data[0]
-                            amt_val = float(loan_row.get("sanctioned_amount") or loan_row.get("amount") or 0.0)
-                            tot_wt = float(loan_row.get("gross_weight") or 0.0)
-                            net_wt = float(loan_row.get("net_weight") or loan_row.get("net_pure_weight") or 0.0)
-                    except Exception:
-                        pass
+                                if amt_val == 0.0 and isinstance(decl_info, dict):
+                                    amt_val = float(decl_info.get("loan_amount", 0.0) or decl_info.get("principal_amount", 0.0) or 0.0)
+                                if tot_wt == 0.0 and isinstance(decl_info, dict):
+                                    tot_wt = float(decl_info.get("total_weight", 0.0) or 0.0)
+                                if net_wt == 0.0 and isinstance(decl_info, dict):
+                                    net_wt = float(decl_info.get("net_weight", 0.0) or 0.0)
 
-                    # 3. டேட்டாபேஸில் இல்லையெனில் decl_info அல்லது visit இலிருந்து எடுப்பது
-                    if amt_val == 0.0 and isinstance(decl_info, dict):
-                        amt_val = float(decl_info.get("loan_amount", 0.0) or decl_info.get("principal_amount", 0.0) or 0.0)
-                    if tot_wt == 0.0:
-                        tot_wt = float(v_info.get("gross_weight", 0.0) or 0.0)
-                    if net_wt == 0.0:
-                        net_wt = float(v_info.get("net_weight", 0.0) or 0.0)
+                                html_template = f"""<!DOCTYPE html>
+                                <html>
+                                <head>
+                                    <meta charset="utf-8">
+                                    <title>கூடுதல் கடன் உறுதிமொழிப் பத்திரம் - {gl_no_val}</title>
+                                    <style>
+                                        @page {{ size: A4 portrait; margin: 10mm 15mm; }}
+                                        * {{ box-sizing: border-box; }}
+                                        body {{ font-family: Arial, sans-serif; margin: 0; padding: 0; line-height: 1.4; color: #111; font-size: 12px; }}
+                                        .title {{ text-align: center; font-size: 14px; font-weight: bold; border-bottom: 1.5px solid #222; padding-bottom: 4px; margin-bottom: 10px; }}
+                                        .parties-table {{ width: 100%; margin-bottom: 8px; font-size: 12px; border-collapse: collapse; }}
+                                        .parties-table td {{ vertical-align: top; padding: 0; }}
+                                        .subject {{ background-color: #f2f2f2; padding: 5px 8px; font-weight: bold; font-size: 12px; border-left: 3px solid #b8860b; margin-bottom: 8px; }}
+                                        .content {{ text-align: justify; font-size: 11.5px; }}
+                                        .content p {{ margin: 0 0 6px 0; }}
+                                        .summary-box {{ border: 1px dashed #444; padding: 6px 10px; margin: 8px 0; background: #fafafa; font-size: 11.5px; }}
+                                        .signature-table {{ width: 100%; margin-top: 15px; border-collapse: collapse; }}
+                                        .signature-table td {{ vertical-align: top; font-size: 11.5px; padding: 0; }}
+                                    </style>
+                                </head>
+                                <body>
+                                    <div class="title">அடகு நகைக்கடன் கூடுதல் தொகை பெறுதல் தொடர்பான உறுதிமொழிப் பத்திரம்</div>
+                                    <table class="parties-table">
+                                        <tr>
+                                            <td style="width: 50%;"><strong>அனுப்புநர்:</strong><br>திரு/திருமதி. {cust_name}<br>தொடர்பு எண்: {cust_mob}</td>
+                                            <td style="width: 50%;"><strong>பெறுநர்:</strong><br>மேலாளர் அவர்கள்,<br>முத்துசிஸ் கோல்டு புரொடக்ட் பிரைவேட் லிமிடெட்,<br>கிளை: {branch_name}</td>
+                                        </tr>
+                                    </table>
+                                    <div class="subject">பொருள்: கடன் எண்: {gl_no_val} – கூடுதல் கடன் தொகை பெற்றமைக்கான உறுதிமொழி ஆவணம்.</div>
+                                    <div class="content">
+                                        <p>ஐயா,</p>
+                                        <p>நான் தங்களது நிறுவனத்தில் <strong>{today_str}</strong> அன்று கடன் எண் <strong>{gl_no_val}</strong>-ன் கீழ் எனது தங்க நகைகளை அடமானம் வைத்து <strong>₹{amt_val:,.2f}</strong> கடனாகப் பெற்றுள்ளேன்.</p>
+                                        <p>எனது அவசர பணத்தேவையின் காரணமாக, நிறுவனத்தின் வழக்கமான கடன் மதிப்பீட்டு வரம்பை (LTV) விட எனது தனிப்பட்ட வேண்டுகோளின் பேரில் கூடுதல் தொகையினை கடனாகப் பெற்றுள்ளேன் என்பதை மனப்பூர்வமாக ஒப்புக்கொள்கிறேன்.</p>
+                                        <p>இக்கடனுக்கான கால அளவு 3 (மூன்று) மாதங்கள் மட்டுமே. இக்காலக்கட்டத்தில் மாதாந்திர வட்டியை தவறாமல் செலுத்தி, 3 மாத கால முடிவிற்குள் (அதாவது <strong>{due_date_str}</strong>-க்குள்) அசல் மற்றும் முழு வட்டியையும் செலுத்தி நகைகளைத் திருப்பிக் கொள்கிறேன் என உறுதியளிக்கிறேன். தவணை தவறினால், நிறுவனத்தின் விதிகளின்படி கூடுதல் அபராத வட்டி செலுத்த நான் கட்டுப்பட்டவன் ஆவேன்.</p>
+                                        <p>3 மாத காலத்திற்குள் அசல் மற்றும் வட்டி முழுவதையும் செலுத்தி கடனை நேர் செய்யத் தவறினால், இந்திய ஒப்பந்தச் சட்ட விதிகளின்படி (Indian Contract Act, 1872) நிறுவனம் எனக்கு உரிய முன்னறிவிப்பு வழங்கி, அடமானம் வைக்கப்பட்ட நகைகளை வெளிப்படை ஏலத்திலோ அல்லது நேரடி விற்பனை மூலமாகவோ விற்று கடன் பாக்கியை வசூலித்துக் கொள்ள முழு உரிமை உண்டு.</p>
+                                        <p>அவ்வாறு நகைகளை விற்பனை செய்து கடன் தொகையை ஈடுசெய்வதில் எனக்கு எவ்வித ஆட்சேபனையோ, உரிமைகோரலோ இருக்காது. விற்பனைத் தொகையானது நிலுவைக் கடனை விடக் குறைவாக இருக்கும் பட்சத்தில், எஞ்சிய கடன் தொகையை நான் செலுத்த முழுப் பொறுப்பேற்கிறேன்.</p>
+                                        <p>மேற்கண்ட அனைத்து விதிகளையும் முழுமையாகப் படித்துப் புரிந்து கொண்டு, எந்தவித வற்புறுத்தலும் இன்றி எனது சொந்த விருப்பத்தின் பேரில் இந்த உறுதிமொழிப் பத்திரத்தில் கையொப்பமிடுகிறேன்.</p>
+                                    </div>
+                                    <div class="summary-box"><strong>அடகு வைக்கப்பட்ட நகைகளின் சுருக்கம்:</strong><br>ரசீது எண்: <strong>{gl_no_val}</strong> | மொத்த எடை: <strong>{tot_wt}g</strong> | நிகர எடை: <strong>{net_wt}g</strong> | தேதி: <strong>{today_str}</strong> | இடம்: <strong>{branch_name}</strong></div>
+                                    <table class="signature-table">
+                                        <tr>
+                                            <td style="width: 50%;"><strong>சாட்சிகள்:</strong><br><br>1. பெயர்: ______________________ கையொப்பம்: ____________<br><br>2. பெயர்: ______________________ கையொப்பம்: ____________</td>
+                                            <td style="width: 50%; text-align: right; vertical-align: bottom;">வாடிக்கையாளர் கையொப்பம்: ___________________<br><br>(<strong>{cust_name}</strong>)</td>
+                                        </tr>
+                                    </table>
+                                </body>
+                                </html>"""
 
-                    html_template = f"""<!DOCTYPE html>
-                    <html>
-                    <head>
-                        <meta charset="utf-8">
-                        <title>கூடுதல் கடன் உறுதிமொழிப் பத்திரம் - {gl_no_val}</title>
-                        <style>
-                            @page {{ size: A4 portrait; margin: 10mm 15mm; }}
-                            * {{ box-sizing: border-box; }}
-                            body {{ font-family: Arial, sans-serif; margin: 0; padding: 0; line-height: 1.4; color: #111; font-size: 12px; }}
-                            .title {{ text-align: center; font-size: 14px; font-weight: bold; border-bottom: 1.5px solid #222; padding-bottom: 4px; margin-bottom: 10px; }}
-                            .parties-table {{ width: 100%; margin-bottom: 8px; font-size: 12px; border-collapse: collapse; }}
-                            .parties-table td {{ vertical-align: top; padding: 0; }}
-                            .subject {{ background-color: #f2f2f2; padding: 5px 8px; font-weight: bold; font-size: 12px; border-left: 3px solid #b8860b; margin-bottom: 8px; }}
-                            .content {{ text-align: justify; font-size: 11.5px; }}
-                            .content p {{ margin: 0 0 6px 0; }}
-                            .summary-box {{ border: 1px dashed #444; padding: 6px 10px; margin: 8px 0; background: #fafafa; font-size: 11.5px; }}
-                            .signature-table {{ width: 100%; margin-top: 15px; border-collapse: collapse; }}
-                            .signature-table td {{ vertical-align: top; font-size: 11.5px; padding: 0; }}
-                        </style>
-                    </head>
-                    <body>
-                        <div class="title">அடகு நகைக்கடன் கூடுதல் தொகை பெறுதல் தொடர்பான உறுதிமொழிப் பத்திரம்</div>
-                        <table class="parties-table">
-                            <tr>
-                                <td style="width: 50%;"><strong>அனுப்புநர்:</strong><br>திரு/திருமதி. {cust_name}<br>தொடர்பு எண்: {cust_mob}</td>
-                                <td style="width: 50%;"><strong>பெறுநர்:</strong><br>மேலாளர் அவர்கள்,<br>முத்துசிஸ் கோல்டு புரொடக்ட் பிரைவேட் லிமிடெட்,<br>கிளை: {branch_name}</td>
-                            </tr>
-                        </table>
-                        <div class="subject">பொருள்: கடன் எண்: {gl_no_val} – கூடுதல் கடன் தொகை பெற்றமைக்கான உறுதிமொழி ஆவணம்.</div>
-                        <div class="content">
-                            <p>ஐயா,</p>
-                            <p>நான் தங்களது நிறுவனத்தில் <strong>{today_str}</strong> அன்று கடன் எண் <strong>{gl_no_val}</strong>-ன் கீழ் எனது தங்க நகைகளை அடமானம் வைத்து <strong>₹{amt_val:,.2f}</strong> கடனாகப் பெற்றுள்ளேன்.</p>
-                            <p>எனது அவசர பணத்தேவையின் காரணமாக, நிறுவனத்தின் வழக்கமான கடன் மதிப்பீட்டு வரம்பை (LTV) விட எனது தனிப்பட்ட வேண்டுகோளின் பேரில் கூடுதல் தொகையினை கடனாகப் பெற்றுள்ளேன் என்பதை மனப்பூர்வமாக ஒப்புக்கொள்கிறேன்.</p>
-                            <p>இக்கடனுக்கான கால அளவு 3 (மூன்று) மாதங்கள் மட்டுமே. இக்காலக்கட்டத்தில் மாதாந்திர வட்டியை தவறாமல் செலுத்தி, 3 மாத கால முடிவிற்குள் (அதாவது <strong>{due_date_str}</strong>-க்குள்) அசல் மற்றும் முழு வட்டியையும் செலுத்தி நகைகளைத் திருப்பிக் கொள்கிறேன் என உறுதியளிக்கிறேன். தவணை தவறினால், நிறுவனத்தின் விதிகளின்படி கூடுதல் அபராத வட்டி செலுத்த நான் கட்டுப்பட்டவன் ஆவேன்.</p>
-                            <p>3 மாத காலத்திற்குள் அசல் மற்றும் வட்டி முழுவதையும் செலுத்தி கடனை நேர் செய்யத் தவறினால், இந்திய ஒப்பந்தச் சட்ட விதிகளின்படி (Indian Contract Act, 1872) நிறுவனம் எனக்கு உரிய முன்னறிவிப்பு வழங்கி, அடமானம் வைக்கப்பட்ட நகைகளை வெளிப்படை ஏலத்திலோ அல்லது நேரடி விற்பனை மூலமாகவோ விற்று கடன் பாக்கியை வசூலித்துக் கொள்ள முழு உரிமை உண்டு.</p>
-                            <p>அவ்வாறு நகைகளை விற்பனை செய்து கடன் தொகையை ஈடுசெய்வதில் எனக்கு எவ்வித ஆட்சேபனையோ, உரிமைகோரலோ இருக்காது. விற்பனைத் தொகையானது நிலுவைக் கடனை விடக் குறைவாக இருக்கும் பட்சத்தில், எஞ்சிய கடன் தொகையை நான் செலுத்த முழுப் பொறுப்பேற்கிறேன்.</p>
-                            <p>மேற்கண்ட அனைத்து விதிகளையும் முழுமையாகப் படித்துப் புரிந்து கொண்டு, எந்தவித வற்புறுத்தலும் இன்றி எனது சொந்த விருப்பத்தின் பேரில் இந்த உறுதிமொழிப் பத்திரத்தில் கையொப்பமிடுகிறேன்.</p>
-                        </div>
-                        <div class="summary-box"><strong>அடகு வைக்கப்பட்ட நகைகளின் சுருக்கம்:</strong><br>ரசீது எண்: <strong>{gl_no_val}</strong> | மொத்த எடை: <strong>{tot_wt}g</strong> | நிகர எடை: <strong>{net_wt}g</strong> | தேதி: <strong>{today_str}</strong> | இடம்: <strong>{branch_name}</strong></div>
-                        <table class="signature-table">
-                            <tr>
-                                <td style="width: 50%;"><strong>சாட்சிகள்:</strong><br><br>1. பெயர்: ______________________ கையொப்பம்: ____________<br><br>2. பெயர்: ______________________ கையொப்பம்: ____________</td>
-                                <td style="width: 50%; text-align: right; vertical-align: bottom;">வாடிக்கையாளர் கையொப்பம்: ___________________<br><br>(<strong>{cust_name}</strong>)</td>
-                            </tr>
-                        </table>
-                    </body>
-                    </html>"""
-
-                    download_bytes = html_template.encode("utf-8")
-                    st.markdown("---")
-                    with st.container(border=True):
-                        st.warning("⚠️ **கவனிக்க:** கூடுதல் நகைக் கடன் உறுதிமொழிப் பத்திரம் அவசியமாகிறது.")
-                        st.download_button(
-                            label=f"📄 உறுதி ஆவணத்தைப் பதிவிறக்குக (Print Declaration - GL: {gl_no_val})",
-                            data=download_bytes,
-                            file_name=f"Declaration_{clean_gl_key}.html",
-                            mime="text/html; charset=utf-8",
-                            type="primary",
-                            key=f"dl_btn_{clean_gl_key}"
-                        )
+                                download_bytes = html_template.encode("utf-8")
+                                st.markdown("---")
+                                with st.container(border=True):
+                                    st.warning("⚠️ **கவனிக்க:** கூடுதல் நகைக் கடன் உறுதிமொழிப் பத்திரம் அவசியமாகிறது.")
+                                    st.download_button(
+                                        label=f"📄 உறுதி ஆவணத்தைப் பதிவிறக்குக (Print Declaration - GL: {gl_no_val})",
+                                        data=download_bytes,
+                                        file_name=f"Declaration_{clean_gl_key}.html",
+                                        mime="text/html; charset=utf-8",
+                                        type="primary",
+                                        key=f"dl_btn_{clean_gl_key}"
+                                    )
 
                 # 🛒 கார்ட் பட்டியல்
                 st.markdown("---")
