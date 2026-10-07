@@ -7513,11 +7513,28 @@ if st.session_state.get("logged_in", False):
                                 actual_net_wt = float(visit.get("net_weight", 0.0) or visit.get("net_pure_weight", 0.0) or 0.0)
                                 gl_number_val = new_gl_no if 'new_gl_no' in locals() else "GL"
 
-                                # மதிப்புகளை session_state-ல் பாதுகாப்பாகச் சேமித்தல்
+                                # 🌟 டேட்டாவை உறுதியாக செஷன் ஸ்டேட்டில் சேமித்தல்
                                 st.session_state.decl_amt = actual_amt
                                 st.session_state.decl_tot_wt = actual_gross_wt
                                 st.session_state.decl_net_wt = actual_net_wt
                                 st.session_state.declaration_gl_no = gl_number_val
+                                st.session_state.show_declaration_box = True  # 👈 பட்டனைக் காட்டுவதற்கான பிரத்யேக ஃப்ளாக் (Flag)
+
+                                if "form_reset_counter" not in st.session_state:
+                                    st.session_state.form_reset_counter = 0
+                                st.session_state.form_reset_counter += 1
+
+                                st.success(f"'{txn_category}' வெற்றிகரமாகப் பட்டியலில் சேர்க்கப்பட்டது!")
+                                st.rerun()
+
+                            # 2. பக்கத்தின் எங்கு வேண்டுமானாலும் இந்த டவுன்லோட் பகுதியை வைத்துக்கொள்ளலாம் (சமர்ப்பித்த பிறகு பட்டன் எப்போதும் தெரியும்):
+                            if st.session_state.get("show_declaration_box", False):
+                                gl_no_val = st.session_state.get("declaration_gl_no", "GL")
+                                clean_gl_key = str(gl_no_val).replace("/", "_")
+
+                                v_info = st.session_state.get("current_visit", {}) or {}
+                                cust_name = v_info.get("customer_name") or v_info.get("name") or "வாடிக்கையாளர்"
+                                cust_mob = v_info.get("mobile") or v_info.get("customer_mobile
 
                                 decl_payload = {
                                     "customer_name": visit.get("customer_name", ""),
