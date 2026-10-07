@@ -7470,43 +7470,9 @@ if st.session_state.get("logged_in", False):
                             st.session_state.transactions_cart.append(cart_entry)
 
                             # 🌟 Pledge என்றால் உறுதி ஆவணம் (Declaration Form) தயாரித்தல் (ஒரே ஒருமுறை மட்டும்)
-                            if "Pledge" in txn_category:
-                                # 🌟 கடன் தொகை மற்றும் எடைகள் சரியாக வருவதற்கு மதிப்புகளைப் பெறுதல்
-                                actual_amt = float(paid_amt if 'paid_amt' in locals() and paid_amt else visit.get("amount", 0.0) or 0.0)
-                                actual_gross_wt = float(visit.get("gross_weight", 0.0) or 0.0)
-                                actual_net_wt = float(visit.get("net_weight", 0.0) or visit.get("net_pure_weight", 0.0) or 0.0)
-                                gl_number_val = new_gl_no if 'new_gl_no' in locals() else "GL"
-
-                                # 🌟 session_state-ல் நேரடியாகச் சேமித்தல் (டவுன்லோட் செய்யும்போது பயன்பட)
-                                st.session_state.decl_amt = actual_amt
-                                st.session_state.decl_tot_wt = actual_gross_wt
-                                st.session_state.decl_net_wt = actual_net_wt
-                                st.session_state.declaration_gl_no = gl_number_val
-
-                                decl_payload = {
-                                    "customer_name": visit.get("customer_name", ""),
-                                    "address": visit.get("address", ""),
-                                    "contact_number": visit.get("mobile", ""),
-                                    "branch_name": st.session_state.get("branch_name", st.session_state.get("branch", "Keezhamanakudi")),
-                                    "pledge_date": datetime.now().strftime("%d-%m-%Y"),
-                                    "loan_number": gl_number_val,
-                                    "loan_amount": actual_amt,      # 👈 சரியாக கடன் தொகை செல்லும்
-                                    "total_weight": actual_gross_wt, # 👈 மொத்த எடை செல்லும்
-                                    "net_weight": actual_net_wt,     # 👈 நிகர எடை செல்லும்
-                                    "current_date": datetime.now().strftime("%d-%m-%Y")
-                                }
-                                
-                                st.session_state.current_declaration = generate_declaration_html(decl_payload) if 'generate_declaration_html' in globals() else decl_payload
-
-                                # 🌟 படிவத்தை ரீசெட் கவுண்டரை கூட்டுதல் மற்றும் திரையைப் புதுப்பித்தல்
-                                if "form_reset_counter" not in st.session_state:
-                                    st.session_state.form_reset_counter = 0
-                                st.session_state.form_reset_counter += 1
-
-                                st.success(f"'{txn_category}' வெற்றிகரமாகப் பட்டியலில் சேர்க்கப்பட்டது!")
-                                st.rerun()
-
-                            # உறுதி ஆவணப் பதிவிறக்கப் பகுதி
+                            # -------------------------------------------------------------------------
+                            # 1. பரிவர்த்தனைப் பதிவு செய்யும் பகுதி (Pledge சேமிக்கும் இடம்)
+                            # -------------------------------------------------------------------------
                             if "Pledge" in txn_category:
                                 actual_amt = float(paid_amt if 'paid_amt' in locals() and paid_amt else visit.get("amount", 0.0) or 0.0)
                                 actual_gross_wt = float(visit.get("gross_weight", 0.0) or 0.0)
@@ -7518,7 +7484,7 @@ if st.session_state.get("logged_in", False):
                                 st.session_state.decl_tot_wt = actual_gross_wt
                                 st.session_state.decl_net_wt = actual_net_wt
                                 st.session_state.declaration_gl_no = gl_number_val
-                                st.session_state.show_declaration_box = True  # 👈 பட்டனைக் காட்டுவதற்கான பிரத்யேக ஃப்ளாக் (Flag)
+                                st.session_state.show_declaration_box = True  # 👈 பட்டனைக் காட்டுவதற்கான ஃப்ளாக்
 
                                 if "form_reset_counter" not in st.session_state:
                                     st.session_state.form_reset_counter = 0
@@ -7527,7 +7493,10 @@ if st.session_state.get("logged_in", False):
                                 st.success(f"'{txn_category}' வெற்றிகரமாகப் பட்டியலில் சேர்க்கப்பட்டது!")
                                 st.rerun()
 
-                            # 2. பக்கத்தின் எங்கு வேண்டுமானாலும் இந்த டவுன்லோட் பகுதியை வைத்துக்கொள்ளலாம் (சமர்ப்பித்த பிறகு பட்டன் எப்போதும் தெரியும்):
+
+                            # -------------------------------------------------------------------------
+                            # 2. உறுதி ஆவணப் பதிவிறக்கப் பகுதி (பரிவர்த்தனை லூப்புக்கு வெளியே இயங்கும்)
+                            # -------------------------------------------------------------------------
                             if st.session_state.get("show_declaration_box", False):
                                 gl_no_val = st.session_state.get("declaration_gl_no", "GL")
                                 clean_gl_key = str(gl_no_val).replace("/", "_")
@@ -7541,7 +7510,7 @@ if st.session_state.get("logged_in", False):
                                 today_str = today_dt.strftime("%d-%m-%Y")
                                 due_date_str = (today_dt + relativedelta(months=3)).strftime("%d-%m-%Y")
 
-                                # 🌟 மதிப்புகளைப் பெறுதல்
+                                # 🌟 சேமிக்கப்பட்ட தொகைகள் மற்றும் எடைகளைப் பெறுதல்
                                 amt_val = float(st.session_state.get("decl_amt", 0.0))
                                 tot_wt = float(st.session_state.get("decl_tot_wt", 0.0))
                                 net_wt = float(st.session_state.get("decl_net_wt", 0.0))
