@@ -9817,7 +9817,7 @@ if st.session_state.get("logged_in", False):
                                 """)
 
                         # ---------------------------------------------------------
-                        # பிரிவு 4: அப்ரூவல் / கிளாரிஃபிகேஷன் பொத்தான்கள்
+                        # பிரிவு 4: அப்ரூவல் / கிளாரிஃபிகேஷன் / ரத்து செய்யும் பொத்தான்கள்
                         # ---------------------------------------------------------
                         ops_call_remark = st.text_input(
                             "அழைப்பு சரிபார்ப்பு குறிப்பு / விளக்கம்:",
@@ -9828,7 +9828,7 @@ if st.session_state.get("logged_in", False):
                             key=f"ops_call_rem_{v_id}",
                         )
 
-                        o_btn1, o_btn2 = st.columns(2)
+                        o_btn1, o_btn2, o_btn3 = st.columns(3)
                         with o_btn1:
                             if st.button(
                                 "✅ தொலைபேசி வழி சரிபார்க்கப்பட்டது (Approve)",
@@ -9884,6 +9884,34 @@ if st.session_state.get("logged_in", False):
                                     except Exception as e:
                                         st.error(f"பிழை: {e}")
 
+                        with o_btn3:
+                            if st.button(
+                                "❌ வருகையை ரத்து செய்க (Cancel Visit)",
+                                key=f"v_cancel_{v_id}",
+                                type="secondary",
+                                use_container_width=True,
+                            ):
+                                if not ops_call_remark.strip():
+                                    st.error("⚠️ தயவுசெய்து வருகையை ரத்து செய்வதற்கான காரணத்தை குறிப்பில் உள்ளிடவும்!")
+                                else:
+                                    try:
+                                        # 1. வருகை நிலையை Cancelled என மாற்றுதல்
+                                        supabase.table("customer_visits").update({
+                                            "status": "Cancelled",
+                                            "verification_remarks": f"Cancelled by Operations: {ops_call_remark.strip()}"
+                                        }).eq("id", v_id).execute()
+
+                                        # 2. கல்லா அல்லது பரிவர்த்தனை அட்டவணையில் (Transactions) ஏற்பட்ட தாக்கத்தை முழுமையாக நீக்குதல்
+                                        supabase.table("transactions").delete().eq("visit_id", v_id).execute()
+
+                                        # 3. நகைக்கடன் பதிவுகள் இருந்தால் அதையும் ரத்து செய்தல்
+                                        supabase.table("gold_loans").update({"status": "Cancelled"}).eq("visit_id", v_id).execute()
+
+                                        st.success("❌ வருகை வெற்றிகரமாக ரத்து செய்யப்பட்டதுடன், கல்லாப் பதிவுகளும் முழுமையாகச் சரிக்கட்டப்பட்டன!")
+                                        st.rerun()
+                                    except Exception as e:
+                                        st.error(f"பிழை: {e}")
+                                        
         elif selected_section == "🛡️ OTP விலக்கு அனுமதி":
             st.subheader("🛡️ OTP விலக்கு இறுதி சரிபார்ப்பு (Operations Clearance)")
             st.caption(
