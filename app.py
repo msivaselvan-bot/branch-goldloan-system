@@ -9641,6 +9641,8 @@ if st.session_state.get("logged_in", False):
             # 3. Join இன்றி பாதுகாப்பான நேரடி வினவல்
             try:
                 q = supabase.table("customer_visits").select("*")
+                
+                # நிலையின் அடிப்படையில் தரவுகளை எடுத்தல்
                 if stat_filter != "அனைத்தும் (All)":
                     q = q.eq("status", stat_filter)
 
@@ -9649,16 +9651,13 @@ if st.session_state.get("logged_in", False):
                 st.error(f"வருகைகளை எடுப்பதில் பிழை: {e}")
                 ops_visits = []
 
-            # உரைத் தேடல் வடிகட்டல்
-            if visit_search.strip() and ops_visits:
-                s_key = visit_search.strip().lower()
-                ops_visits = [
-                    v
-                    for v in ops_visits
-                    if s_key in str(v.get("visit_no", "")).lower()
-                    or s_key in str(v.get("customer_name", "")).lower()
-                    or s_key in str(v.get("mobile", "")).lower()
-                ]
+            # 🌟 கூடுதல் பாதுகாப்பு: ஒருவேளை டேட்டாபேஸில் நிலைகள் சிறிய மாற்றத்துடன் இருந்தால் பைத்தான் மூலமாகவும் ஃபில்டர் செய்தல்
+            if stat_filter != "அனைத்தும் (All)" and not ops_visits:
+                try:
+                    fallback_q = supabase.table("customer_visits").select("*").order("id", desc=True).limit(100).execute().data or []
+                    ops_visits = [v for v in fallback_q if str(v.get("status", "")).strip().lower() == stat_filter.strip().lower()]
+                except Exception:
+                    pass
 
             # 4. முடிவுகள் மற்றும் விபரங்கள் காட்சி
             if not ops_visits:
@@ -9911,7 +9910,7 @@ if st.session_state.get("logged_in", False):
                                         st.rerun()
                                     except Exception as e:
                                         st.error(f"பிழை: {e}")
-                                        
+
         elif selected_section == "🛡️ OTP விலக்கு அனுமதி":
             st.subheader("🛡️ OTP விலக்கு இறுதி சரிபார்ப்பு (Operations Clearance)")
             st.caption(
