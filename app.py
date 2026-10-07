@@ -7471,6 +7471,11 @@ if st.session_state.get("logged_in", False):
 
                             # 🌟 Pledge என்றால் உறுதி ஆவணம் (Declaration Form) தயாரித்தல் (ஒரே ஒருமுறை மட்டும்)
                             if "Pledge" in txn_category:
+                                # 🌟 கடன் தொகை மற்றும் எடைகள் சரியாக வருவதற்கு அவeleriப் பெறுதல்
+                                actual_amt = float(paid_amt if 'paid_amt' in locals() and paid_amt else visit.get("amount", 0.0) or 0.0)
+                                actual_gross_wt = float(visit.get("gross_weight", 0.0) or 0.0)
+                                actual_net_wt = float(visit.get("net_weight", 0.0) or visit.get("net_pure_weight", 0.0) or 0.0)
+
                                 decl_payload = {
                                     "customer_name": visit.get("customer_name", ""),
                                     "address": visit.get("address", ""),
@@ -7478,19 +7483,22 @@ if st.session_state.get("logged_in", False):
                                     "branch_name": st.session_state.get("branch_name", st.session_state.get("branch", "Keezhamanakudi")),
                                     "pledge_date": datetime.now().strftime("%d-%m-%Y"),
                                     "loan_number": new_gl_no if 'new_gl_no' in locals() else "",
-                                    "loan_amount": paid_amt if 'paid_amt' in locals() else 0.0,
+                                    "loan_amount": actual_amt,       # 👈 சரியாக கடன் தொகை செல்லும்
+                                    "total_weight": actual_gross_wt, # 👈 மொத்த எடை செல்லும்
+                                    "net_weight": actual_net_wt,     # 👈 நிகர எடை செல்லும்
                                     "current_date": datetime.now().strftime("%d-%m-%Y")
                                 }
                                 st.session_state.declaration_gl_no = new_gl_no if 'new_gl_no' in locals() else "GL"
-                                st.session_state.current_declaration = generate_declaration_html(decl_payload)
+                                st.session_state.current_declaration = generate_declaration_html(decl_payload) if 'generate_declaration_html' in globals() else decl_payload
 
-                            # 🌟 படிவத்தை ரீசெட் கவுண்டரை கூட்டுதல் மற்றும் திரையைப் புதுப்பித்தல்
-                            if "form_reset_counter" not in st.session_state:
-                                st.session_state.form_reset_counter = 0
-                            st.session_state.form_reset_counter += 1
+                                # 🌟 படிவத்தை ரீசெட் கவுண்டரை கூட்டுதல் மற்றும் திரையைப் புதுப்பித்தல்
+                                if "form_reset_counter" not in st.session_state:
+                                    st.session_state.form_reset_counter = 0
+                                st.session_state.form_reset_counter += 1
 
-                            st.success(f"'{txn_category}' வெற்றிகரமாகப் பட்டியலில் சேர்க்கப்பட்டது!")
-                            st.rerun()
+                                st.success(f"'{txn_category}' வெற்றிகரமாகப் பட்டியலில் சேர்க்கப்பட்டது!")
+                                st.rerun()
+                                
                 # உறுதி ஆவணப் பதிவிறக்கப் பகுதி
                 if st.session_state.get("current_declaration"):
                     decl_info = st.session_state.current_declaration
