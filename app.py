@@ -7534,39 +7534,6 @@ if st.session_state.get("logged_in", False):
 
                                 v_info = st.session_state.get("current_visit", {}) or {}
                                 cust_name = v_info.get("customer_name") or v_info.get("name") or "வாடிக்கையாளர்"
-                                cust_mob = v_info.get("mobile") or v_info.get("customer_mobile
-
-                                decl_payload = {
-                                    "customer_name": visit.get("customer_name", ""),
-                                    "address": visit.get("address", ""),
-                                    "contact_number": visit.get("mobile", ""),
-                                    "branch_name": st.session_state.get("branch_name", st.session_state.get("branch", "Keezhamanakudi")),
-                                    "pledge_date": datetime.now().strftime("%d-%m-%Y"),
-                                    "loan_number": gl_number_val,
-                                    "loan_amount": actual_amt,
-                                    "total_weight": actual_gross_wt,
-                                    "net_weight": actual_net_wt,
-                                    "current_date": datetime.now().strftime("%d-%m-%Y")
-                                }
-                                
-                                # 🌟 ஆவணத் தரவை டிக்ஷனரியாக அப்படியே session_state-ல் சேமித்தல் (பட்டன் தோன்றுவதற்கு இது அவசியம்)
-                                st.session_state.current_declaration = decl_payload
-
-                                if "form_reset_counter" not in st.session_state:
-                                    st.session_state.form_reset_counter = 0
-                                st.session_state.form_reset_counter += 1
-
-                                st.success(f"'{txn_category}' வெற்றிகரமாகப் பட்டியலில் சேர்க்கப்பட்டது!")
-                                st.rerun()
-
-                            # உறுதி ஆவணப் பதிவிறக்கப் பகுதி
-                            if st.session_state.get("current_declaration"):
-                                decl_info = st.session_state.current_declaration
-                                gl_no_val = st.session_state.get("declaration_gl_no") or "GL"
-                                clean_gl_key = str(gl_no_val).replace("/", "_")
-
-                                v_info = st.session_state.get("current_visit", {}) or {}
-                                cust_name = v_info.get("customer_name") or v_info.get("name") or "வாடிக்கையாளர்"
                                 cust_mob = v_info.get("mobile") or v_info.get("customer_mobile") or v_info.get("phone") or "-"
                                 branch_name = st.session_state.get("branch_name", "முத்துசிஸ் கோல்டு புரொடக்ட் பிரைவேட் லிமிடெட்")
                                 
@@ -7574,17 +7541,10 @@ if st.session_state.get("logged_in", False):
                                 today_str = today_dt.strftime("%d-%m-%Y")
                                 due_date_str = (today_dt + relativedelta(months=3)).strftime("%d-%m-%Y")
 
-                                # மதிப்புகளை எடுப்பது
+                                # 🌟 மதிப்புகளைப் பெறுதல்
                                 amt_val = float(st.session_state.get("decl_amt", 0.0))
                                 tot_wt = float(st.session_state.get("decl_tot_wt", 0.0))
                                 net_wt = float(st.session_state.get("decl_net_wt", 0.0))
-
-                                if amt_val == 0.0 and isinstance(decl_info, dict):
-                                    amt_val = float(decl_info.get("loan_amount", 0.0) or decl_info.get("principal_amount", 0.0) or 0.0)
-                                if tot_wt == 0.0 and isinstance(decl_info, dict):
-                                    tot_wt = float(decl_info.get("total_weight", 0.0) or 0.0)
-                                if net_wt == 0.0 and isinstance(decl_info, dict):
-                                    net_wt = float(decl_info.get("net_weight", 0.0) or 0.0)
 
                                 html_template = f"""<!DOCTYPE html>
                                 <html>
