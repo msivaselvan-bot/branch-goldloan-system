@@ -7514,13 +7514,19 @@ if st.session_state.get("logged_in", False):
                     today_str = today_dt.strftime("%d-%m-%Y")
                     due_date_str = (today_dt + relativedelta(months=3)).strftime("%d-%m-%Y")
 
-                    # 🌟 நேரடியாக Supabase டேட்டாபேஸில் இருந்து கடன் விவரங்களை (தொகை மற்றும் எடைகள்) எடுத்தல்
+                    # 🌟 டேட்டாபேஸில் இருந்து கடன் விவரங்களை (தொகை மற்றும் எடைகள்) எடுப்பது
                     amt_val = 0.0
                     tot_wt = 0.0
                     net_wt = 0.0
                     
                     try:
+                        # 1. முதலில் குறிப்பிட்ட loan_no மூலம் தேடுதல்
                         loan_query = supabase.table("gold_loans").select("sanctioned_amount, amount, gross_weight, net_weight, net_pure_weight").eq("loan_no", gl_no_val).execute()
+                        
+                        # 2. ஒருவேளை கிடைக்கவில்லை எனில், சமீபத்திய (Latest) கடனை எடுத்தல்
+                        if not loan_query.data:
+                            loan_query = supabase.table("gold_loans").select("sanctioned_amount, amount, gross_weight, net_weight, net_pure_weight").order("id", desc=True).limit(1).execute()
+
                         if loan_query.data:
                             loan_row = loan_query.data[0]
                             amt_val = float(loan_row.get("sanctioned_amount") or loan_row.get("amount") or 0.0)
@@ -7529,7 +7535,7 @@ if st.session_state.get("logged_in", False):
                     except Exception:
                         pass
 
-                    # டேட்டாபேஸில் கிடைக்கவில்லை எனിൽ decl_info அல்லது visit இலிருந்து எடுப்பது
+                    # 3. டேட்டாபேஸில் இல்லையெனில் decl_info அல்லது visit இலிருந்து எடுப்பது
                     if amt_val == 0.0 and isinstance(decl_info, dict):
                         amt_val = float(decl_info.get("loan_amount", 0.0) or decl_info.get("principal_amount", 0.0) or 0.0)
                     if tot_wt == 0.0:
