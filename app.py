@@ -7498,11 +7498,11 @@ if st.session_state.get("logged_in", False):
 
                                 st.success(f"'{txn_category}' வெற்றிகரமாகப் பட்டியலில் சேர்க்கப்பட்டது!")
                                 st.rerun()
-                                
+
                 # உறுதி ஆவணப் பதிவிறக்கப் பகுதி
                 if st.session_state.get("current_declaration"):
                     decl_info = st.session_state.current_declaration
-                    gl_no_val = st.session_state.get("declaration_gl_no") or (decl_info.get("gp_number", "GL") if isinstance(decl_info, dict) else "GL")
+                    gl_no_val = st.session_state.get("declaration_gl_no") or (decl_info.get("loan_number", "GL") if isinstance(decl_info, dict) else "GL")
                     clean_gl_key = str(gl_no_val).replace("/", "_")
 
                     v_info = st.session_state.get("current_visit", {}) or (visit if 'visit' in locals() else {})
@@ -7514,14 +7514,15 @@ if st.session_state.get("logged_in", False):
                     today_str = today_dt.strftime("%d-%m-%Y")
                     due_date_str = (today_dt + relativedelta(months=3)).strftime("%d-%m-%Y")
 
+                    # 🌟 மதிப்புகளை நேரடியாக decl_info (payload) இலிருந்து பாதுகாப்பாக எடுத்தல்
                     if isinstance(decl_info, dict):
-                        amt_val = float(decl_info.get("principal_amount", 0.0) or decl_info.get("paid_amount", 0.0) or decl_info.get("amount", 0.0))
-                        tot_wt = float(decl_info.get("total_weight", 0.0) or 0.0)
-                        net_wt = float(decl_info.get("net_weight", 0.0) or 0.0)
+                        amt_val = float(decl_info.get("loan_amount", 0.0) or decl_info.get("principal_amount", 0.0) or 0.0)
+                        tot_wt = float(decl_info.get("total_weight", 0.0) or visit.get("gross_weight", 0.0) or 0.0)
+                        net_wt = float(decl_info.get("net_weight", 0.0) or visit.get("net_weight", 0.0) or 0.0)
                     else:
-                        amt_val = 0.0
-                        tot_wt = 0.0
-                        net_wt = 0.0
+                        amt_val = float(paid_amt if 'paid_amt' in locals() else 0.0)
+                        tot_wt = float(visit.get("gross_weight", 0.0) if 'visit' in locals() else 0.0)
+                        net_wt = float(visit.get("net_weight", 0.0) if 'visit' in locals() else 0.0)
 
                     html_template = f"""<!DOCTYPE html>
                     <html>
