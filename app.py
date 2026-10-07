@@ -2298,35 +2298,173 @@ if not st.session_state.logged_in:
                     )
 
 # ==========================================
-# 6. முதன்மை திரை
+# 6. சைட் மெனுபார் மற்றும் முதன்மை திரை அமைப்பு
 # ==========================================
-else:
-    # 💵 பக்கவாட்டு மெனுவில் (Sidebar) நேரலை கல்லா இருப்பு
-    if st.session_state.get("branch_id"):
-        with st.sidebar:
-            st.markdown("---")
-            live_cash = get_branch_current_cash(st.session_state.branch_id)
-            st.metric("💵 நேரலை கல்லா இருப்பு", f"₹{live_cash:,.2f}")
 
+# 1. அட்மின் அனுமதி சரிபார்ப்பு
+is_admin = st.session_state.get("role") == "Admin" or st.session_state.get("is_admin", False) or st.session_state.get("username") == "admin"
+
+menu_options = ["🏠 பரிவர்த்தனைகள் & கார்ட் (Transactions)"]
+
+if is_admin:
+    menu_options.append("📊 கிளை தினசரி ரிப்போர்ட் (Daily Report)")
+
+# 🌟 CRM பக்கத்தை மெனுவில் சேர்த்தல்
+menu_options.append("📞 CRM & டெலிகாலிங் மேசை")
+
+# 2. சைடுபாரில் மெனு மற்றும் நேரலை கல்லா இருப்பு காட்டுவது
+with st.sidebar:
+    selected_page = st.selectbox("🧭 மெனு (Navigation)", menu_options)
+    
+    if st.session_state.get("branch_id"):
+        st.markdown("---")
+        live_cash = get_branch_current_cash(st.session_state.branch_id)
+        st.metric("💵 நேரலை கல்லா இருப்பு", f"₹{live_cash:,.2f}")
+
+# 3. பக்கங்களின் ரூட்டிங் (Routing & Page Display)
+if selected_page == "📊 கிளை தினசரி ரிப்போர்ட் (Daily Report)":
+    branch_report.show_branch_daily_transaction_report(supabase)
+    st.stop()
+
+elif selected_page == "📞 CRM & டெலிகாலிங் மேசை":
+    # 🌟 CRM & டெலிகாலிங் தனிப் பக்கம்
+    st.subheader("📞 CRM, மார்க்கெட்டிங் லீடுகள் மற்றும் டெலிகாலிங் மேசை")
+    st.caption("மார்க்கெட்டிங் லீடுகள் பதிவேற்றம், டெலிகாலர் பின்தொடர்தல் மற்றும் கிளைகளுக்கு லீடு ஒதுக்கீடு செய்யும் பகுதி.")
+
+    crm_tab1, crm_tab2, crm_tab3, crm_tab4 = st.tabs([
+        "📂 மார்க்கெட்டிங் லீடுகள் (Excel Upload)",
+        "🎧 டெலிகாலிங் டெஸ்க் (Telecalling Desk)",
+        "🏢 கிளை லீடுகள் மேலாண்மை (Branch Leads)",
+        "📊 அட்மின் கண்காணிப்பு (Analytics)"
+    ])
+
+    with crm_tab1:
+        st.markdown("##### 📂 மார்க்கெட்டிங் லீடுகள் எக்செல் / CSV பதிவேற்றம்")
+        uploaded_excel = st.file_uploader("எக்செல் கோப்பைத் தேர்ந்தெடுக்கவும் (.xlsx, .csv)", type=["xlsx", "csv"], key="menu_crm_file")
+        if uploaded_excel is not None:
+            import pandas as pd
+            try:
+                df_upload = pd.read_excel(uploaded_excel) if uploaded_excel.name.endswith('.xlsx') else pd.read_csv(uploaded_excel)
+                st.write("📋 **முன்னோட்டத் தரவுகள் (Preview):**", df_upload.head())
+                if st.button("🚀 லீடுகளை டேட்டாபேஸில் பதிவேற்று", type="primary", key="menu_btn_upload"):
+                    success_count = 0
+                    for _, row in df_upload.iterrows():
+                        lead_data = {
+                            "customer_name": str(row.get("Name", row.get("Customer Name", ""))),
+                            "phone": str(row.get("Phone", row.get("Mobile", ""))),
+                            "address": str(row.get("Address", "")),
+                            "city": str(row.get("City", row.get("Place", ""))),
+                            "status": "New",
+                            "telecaller_name": st.session_state.get("username", "Admin")
+                        }
+                        supabase.table("leads").insert(lead_data).execute()
+                        success_count += 1
+                    st.success(f"🎉 வெற்றிகரமாக {success_count} லீடுகள் டேட்டாபேஸில் சேர்க்கப்பட்டன!")
+            except Exception as e:
+                st.error(f"கோப்பைப் படிப்பதில் பிழை: {e}")
+
+    with crm_tab2:
+        st.markdown("##### 🎧 டெலிகாலிங் பின்தொடர்தல் மேசை")
+        try:
+            leads_res = supabase.table("leads").select("*").in_("status", ["New", "Future Lead", "Not Reachable"]).order("id", desc=True).execute()
+            active_leads = leads_res.data or []
+        except Exception:
+            active_leads = []
+
+        if not active_leads:
+            st.info("✅ தற்பொழுது தொடர்புகொள்ள வேண்டிய லீடுகள் எதுவும் நிலுவையில் இல்லை.")
+        else:
+            selected_lead_id = st.selectbox(
+                "விவரம் பார்க்க வேண்டிய லீட்டைத் தேர்ந்தெடுக்கவும்:", 
+                [l['id'] for l in active_leads], 
+                format_func=lambda x: next((f"{l['customer_name']} - {l['phone']} ({l['city']})" for l in active_leads if l['id'] == x), ""),
+                key="menu_lead_sel"
+            )
+            curr_lead = next((l for l in active_leads if l['id'] == selected_lead_id), None)
+            if curr_lead:
+                col_l1, col_l2 = st.columns(2)
+                with col_l1:
+                    st.write(f"• **பெயர்:** `{curr_lead.get('customer_name')}`")
+                    st.write(f"• **தொலைபேசி:** 📞 `{curr_lead.get('phone')}`")
+                    st.write(f"• **ஊர்/முகவரி:** {curr_lead.get('city')} / {curr_lead.get('address')}")
+                with col_l2:
+                    st.write(f"• **தற்போதைய நிலை:** `{curr_lead.get('status')}`")
+                    st.write(f"• **முந்தைய குறிப்புகள்:** {curr_lead.get('remarks', '-')}")
+
+                st.markdown("---")
+                new_status = st.selectbox("நிலை (Status):", [
+                    "Future Lead (எதிர்கால லீடு)", 
+                    "Immediate Lead (உடனடி லீடு - கிளைக்கு அனுப்பு)", 
+                    "Not Interested (ஆர்வம் இல்லை)", 
+                    "Not Reachable (தொடர்புகொள்ள முடியவில்லை)", 
+                    "Wrong Number (தவறான எண்)"
+                ], key="menu_status_sel")
+
+                try:
+                    b_res = supabase.table("branches").select("id, branch_name").execute()
+                    branch_map = {b['branch_name']: b['id'] for b in (b_res.data or [])}
+                except Exception:
+                    branch_map = {}
+
+                target_branch_id = None
+                follow_date = None
+
+                if "Immediate Lead" in new_status and branch_map:
+                    selected_branch_name = st.selectbox("அருகிலுள்ள கிளையைத் தேர்ந்தெடுக்கவும்:", list(branch_map.keys()), key="menu_branch_sel")
+                    target_branch_id = branch_map.get(selected_branch_name)
+                elif "Future Lead" in new_status:
+                    follow_date = st.date_input("மீண்டும் பேச வேண்டிய தேதி:", key="menu_follow_date")
+
+                call_remarks = st.text_area("பேசிய விவர குறிப்புகள் (Remarks):", key="menu_call_rem")
+                if st.button("💾 டெலிகாலிங் அப்டேட்டைச் சேமி", type="primary", key="menu_save_crm"):
+                    try:
+                        clean_status = new_status.split(" ")[0] + (" " + new_status.split(" ")[1] if "Future" in new_status or "Immediate" in new_status or "Not" in new_status else "")
+                        update_payload = {
+                            "status": clean_status,
+                            "remarks": call_remarks,
+                            "assigned_branch_id": target_branch_id,
+                            "followup_date": str(follow_date) if follow_date else None
+                        }
+                        supabase.table("leads").update(update_payload).eq("id", curr_lead['id']).execute()
+                        st.success("✅ லீடு நிலை வெற்றிகரமாக அப்டேட் செய்யப்பட்டது!")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"பிழை: {e}")
+
+    with crm_tab3:
+        st.markdown("##### 🏢 கிளை லீடுகள் & வணிக மாற்றம் (Branch Manager Desk)")
+        user_branch_id = st.session_state.get("branch_id")
+        try:
+            b_leads_res = supabase.table("leads").select("*").eq("assigned_branch_id", user_branch_id).execute()
+            b_leads = b_leads_res.data or []
+        except Exception:
+            b_leads = []
+        if not b_leads:
+            st.info("📭 தங்களது கிளைக்கு ஒதுக்கப்பட்ட லீடுகள் எதுவும் இல்லை.")
+        else:
+            import pandas as pd
+            st.dataframe(pd.DataFrame(b_leads)[["id", "customer_name", "phone", "city", "status", "remarks"]], use_container_width=True)
+
+    with crm_tab4:
+        st.markdown("##### 📊 அட்மின் கண்காணிப்பு மற்றும் செயல்திறன் அறிக்கை")
+        st.info("📈 டெலிகாலர்களின் தினசரி அழைப்புகள் மற்றும் கிளைகளின் லீடு செயல்பாடுகள்.")
+
+    st.stop()
+
+else:
+    # 4. வழக்கமான பரிவர்த்தனைகள் / முதன்மைத் திரை பகுதி
     top_col1, top_col2, top_col3, top_col4 = st.columns([2.5, 2, 1, 1])
     with top_col1:
         st.write(f"🏢 **கிளை:** {st.session_state.branch}")
     with top_col2:
-        st.write(
-            f"👤 **பயனர்:** {st.session_state.username} ({st.session_state.user_role})"
-        )
+        st.write(f"👤 **பயனர்:** {st.session_state.username} ({st.session_state.user_role})")
     with top_col3:
-        if st.button(
-            "🔄 Refresh",
-            use_container_width=True,
-            help="பக்கத்தை முழுமையாகப் புதுப்பிக்க",
-        ):
+        if st.button("🔄 Refresh", use_container_width=True, help="பக்கத்தை முழுமையாகப் புதுப்பிக்க"):
             st.rerun()
     with top_col4:
         if st.button("வெளியேறு", use_container_width=True):
             st.session_state.logged_in = False
-            st.session_state.user_role = None  # முக்கியம்: ரோலை அழிக்க வேண்டும்
-            # முக்கியம்: பயனர் பெயரை அழிக்க வேண்டும்
+            st.session_state.user_role = None  
             st.session_state.username = None
             st.session_state.current_visit = None
             st.session_state.transactions_cart = []
