@@ -7469,24 +7469,28 @@ if st.session_state.get("logged_in", False):
 
                             # 🌟 Pledge என்றால் உறுதி ஆவணத்திற்கான டேட்டாவை செஷன் ஸ்டேட்டில் சேமித்தல்
                             if "Pledge" in txn_category:
-                                actual_amt = float(paid_amt if 'paid_amt' in locals() and paid_amt else visit.get("amount", 0.0) or 0.0)
-                                actual_gross_wt = float(visit.get("gross_weight", 0.0) or 0.0)
-                                actual_net_wt = float(visit.get("net_weight", 0.0) or visit.get("net_pure_weight", 0.0) or 0.0)
+                                # 🌟 டேட்டாபேஸ் மற்றும் ஃபார்மில் உள்ள சரியான கால்களைப் பயன்படுத்துதல்
+                                actual_amt = float(
+                                    sanctioned_amount if 'sanctioned_amount' in locals() and sanctioned_amount 
+                                    else (paid_amt if 'paid_amt' in locals() and paid_amt else visit.get("amount", 0.0) or 0.0)
+                                )
+                                actual_gross_wt = float(
+                                    total_weight if 'total_weight' in locals() and total_weight 
+                                    else visit.get("gross_weight", 0.0) or 0.0
+                                )
+                                actual_net_wt = float(
+                                    net_weight if 'net_weight' in locals() and net_weight 
+                                    else visit.get("net_weight", 0.0) or 0.0
+                                )
+                                
                                 gl_number_val = new_gl_no if 'new_gl_no' in locals() else "GL"
 
+                                # 🌟 செஷன் ஸ்டேட்டில் உறுதியாகச் சேமித்தல்
                                 st.session_state.decl_amt = actual_amt
                                 st.session_state.decl_tot_wt = actual_gross_wt
                                 st.session_state.decl_net_wt = actual_net_wt
                                 st.session_state.declaration_gl_no = gl_number_val
-                                st.session_state.show_declaration_box = True  # 👈 பட்டனைக் காட்ட ப்ளாக்
-
-                            if "form_reset_counter" not in st.session_state:
-                                st.session_state.form_reset_counter = 0
-                            st.session_state.form_reset_counter += 1
-
-                            st.success(f"'{txn_category}' வெற்றிகரமாகப் பட்டியலில் சேர்க்கப்பட்டது!")
-                            st.rerun()
-
+                                st.session_state.show_declaration_box = True
                 # -------------------------------------------------------------------------
                 # 🌟 2. உறுதி ஆவணப் பதிவிறக்கப் பகுதி (இது பட்டன் லூப்புக்கு வெளியே, கார்ட்டுக்கு அருகில் இயங்கும்)
                 # -------------------------------------------------------------------------
@@ -7568,7 +7572,7 @@ if st.session_state.get("logged_in", False):
                             key=f"dl_btn_{clean_gl_key}"
                         )
 
-                        
+
                 # 🛒 கார்ட் பட்டியல்
                 st.markdown("---")
                 if len(st.session_state.transactions_cart) > 0:
