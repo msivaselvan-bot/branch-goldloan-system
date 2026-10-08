@@ -10193,7 +10193,7 @@ if st.session_state.get("logged_in", False):
                                             lead_data = {
                                                 "customer_name": str(row.get("customer_name", row.get("Name", row.get("Customer Name", "")))),
                                                 "phone": str(row.get("phone", row.get("Phone", row.get("Mobile", "")))),
-                                                "address": str(row.get("address", row.get("Address", "")))),
+                                                "address": str(row.get("address", row.get("Address", ""))),
                                                 "city": str(row.get("city", row.get("City", row.get("Place", "Nagercoil")))),
                                                 "status": "New",
                                                 "telecaller_name": current_user
