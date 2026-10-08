@@ -10138,19 +10138,19 @@ if st.session_state.get("logged_in", False):
                         if st.button("🚀 லீடுகளை டேட்டாபேஸில் பதிவேற்று", type="primary", key="main_btn_upload"):
                             success_count = 0
                             for _, row in df_upload.iterrows():
+                                # 🌟 எக்செல் காலம்களின் பெயர்களுக்கு ஏற்ப துல்லியமாக எடுத்தல்
                                 lead_data = {
-                                    "customer_name": str(row.get("Name", row.get("Customer Name", ""))),
-                                    "phone": str(row.get("Phone", row.get("Mobile", ""))),
-                                    "address": str(row.get("Address", "")),
-                                    "city": str(row.get("City", row.get("Place", ""))),
+                                    "customer_name": str(row.get("customer_name", row.get("Name", row.get("Customer Name", "")))),
+                                    "phone": str(row.get("phone", row.get("Phone", row.get("Mobile", "")))),
+                                    "address": str(row.get("address", row.get("Address", ""))),
+                                    "city": str(row.get("city", row.get("City", row.get("Place", "Nagercoil")))),
                                     "status": "New",
                                     "telecaller_name": st.session_state.get("username", "Admin")
                                 }
                                 supabase.table("leads").insert(lead_data).execute()
                                 success_count += 1
                             st.success(f"🎉 வெற்றிகரமாக {success_count} லீடுகள் டேட்டாபேஸில் சேர்க்கப்பட்டன!")
-                    except Exception as e:
-                        st.error(f"கோப்பைப் படிப்பதில் பிழை: {e}")
+                            st.rerun()
 
             with crm_tab2:
                 st.markdown("##### 🎧 டெலிகாலிங் பின்தொடர்தல் மேசை")
