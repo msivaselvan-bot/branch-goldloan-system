@@ -10163,21 +10163,30 @@ if st.session_state.get("logged_in", False):
                 if not active_leads:
                     st.info("✅ தற்பொழுது தொடர்புகொள்ள வேண்டிய லீடுகள் எதுவும் நிலுவையில் இல்லை.")
                 else:
+                    # 🌟 பாதுகாப்பான முறையில் பெயர் மற்றும் போன் நம்பரை லீஸ்ட் செய்யும் பகுதி
+                    def get_lead_label(l):
+                        name = l.get('customer_name') or 'பெயர் இல்லை'
+                        phone = l.get('phone') or 'எண் இல்லை'
+                        city = l.get('city') or 'ஊர் இல்லை'
+                        return f"{name} - {phone} ({city})"
+
                     selected_lead_id = st.selectbox(
                         "விவரம் பார்க்க வேண்டிய லீட்டைத் தேர்ந்தெடுக்கவும்:", 
                         [l['id'] for l in active_leads], 
-                        format_func=lambda x: next((f"{l['customer_name']} - {l['phone']} ({l['city']})" for l in active_leads if l['id'] == x), ""),
+                        format_func=lambda x: get_lead_label(next((l for l in active_leads if l['id'] == x), {})),
                         key="main_lead_sel"
                     )
+                    
                     curr_lead = next((l for l in active_leads if l['id'] == selected_lead_id), None)
+                    
                     if curr_lead:
                         col_l1, col_l2 = st.columns(2)
                         with col_l1:
-                            st.write(f"• **பெயர்:** `{curr_lead.get('customer_name')}`")
-                            st.write(f"• **தொலைபேசி:** 📞 `{curr_lead.get('phone')}`")
-                            st.write(f"• **ஊர்/முகவரி:** {curr_lead.get('city')} / {curr_lead.get('address')}")
+                            st.write(f"• **பெயர்:** `{curr_lead.get('customer_name', '-')}`")
+                            st.write(f"• **தொலைபேசி:** 📞 `{curr_lead.get('phone', '-')}`")
+                            st.write(f"• **ஊர்/முகவரி:** {curr_lead.get('city', '-')} / {curr_lead.get('address', '-')}")
                         with col_l2:
-                            st.write(f"• **தற்போதைய நிலை:** `{curr_lead.get('status')}`")
+                            st.write(f"• **தற்போதைய நிலை:** `{curr_lead.get('status', 'New')}`")
                             st.write(f"• **முந்தைய குறிப்புகள்:** {curr_lead.get('remarks', '-')}")
 
                         st.markdown("---")
