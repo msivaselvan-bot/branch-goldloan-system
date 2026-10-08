@@ -3915,6 +3915,7 @@ if st.session_state.get("logged_in", False):
                             "🛡️ OTP விலக்கு அனுமதி",
                             "🔍 தணிக்கையர் பணிப்பாய்வு",
                             # 🌟 புதிய CRM & டெலிகாலிங் பிரிவுகள்
+                            "📞 CRM & டெலிகாலிங் மேசை",
                             "📂 CRM: மார்க்கெட்டிங் லீடுகள் (Excel Upload)",
                             "🎧 CRM: டெலிகாலிங் டெஸ்க் (Telecalling Desk)",
                             "🏢 CRM: கிளை லீடுகள் மேலாண்மை (Branch Leads)",
