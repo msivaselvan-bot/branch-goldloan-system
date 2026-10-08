@@ -10126,47 +10126,47 @@ if st.session_state.get("logged_in", False):
             st.subheader("📞 CRM, மார்க்கெட்டிங் லீடுகள் மற்றும் டெலிகாலிங் மேசை")
             st.caption("மார்க்கெட்டிங் லீடுகள் பதிவேற்றம், டெலிகாலர் பின்தொடர்தல் மற்றும் கிளைகளுக்கு லீடு ஒதுக்கீடு செய்யும் பகுதி.")
 
-            # தற்போதைய பயனரின் அனுமதிகளைப் பெறுதல்
+            # தற்போதைய பயனரின் தகவல்கள் மற்றும் அனுமதிகளைப் பெறுதல்
             current_user = st.session_state.get("username", "")
             current_role = st.session_state.get("user_role", st.session_state.get("role", ""))
             is_admin_user = current_role == "Admin" or current_user == "admin"
 
-            # டேட்டாபேஸிலிருந்து தற்போதைய பயனரின் permissions-ஐ எடுப்பது (அல்லது session_state-ல் இருந்தால் அதைப் பயன்படுத்துவது)
-            # உதாரணத்திற்கு session_state அல்லது டேட்டாபேஸ் செக்:
+            # டேட்டாபேஸ் அல்லது செஷன் ஸ்டேட்டிலிருந்து பணியாளரின் அனுமதிகளை எடுத்தல்
             user_permissions = st.session_state.get("permissions", [])
-            
-            # ஒருவேளை அட்மின் எனில் அனைத்து அனுமதிகளும் உண்டு எனக் கொள்ளவும்
-            if is_admin_user:
-                user_permissions = [
-                    "📂 CRM: மார்க்கெட்டிங் லீடுகள் (Excel Upload)",
-                    "🎧 CRM: டெலிகாலிங் டெஸ்க் (Telecalling Desk)",
-                    "🏢 CRM: கிளை லீடுகள் மேலாண்மை (Branch Leads)",
-                    "📊 CRM: அட்மின் கண்காணிப்பு (Analytics)"
-                ]
+            if not isinstance(user_permissions, list):
+                user_permissions = []
 
             tab_labels = []
             tab_keys = []
 
-            # 1. Excel Upload அனுமதி உள்ளதா எனச் சரிபார்த்தல்
-            if "📂 CRM: மார்க்கெட்டிங் லீடுகள் (Excel Upload)" in user_permissions:
-                tab_labels.append("📂 மார்க்கெட்டிங் லீடுகள் (Excel Upload)")
-                tab_keys.append("upload")
+            # 1. அட்மின் எனில் அல்லது மொத்த CRM-க்கும் அனுமதி எனில் அனைத்து டேப்களும் தெரியும்
+            if is_admin_user or "📞 CRM & டெலிகாலிங் மேசை" in user_permissions:
+                tab_labels = [
+                    "📂 மார்க்கெட்டிங் லீடுகள் (Excel Upload)",
+                    "🎧 டெலிகாலிங் டெஸ்க் (Telecalling Desk)",
+                    "🏢 கிளை லீடுகள் மேலாண்மை (Branch Leads)",
+                    "📊 அட்மின் கண்காணிப்பு (Analytics)"
+                ]
+                tab_keys = ["upload", "telecalling", "branch_leads", "analytics"]
+            else:
+                # 2. குறிப்பிட்ட டேப்களுக்கு மட்டும் அட்மின் அனுமதி அளித்திருந்தால் அவற்றை மட்டும் சேர்த்தல்
+                if "📂 CRM: மார்க்கெட்டிங் லீடுகள் (Excel Upload)" in user_permissions:
+                    tab_labels.append("📂 மார்க்கெட்டிங் லீடுகள் (Excel Upload)")
+                    tab_keys.append("upload")
 
-            # 2. Telecalling Desk அனுமதி உள்ளதா எனச் சரிபார்த்தல்
-            if "🎧 CRM: டெலிகாலிங் டெஸ்க் (Telecalling Desk)" in user_permissions:
-                tab_labels.append("🎧 டெலிகாலிங் டெஸ்க் (Telecalling Desk)")
-                tab_keys.append("telecalling")
+                if "🎧 CRM: டெலிகாலிங் டெஸ்க் (Telecalling Desk)" in user_permissions:
+                    tab_labels.append("🎧 டெலிகாலிங் டெஸ்க் (Telecalling Desk)")
+                    tab_keys.append("telecalling")
 
-            # 3. Branch Leads அனுமதி உள்ளதா எனச் சரிபார்த்தல்
-            if "🏢 CRM: கிளை லீடுகள் மேலாண்மை (Branch Leads)" in user_permissions:
-                tab_labels.append("🏢 கிளை லீடுகள் மேலாண்மை (Branch Leads)")
-                tab_keys.append("branch_leads")
+                if "🏢 CRM: கிளை லீடுகள் மேலாண்மை (Branch Leads)" in user_permissions:
+                    tab_labels.append("🏢 கிளை லீடுகள் மேலாண்மை (Branch Leads)")
+                    tab_keys.append("branch_leads")
 
-            # 4. Analytics அனுமதி உள்ளதா எனச் சரிபார்த்தல்
-            if "📊 CRM: அட்மின் கண்காணிப்பு (Analytics)" in user_permissions:
-                tab_labels.append("📊 அட்மின் கண்காணிப்பு (Analytics)")
-                tab_keys.append("analytics")
+                if "📊 CRM: அட்மின் கண்காணிப்பு (Analytics)" in user_permissions:
+                    tab_labels.append("📊 அட்மின் கண்காணிப்பு (Analytics)")
+                    tab_keys.append("analytics")
 
+            # ஒருவேளை எந்த அனுமதியும் வழங்கப்படவில்லை எனில்
             if not tab_labels:
                 st.warning("⚠️ தங்களுடைய கணக்கிற்கு எந்தவொரு CRM பிரிவையும் பயன்படுத்த அட்மின் அனுமதி வழங்கவில்லை.")
             else:
@@ -10193,7 +10193,7 @@ if st.session_state.get("logged_in", False):
                                             lead_data = {
                                                 "customer_name": str(row.get("customer_name", row.get("Name", row.get("Customer Name", "")))),
                                                 "phone": str(row.get("phone", row.get("Phone", row.get("Mobile", "")))),
-                                                "address": str(row.get("address", row.get("Address", ""))),
+                                                "address": str(row.get("address", row.get("Address", "")))),
                                                 "city": str(row.get("city", row.get("City", row.get("Place", "Nagercoil")))),
                                                 "status": "New",
                                                 "telecaller_name": current_user
