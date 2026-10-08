@@ -10163,7 +10163,6 @@ if st.session_state.get("logged_in", False):
                 if not active_leads:
                     st.info("✅ தற்பொழுது தொடர்புகொள்ள வேண்டிய லீடுகள் எதுவும் நிலுவையில் இல்லை.")
                 else:
-                    # 🌟 பாதுகாப்பான முறையில் பெயர் மற்றும் போன் நம்பரை லீஸ்ட் செய்யும் பகுதி
                     def get_lead_label(l):
                         name = l.get('customer_name') or 'பெயர் இல்லை'
                         phone = l.get('phone') or 'எண் இல்லை'
