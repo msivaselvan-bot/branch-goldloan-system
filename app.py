@@ -10126,10 +10126,10 @@ if st.session_state.get("logged_in", False):
             st.subheader("📞 CRM, மார்க்கெட்டிங் லீடுகள் மற்றும் டெலிகாலிங் மேசை")
             st.caption("மார்க்கெட்டிங் லீடுகள் பதிவேற்றம், டெலிகாலர் பின்தொடர்தல் மற்றும் கிளைகளுக்கு லீடு ஒதுக்கீடு செய்யும் பகுதி.")
 
-            # தற்போதைய பயனரின் தகவல்கள் மற்றும் அனுமதிகளைப் பெறுதல்
-            ccurrent_user = st.session_state.get("username", "")
+            # 🌟 பாதுகாப்பான முறையில் செஷன் ஸ்டேட்டிலிருந்து பயனரின் தகவல்களைப் பெறுதல்
+            current_user = st.session_state.get("username", "Admin")
             current_role = st.session_state.get("user_role", st.session_state.get("role", ""))
-            is_admin_user = current_role == "Admin" or current_user == "admin"
+            is_admin_user = current_role == "Admin" or current_user == "admin" or current_user == "Admin"
             user_branch_id = st.session_state.get("branch_id")
 
             user_permissions = st.session_state.get("permissions", [])
@@ -10139,7 +10139,7 @@ if st.session_state.get("logged_in", False):
             tab_labels = []
             tab_keys = []
 
-            # 🌟 அட்மின் அல்லது முழு CRM அனுமதி உள்ளவர்களுக்கு
+            # அட்மின் அல்லது முழு அனுமதி உள்ளவர்களுக்கு
             if is_admin_user or "📞 CRM & டெலிகாலிங் மேசை" in user_permissions:
                 tab_labels = [
                     "📂 மார்க்கெட்டிங் லீடுகள் (Excel Upload)",
@@ -10149,7 +10149,7 @@ if st.session_state.get("logged_in", False):
                 ]
                 tab_keys = ["upload", "telecalling", "branch_leads", "analytics"]
             else:
-                # 🌟 கிளை யூசராக (Branch User) இருந்தால், அட்மின் கொடுக்காவிட்டாலும் 'Branch Leads' டேப் தானாக வர வழிசெய்தல்
+                # கிளை யூசர் எனில் Branch Leads டேப்பை வழங்குதல்
                 if user_branch_id is not None or "🏢 CRM: கிளை லீடுகள் மேலாண்மை (Branch Leads)" in user_permissions:
                     tab_labels.append("🏢 கிளை லீடுகள் மேலாண்மை (Branch Leads)")
                     tab_keys.append("branch_leads")
@@ -10165,14 +10165,11 @@ if st.session_state.get("logged_in", False):
                 if "📊 CRM: அட்மின் கண்காணிப்பு (Analytics)" in user_permissions:
                     tab_labels.append("📊 அட்மின் கண்காணிப்பு (Analytics)")
                     tab_keys.append("analytics")
-                    
-            # ஒருவேளை எந்த அனுமதியும் வழங்கப்படவில்லை எனில்
+
             if not tab_labels:
                 st.warning("⚠️ தங்களுடைய கணக்கிற்கு எந்தவொரு CRM பிரிவையும் பயன்படுத்த அட்மின் அனுமதி வழங்கவில்லை.")
             else:
-                # அனுமதிக்கப்பட்ட டேப்களை மட்டும் dynamically உருவாக்குதல்
                 created_tabs = st.tabs(tab_labels)
-
                 for idx, t_key in enumerate(tab_keys):
                     with created_tabs[idx]:
                         
