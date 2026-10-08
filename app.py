@@ -3914,6 +3914,11 @@ if st.session_state.get("logged_in", False):
                             "🔔 பரிவர்த்தனை அழைப்பு சரிபார்ப்பு",
                             "🛡️ OTP விலக்கு அனுமதி",
                             "🔍 தணிக்கையர் பணிப்பாய்வு",
+                            # 🌟 புதிய CRM & டெலிகாலிங் பிரிவுகள்
+                            "📂 CRM: மார்க்கெட்டிங் லீடுகள் (Excel Upload)",
+                            "🎧 CRM: டெலிகாலிங் டெஸ்க் (Telecalling Desk)",
+                            "🏢 CRM: கிளை லீடுகள் மேலாண்மை (Branch Leads)",
+                            "📊 CRM: அட்மின் கண்காணிப்பு (Analytics)"
                         ]
 
                         updated_perms = []
@@ -10120,141 +10125,186 @@ if st.session_state.get("logged_in", False):
             st.subheader("📞 CRM, மார்க்கெட்டிங் லீடுகள் மற்றும் டெலிகாலிங் மேசை")
             st.caption("மார்க்கெட்டிங் லீடுகள் பதிவேற்றம், டெலிகாலர் பின்தொடர்தல் மற்றும் கிளைகளுக்கு லீடு ஒதுக்கீடு செய்யும் பகுதி.")
 
-            crm_tab1, crm_tab2, crm_tab3, crm_tab4 = st.tabs([
-            "📂 மார்க்கெட்டிங் லீடுகள் (Excel Upload)",
-            "🎧 டெலிகாலிங் டெஸ்க் (Telecalling Desk)",
-            "🏢 கிளை லீடுகள் மேலாண்மை (Branch Leads)",
-            "📊 அட்மின் கண்காணிப்பு (Analytics)"
-        ])
+            # தற்போதைய பயனரின் அனுமதிகளைப் பெறுதல்
+            current_user = st.session_state.get("username", "")
+            current_role = st.session_state.get("user_role", st.session_state.get("role", ""))
+            is_admin_user = current_role == "Admin" or current_user == "admin"
 
-        # -------------------------------------------------------------
-        # டேப் 1: மார்க்கெட்டிங் லீடுகள் எக்செல் மூலம் Bulk Upload செய்தல்
-        # -------------------------------------------------------------
-        with crm_tab1:
-            st.markdown("##### 📂 மார்க்கெட்டிங் லீடுகள் எக்செல் / CSV பதிவேற்றம்")
-            uploaded_excel = st.file_uploader("எக்செல் கோப்பைத் தேர்ந்தெடுக்கவும் (.xlsx, .csv)", type=["xlsx", "csv"], key="main_crm_file")
-            if uploaded_excel is not None:
-                import pandas as pd
-                try:
-                    df_upload = pd.read_excel(uploaded_excel) if uploaded_excel.name.endswith('.xlsx') else pd.read_csv(uploaded_excel)
-                    st.write("📋 **முன்னோட்டத் தரவுகள் (Preview):**", df_upload.head())
-                    if st.button("🚀 லீடுகளை டேட்டாபேஸில் பதிவேற்று", type="primary", key="main_btn_upload"):
-                        success_count = 0
-                        for _, row in df_upload.iterrows():
-                            lead_data = {
-                                "customer_name": str(row.get("customer_name", row.get("Name", row.get("Customer Name", "")))),
-                                "phone": str(row.get("phone", row.get("Phone", row.get("Mobile", "")))),
-                                "address": str(row.get("address", row.get("Address", ""))),
-                                "city": str(row.get("city", row.get("City", row.get("Place", "Nagercoil")))),
-                                "status": "New",
-                                "telecaller_name": st.session_state.get("username", "Admin")
-                            }
-                            supabase.table("leads").insert(lead_data).execute()
-                            success_count += 1
-                        st.success(f"🎉 வெற்றிகரமாக {success_count} லீடுகள் டேட்டாபேஸில் சேர்க்கப்பட்டன!")
-                        st.rerun()
-                except Exception as e:
-                    st.error(f"கோப்பைப் படிப்பதில் பிழை: {e}")
+            # டேட்டாபேஸிலிருந்து தற்போதைய பயனரின் permissions-ஐ எடுப்பது (அல்லது session_state-ல் இருந்தால் அதைப் பயன்படுத்துவது)
+            # உதாரணத்திற்கு session_state அல்லது டேட்டாபேஸ் செக்:
+            user_permissions = st.session_state.get("permissions", [])
+            
+            # ஒருவேளை அட்மின் எனில் அனைத்து அனுமதிகளும் உண்டு எனக் கொள்ளவும்
+            if is_admin_user:
+                user_permissions = [
+                    "📂 CRM: மார்க்கெட்டிங் லீடுகள் (Excel Upload)",
+                    "🎧 CRM: டெலிகாலிங் டெஸ்க் (Telecalling Desk)",
+                    "🏢 CRM: கிளை லீடுகள் மேலாண்மை (Branch Leads)",
+                    "📊 CRM: அட்மின் கண்காணிப்பு (Analytics)"
+                ]
 
-        # -------------------------------------------------------------
-        # டேப் 2: டெலிகாலிங் டெஸ்க் (Telecaller Desk & 5 Status Updates)
-        # -------------------------------------------------------------
-        with crm_tab2:
-            st.markdown("##### 🎧 டெலிகாலிங் பின்தொடர்தல் மேசை")
-            try:
-                leads_res = supabase.table("leads").select("*").in_("status", ["New", "Future Lead", "Not Reachable"]).order("id", desc=True).execute()
-                active_leads = leads_res.data or []
-            except Exception:
-                active_leads = []
+            tab_labels = []
+            tab_keys = []
 
-            if not active_leads:
-                st.info("✅ தற்பொழுது தொடர்புகொள்ள வேண்டிய லீடுகள் எதுவும் நிலுவையில் இல்லை.")
+            # 1. Excel Upload அனுமதி உள்ளதா எனச் சரிபார்த்தல்
+            if "📂 CRM: மார்க்கெட்டிங் லீடுகள் (Excel Upload)" in user_permissions:
+                tab_labels.append("📂 மார்க்கெட்டிங் லீடுகள் (Excel Upload)")
+                tab_keys.append("upload")
+
+            # 2. Telecalling Desk அனுமதி உள்ளதா எனச் சரிபார்த்தல்
+            if "🎧 CRM: டெலிகாலிங் டெஸ்க் (Telecalling Desk)" in user_permissions:
+                tab_labels.append("🎧 டெலிகாலிங் டெஸ்க் (Telecalling Desk)")
+                tab_keys.append("telecalling")
+
+            # 3. Branch Leads அனுமதி உள்ளதா எனச் சரிபார்த்தல்
+            if "🏢 CRM: கிளை லீடுகள் மேலாண்மை (Branch Leads)" in user_permissions:
+                tab_labels.append("🏢 கிளை லீடுகள் மேலாண்மை (Branch Leads)")
+                tab_keys.append("branch_leads")
+
+            # 4. Analytics அனுமதி உள்ளதா எனச் சரிபார்த்தல்
+            if "📊 CRM: அட்மின் கண்காணிப்பு (Analytics)" in user_permissions:
+                tab_labels.append("📊 அட்மின் கண்காணிப்பு (Analytics)")
+                tab_keys.append("analytics")
+
+            if not tab_labels:
+                st.warning("⚠️ தங்களுடைய கணக்கிற்கு எந்தவொரு CRM பிரிவையும் பயன்படுத்த அட்மின் அனுமதி வழங்கவில்லை.")
             else:
-                def get_lead_label(l):
-                    name = l.get('customer_name') or 'பெயர் இல்லை'
-                    phone = l.get('phone') or 'எண் இல்லை'
-                    city = l.get('city') or 'ஊர் இல்லை'
-                    return f"{name} - {phone} ({city})"
+                # அனுமதிக்கப்பட்ட டேப்களை மட்டும் dynamically உருவாக்குதல்
+                created_tabs = st.tabs(tab_labels)
 
-                selected_lead_id = st.selectbox(
-                    "விவரம் பார்க்க வேண்டிய லீட்டைத் தேர்ந்தெடுக்கவும்:", 
-                    [l['id'] for l in active_leads], 
-                    format_func=lambda x: get_lead_label(next((l for l in active_leads if l['id'] == x), {})),
-                    key="main_lead_sel"
-                )
-                
-                curr_lead = next((l for l in active_leads if l['id'] == selected_lead_id), None)
-                
-                if curr_lead:
-                    col_l1, col_l2 = st.columns(2)
-                    with col_l1:
-                        st.write(f"• **பெயர்:** `{curr_lead.get('customer_name', '-')}`")
-                        st.write(f"• **தொலைபேசி:** 📞 `{curr_lead.get('phone', '-')}`")
-                        st.write(f"• **ஊர்/முகவரி:** {curr_lead.get('city', '-')} / {curr_lead.get('address', '-')}")
-                    with col_l2:
-                        st.write(f"• **தற்போதைய நிலை:** `{curr_lead.get('status', 'New')}`")
-                        st.write(f"• **முந்தைய குறிப்புகள்:** {curr_lead.get('remarks', '-')}")
+                for idx, t_key in enumerate(tab_keys):
+                    with created_tabs[idx]:
+                        
+                        # -------------------------------------------------------------
+                        # டேப் 1: மார்க்கெட்டிங் லீடுகள் (Excel Upload)
+                        # -------------------------------------------------------------
+                        if t_key == "upload":
+                            st.markdown("##### 📂 மார்க்கெட்டிங் லீடுகள் எக்செல் / CSV பதிவேற்றம்")
+                            uploaded_excel = st.file_uploader("எக்செல் கோப்பைத் தேர்ந்தெடுக்கவும் (.xlsx, .csv)", type=["xlsx", "csv"], key="main_crm_file")
+                            if uploaded_excel is not None:
+                                import pandas as pd
+                                try:
+                                    df_upload = pd.read_excel(uploaded_excel) if uploaded_excel.name.endswith('.xlsx') else pd.read_csv(uploaded_excel)
+                                    st.write("📋 **முன்னோட்டத் தரவுகள் (Preview):**", df_upload.head())
+                                    if st.button("🚀 லீடுகளை டேட்டாபேஸில் பதிவேற்று", type="primary", key="main_btn_upload"):
+                                        success_count = 0
+                                        for _, row in df_upload.iterrows():
+                                            lead_data = {
+                                                "customer_name": str(row.get("customer_name", row.get("Name", row.get("Customer Name", "")))),
+                                                "phone": str(row.get("phone", row.get("Phone", row.get("Mobile", "")))),
+                                                "address": str(row.get("address", row.get("Address", "")))),
+                                                "city": str(row.get("city", row.get("City", row.get("Place", "Nagercoil")))),
+                                                "status": "New",
+                                                "telecaller_name": current_user
+                                            }
+                                            supabase.table("leads").insert(lead_data).execute()
+                                            success_count += 1
+                                        st.success(f"🎉 வெற்றிகரமாக {success_count} லீடுகள் டேட்டாபேஸில் சேர்க்கப்பட்டன!")
+                                        st.rerun()
+                                except Exception as e:
+                                    st.error(f"கோப்பைப் படிப்பதில் பிழை: {e}")
 
-                    st.markdown("---")
-                    new_status = st.selectbox("நிலை (Status):", [
-                        "Future Lead (எதிர்கால லீடு)", 
-                        "Immediate Lead (உடனடி லீடு - கிளைக்கு அனுப்பு)", 
-                        "Not Interested (ஆர்வம் இல்லை)", 
-                        "Not Reachable (தொடர்புகொள்ள முடியவில்லை)", 
-                        "Wrong Number (தவறான எண்)"
-                    ], key="main_status_sel")
+                        # -------------------------------------------------------------
+                        # டேப் 2: டெலிகாலிங் டெஸ்க் (Telecalling Desk)
+                        # -------------------------------------------------------------
+                        elif t_key == "telecalling":
+                            st.markdown("##### 🎧 டெலிகாலிங் பின்தொடர்தல் மேசை")
+                            try:
+                                leads_res = supabase.table("leads").select("*").in_("status", ["New", "Future Lead", "Not Reachable"]).order("id", desc=True).execute()
+                                active_leads = leads_res.data or []
+                            except Exception:
+                                active_leads = []
 
-                    try:
-                        b_res = supabase.table("branches").select("id, branch_name").execute()
-                        branch_map = {b['branch_name']: b['id'] for b in (b_res.data or [])}
-                    except Exception:
-                        branch_map = {}
+                            if not active_leads:
+                                st.info("✅ தற்பொழுது தொடர்புகொள்ள வேண்டிய லீடுகள் எதுவும் நிலுவையில் இல்லை.")
+                            else:
+                                def get_lead_label(l):
+                                    name = l.get('customer_name') or 'பெயர் இல்லை'
+                                    phone = l.get('phone') or 'எண் இல்லை'
+                                    city = l.get('city') or 'ஊர் இல்லை'
+                                    return f"{name} - {phone} ({city})"
 
-                    target_branch_id = None
-                    follow_date = None
+                                selected_lead_id = st.selectbox(
+                                    "விவரம் பார்க்க வேண்டிய லீட்டைத் தேர்ந்தெடுக்கவும்:", 
+                                    [l['id'] for l in active_leads], 
+                                    format_func=lambda x: get_lead_label(next((l for l in active_leads if l['id'] == x), {})),
+                                    key="main_lead_sel"
+                                )
+                                
+                                curr_lead = next((l for l in active_leads if l['id'] == selected_lead_id), None)
+                                
+                                if curr_lead:
+                                    col_l1, col_l2 = st.columns(2)
+                                    with col_l1:
+                                        st.write(f"• **பெயர்:** `{curr_lead.get('customer_name', '-')}`")
+                                        st.write(f"• **தொலைபேசி:** 📞 `{curr_lead.get('phone', '-')}`")
+                                        st.write(f"• **ஊர்/முகவரி:** {curr_lead.get('city', '-')} / {curr_lead.get('address', '-')}")
+                                    with col_l2:
+                                        st.write(f"• **தற்போதைய நிலை:** `{curr_lead.get('status', 'New')}`")
+                                        st.write(f"• **முந்தைய குறிப்புகள்:** {curr_lead.get('remarks', '-')}")
 
-                    if "Immediate Lead" in new_status and branch_map:
-                        selected_branch_name = st.selectbox("அருகிலுள்ள கிளையைத் தேர்ந்தெடுக்கவும்:", list(branch_map.keys()), key="main_branch_sel")
-                        target_branch_id = branch_map.get(selected_branch_name)
-                    elif "Future Lead" in new_status:
-                        follow_date = st.date_input("மீண்டும் பேச வேண்டிய தேதி:", key="main_follow_date")
+                                    st.markdown("---")
+                                    new_status = st.selectbox("நிலை (Status):", [
+                                        "Future Lead (எதிர்கால லீடு)", 
+                                        "Immediate Lead (உடனடி லீடு - கிளைக்கு அனுப்பு)", 
+                                        "Not Interested (ஆர்வம் இல்லை)", 
+                                        "Not Reachable (தொடர்புகொள்ள முடியவில்லை)", 
+                                        "Wrong Number (தவறான எண்)"
+                                    ], key="main_status_sel")
 
-                    call_remarks = st.text_area("பேசிய விவர குறிப்புகள் (Remarks):", key="main_call_rem")
-                    if st.button("💾 டெலிகாலிங் அப்டேட்டைச் சேமி", type="primary", key="main_save_crm"):
-                        try:
-                            clean_status = new_status.split(" ")[0] + (" " + new_status.split(" ")[1] if "Future" in new_status or "Immediate" in new_status or "Not" in new_status else "")
-                            update_payload = {
-                                "status": clean_status,
-                                "remarks": call_remarks,
-                                "assigned_branch_id": target_branch_id,
-                                "followup_date": str(follow_date) if follow_date else None
-                            }
-                            supabase.table("leads").update(update_payload).eq("id", curr_lead['id']).execute()
-                            st.success("✅ லீடு நிலை வெற்றிகரமாக அப்டேட் செய்யப்பட்டது!")
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"பிழை: {e}")
+                                    try:
+                                        b_res = supabase.table("branches").select("id, branch_name").execute()
+                                        branch_map = {b['branch_name']: b['id'] for b in (b_res.data or [])}
+                                    except Exception:
+                                        branch_map = {}
 
-        # -------------------------------------------------------------
-        # டேப் 3: கிளை லீடுகள் மேலாண்மை (Branch Desk)
-        # -------------------------------------------------------------
-        with crm_tab3:
-            st.markdown("##### 🏢 கிளை லீடுகள் & வணிக மாற்றம் (Branch Manager Desk)")
-            user_branch_id = st.session_state.get("branch_id")
-            try:
-                b_leads_res = supabase.table("leads").select("*").eq("assigned_branch_id", user_branch_id).execute()
-                b_leads = b_leads_res.data or []
-            except Exception:
-                b_leads = []
-            if not b_leads:
-                st.info("📭 தங்களது கிளைக்கு ஒதுக்கப்பட்ட லீடுகள் எதுவும் இல்லை.")
-            else:
-                import pandas as pd
-                st.dataframe(pd.DataFrame(b_leads)[["id", "customer_name", "phone", "city", "status", "remarks"]], use_container_width=True)
+                                    target_branch_id = None
+                                    follow_date = None
 
-        # -------------------------------------------------------------
-        # டேப் 4: அட்மின் கண்காணிப்பு (Admin Analytics)
-        # -------------------------------------------------------------
-        with crm_tab4:
-            st.markdown("##### 📊 அட்மின் கண்காணிப்பு மற்றும் செயல்திறன் அறிக்கை")
-            st.info("📈 டெலிகாலர்களின் தினசரி அழைப்புகள் மற்றும் கிளைகளின் லீடு செயல்பாடுகள்.")
+                                    if "Immediate Lead" in new_status and branch_map:
+                                        selected_branch_name = st.selectbox("அருகிலுள்ள கிளையைத் தேர்ந்தெடுக்கவும்:", list(branch_map.keys()), key="main_branch_sel")
+                                        target_branch_id = branch_map.get(selected_branch_name)
+                                    elif "Future Lead" in new_status:
+                                        follow_date = st.date_input("மீண்டும் பேச வேண்டிய தேதி:", key="main_follow_date")
+
+                                    call_remarks = st.text_area("பேசிய விவர குறிப்புகள் (Remarks):", key="main_call_rem")
+                                    if st.button("💾 டெலிகாலிங் அப்டேட்டைச் சேமி", type="primary", key="main_save_crm"):
+                                        try:
+                                            clean_status = new_status.split(" ")[0] + (" " + new_status.split(" ")[1] if "Future" in new_status or "Immediate" in new_status or "Not" in new_status else "")
+                                            update_payload = {
+                                                "status": clean_status,
+                                                "remarks": call_remarks,
+                                                "assigned_branch_id": target_branch_id,
+                                                "followup_date": str(follow_date) if follow_date else None
+                                            }
+                                            supabase.table("leads").update(update_payload).eq("id", curr_lead['id']).execute()
+                                            st.success("✅ லீடு நிலை வெற்றிகரமாக அப்டேட் செய்யப்பட்டது!")
+                                            st.rerun()
+                                        except Exception as e:
+                                            st.error(f"பிழை: {e}")
+
+                        # -------------------------------------------------------------
+                        # டேப் 3: கிளை லீடுகள் மேலாண்மை (Branch Leads)
+                        # -------------------------------------------------------------
+                        elif t_key == "branch_leads":
+                            st.markdown("##### 🏢 கிளை லீடுகள் & வணிக மாற்றம் (Branch Manager Desk)")
+                            user_branch_id = st.session_state.get("branch_id")
+                            try:
+                                b_leads_res = supabase.table("leads").select("*").eq("assigned_branch_id", user_branch_id).execute()
+                                b_leads = b_leads_res.data or []
+                            except Exception:
+                                b_leads = []
+                            if not b_leads:
+                                st.info("📭 தங்களது கிளைக்கு ஒதுக்கப்பட்ட லீடுகள் எதுவும் இல்லை.")
+                            else:
+                                import pandas as pd
+                                st.dataframe(pd.DataFrame(b_leads)[["id", "customer_name", "phone", "city", "status", "remarks"]], use_container_width=True)
+
+                        # -------------------------------------------------------------
+                        # டேப் 4: அட்மின் கண்காணிப்பு (Analytics)
+                        # -------------------------------------------------------------
+                        elif t_key == "analytics":
+                            st.markdown("##### 📊 அட்மின் கண்காணிப்பு மற்றும் செயல்திறன் அறிக்கை")
+                            st.info("📈 டெலிகாலர்களின் தினசரி அழைப்புகள் மற்றும் கிளைகளின் லீடு செயல்பாடுகள்.")
+
+            st.stop()
