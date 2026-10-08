@@ -10115,7 +10115,7 @@ if st.session_state.get("logged_in", False):
                                         "⚠️ கூடுதல் விளக்கம் கேட்டு கிளைக்கு அனுப்பப்பட்டது!"
                                     )
                                     st.rerun()
-                                    
+
         elif selected_section == "📞 CRM & டெலிகாலிங் மேசை":
             st.subheader("📞 CRM, மார்க்கெட்டிங் லீடுகள் மற்றும் டெலிகாலிங் மேசை")
             st.caption("மார்க்கெட்டிங் லீடுகள் பதிவேற்றம், டெலிகாலர் பின்தொடர்தல் மற்றும் கிளைகளுக்கு லீடு ஒதுக்கீடு செய்யும் பகுதி.")
@@ -10142,7 +10142,7 @@ if st.session_state.get("logged_in", False):
                                 lead_data = {
                                     "customer_name": str(row.get("customer_name", row.get("Name", row.get("Customer Name", "")))),
                                     "phone": str(row.get("phone", row.get("Phone", row.get("Mobile", "")))),
-                                    "address": str(row.get("address", row.get("Address", "")))),
+                                    "address": str(row.get("address", row.get("Address", ""))),
                                     "city": str(row.get("city", row.get("City", row.get("Place", "Nagercoil")))),
                                     "status": "New",
                                     "telecaller_name": st.session_state.get("username", "Admin")
