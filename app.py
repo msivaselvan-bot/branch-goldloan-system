@@ -10285,18 +10285,202 @@ if st.session_state.get("logged_in", False):
                         # டேப் 3: கிளை லீடுகள் மேலாண்மை (Branch Leads)
                         # -------------------------------------------------------------
                         elif t_key == "branch_leads":
-                            st.markdown("##### 🏢 கிளை லீடுகள் & வணிக மாற்றம் (Branch Manager Desk)")
+                            st.markdown("##### 🏢 கிளை லீடுகள் மேலாண்மை & வணிக மாற்றம் (Branch Desk)")
+                            
                             user_branch_id = st.session_state.get("branch_id")
-                            try:
-                                b_leads_res = supabase.table("leads").select("*").eq("assigned_branch_id", user_branch_id).execute()
-                                b_leads = b_leads_res.data or []
-                            except Exception:
-                                b_leads = []
-                            if not b_leads:
-                                st.info("📭 தங்களது கிளைக்கு ஒதுக்கப்பட்ட லீடுகள் எதுவும் இல்லை.")
-                            else:
-                                import pandas as pd
-                                st.dataframe(pd.DataFrame(b_leads)[["id", "customer_name", "phone", "city", "status", "remarks"]], use_container_width=True)
+                            current_user_name = st.session_state.get("username", "Branch User")
+
+                            # இரண்டு துணைப் பிரிவுகள் (Tabs): 1. கிளை லீடுகள் பின்தொடர்தல், 2. புதிய லீடு பதிவு
+                            sub_tab1, sub_tab2 = st.tabs(["📞 கிளை லீடுகள் & அப்டேட்", "➕ புதிய லீடு பதிவு செய்தல்"])
+
+                            # =========================================================
+                            # 1. கிளைக்கு ஒதுக்கப்பட்ட லீடுகள் மற்றும் அப்டேட் படிவம்
+                            # =========================================================
+                            with sub_tab1:
+                                try:
+                                    # கிளைக்குரிய அனைத்து செயலில் உள்ள லீடுகளையும் எடுத்தல்
+                                    b_query = supabase.table("leads").select("*")
+                                    if user_branch_id:
+                                        b_query = b_query.eq("assigned_branch_id", user_branch_id)
+                                    b_leads_res = b_query.order("id", desc=True).execute()
+                                    branch_leads = b_leads_res.data or []
+                                except Exception as e:
+                                    st.error(f"டேட்டா பெறுவதில் பிழை: {e}")
+                                    branch_leads = []
+
+                                if not branch_leads:
+                                    st.info("📭 தங்களது கிளைக்கு ஒதுக்கப்பட்ட லீடுகள் எதுவும் தற்போது நிலுவையில் இல்லை.")
+                                else:
+                                    # லீடுகள் அட்டவணை மேலோட்டம்
+                                    import pandas as pd
+                                    view_data = []
+                                    for item in branch_leads:
+                                        view_data.append({
+                                            "ID": item.get("id"),
+                                            "வாடிக்கையாளர்": item.get("customer_name", "-"),
+                                            "தொலைபேசி": item.get("phone", "-"),
+                                            "ஊர்": item.get("city", "-"),
+                                            "வணிகப் பிரிவு": item.get("business_type", "-"),
+                                            "தற்போதைய நிலை": item.get("status", "-"),
+                                            "பாலோ தேதி": item.get("followup_date", "-"),
+                                            "குறிப்புகள்": item.get("remarks", "-")
+                                        })
+                                    st.dataframe(pd.DataFrame(view_data), use_container_width=True)
+
+                                    st.markdown("---")
+                                    st.markdown("#### ✏️ வாடிக்கையாளரைத் தேர்வு செய்து விவரம் புதுப்பிக்க")
+
+                                    def get_branch_lead_label(l):
+                                        return f"ID: {l.get('id')} - {l.get('customer_name', 'பெயர் இல்லை')} ({l.get('phone', 'எண் இல்லை')}) - {l.get('status', 'Lead')}"
+
+                                    selected_id = st.selectbox(
+                                        "அப்டேட் செய்ய வேண்டிய வாடிக்கையாளரைத் தேர்ந்தெடுக்கவும்:",
+                                        [l["id"] for l in branch_leads],
+                                        format_func=lambda x: get_branch_lead_label(next((l for l in branch_leads if l["id"] == x), {})),
+                                        key="br_sel_lead_id"
+                                    )
+
+                                    lead_to_edit = next((l for l in branch_leads if l["id"] == selected_id), None)
+
+                                    if lead_to_edit:
+                                        with st.form(f"update_lead_form_{selected_id}"):
+                                            col_a, col_b = st.columns(2)
+                                            with col_a:
+                                                st.write(f"👤 **வாடிக்கையாளர் பெயர்:** `{lead_to_edit.get('customer_name', '-')}`")
+                                                st.write(f"📞 **தொடர்பு எண்:** `{lead_to_edit.get('phone', '-')}`")
+                                                st.write(f"📍 **முகவரி/ஊர்:** {lead_to_edit.get('city', '-')}")
+                                            with col_b:
+                                                st.write(f"📌 **தற்போதைய நிலை:** `{lead_to_edit.get('status', '-')}`")
+                                                st.write(f"📝 **முந்தைய குறிப்புகள்:** {lead_to_edit.get('remarks', '-')}")
+
+                                            st.markdown("---")
+
+                                            # 1. பேசிய வணிகப் பிரிவு வகைப்பாடு
+                                            business_options = ["நகைக் கடன்", "நகை விற்க", "நகை வாங்க", "ஆர்டி (RD)", "எப்டி (FD)", "பிற"]
+                                            curr_b_type = lead_to_edit.get("business_type", "நகைக் கடன்")
+                                            default_b_idx = business_options.index(curr_b_type) if curr_b_type in business_options else 0
+                                            
+                                            sel_business = st.selectbox(
+                                                "பேசப்பட்ட வணிகப் பிரிவு (Business Category):",
+                                                business_options,
+                                                index=default_b_idx
+                                            )
+
+                                            # 2. நிலையைத் தேர்வு செய்தல்
+                                            status_options = [
+                                                "பியுச்சர் லீடு (Future Lead)",
+                                                "ஹாட் லீடு (Hot Lead)",
+                                                "கன்வெர்ட்டட் லீடு (Converted Lead)",
+                                                "விருப்பம் இல்லை (Not Interested)",
+                                                "தவறான லீடு (Wrong Number)"
+                                            ]
+                                            sel_status = st.selectbox("தற்போதைய அழைப்பு நிலை (Status):", status_options)
+
+                                            # நிபந்தனைப் புலங்கள் (Dynamic Input Fields)
+                                            followup_dt = None
+                                            ref_no = None
+
+                                            if "பியுச்சர் லீடு" in sel_status:
+                                                followup_dt = st.date_input("மீண்டும் தொடர்பு கொள்ள வேண்டிய தேதி (Follow-up Date):")
+                                            elif "கன்வெர்ட்டட் லீடு" in sel_status:
+                                                ref_no = st.text_input("வியாபாரத்தின் தொடர்பு எண் / பில் / கணக்கு எண் (Transaction / Account No):", placeholder="எ.கா: PL-1024 / RD-502 / INV-982")
+
+                                            br_remarks = st.text_area("பேசிய விவரங்கள் மற்றும் குறிப்புகள் (Remarks):", placeholder="வாடிக்கையாளரிடம் பேசிய தகவல்கள்...")
+
+                                            btn_update = st.form_submit_button("💾 நிலையைப் புதுப்பித்துச் சேமி", type="primary")
+
+                                            if btn_update:
+                                                # நிலையின் பெயரை மட்டும் பிரித்தெடுத்தல்
+                                                clean_st = sel_status.split(" (")[0]
+                                                
+                                                update_dict = {
+                                                    "status": clean_st,
+                                                    "business_type": sel_business,
+                                                    "remarks": br_remarks,
+                                                    "updated_by": current_user_name
+                                                }
+
+                                                if followup_dt:
+                                                    update_dict["followup_date"] = str(followup_dt)
+                                                if ref_no:
+                                                    update_dict["conversion_ref_no"] = ref_no
+
+                                                try:
+                                                    supabase.table("leads").update(update_dict).eq("id", selected_id).execute()
+                                                    st.success("✅ வாடிக்கையாளர் விவரம் வெற்றிகரமாகப் புதுப்பிக்கப்பட்டது!")
+                                                    st.rerun()
+                                                except Exception as err:
+                                                    st.error(f"சேமிப்பதில் பிழை: {err}")
+
+                            # =========================================================
+                            # 2. கிளை மூலம் புதிய லீடு உருவாக்கும் பகுதி
+                            # =========================================================
+                            with sub_tab2:
+                                st.markdown("#### ➕ புதிய வாடிக்கையாளர் லீடு உருவாக்குதல்")
+                                st.caption("கிளைக்கு நேரடியாக வருபவர்கள் அல்லது அழைப்பவர்களின் விவரங்களை உள்ளிட்டு பாலோ செய்ய இங்கே பதிவு செய்யவும்.")
+
+                                with st.form("branch_add_new_lead_form"):
+                                    c_name = st.text_input("வாடிக்கையாளர் பெயர் (Customer Name)*:")
+                                    c_phone = st.text_input("தொலைபேசி எண் (Phone Number)*:", max_chars=10)
+                                    c_city = st.text_input("ஊர் / பகுதி (City / Area):")
+                                    
+                                    col_n1, col_n2 = st.columns(2)
+                                    with col_n1:
+                                        # லீடு மூலம் (Source)
+                                        lead_sources = [
+                                            "நேரடி வருகை (Walk-in)",
+                                            "தொலைபேசி அழைப்பு (Phone Call)",
+                                            "பழைய வாடிக்கையாளர் பரிந்துரை (Reference)",
+                                            "துண்டுப் பிரசுரம் / விளம்பரம் (Pamphlet/Board)",
+                                            "டிஜிட்டல் / சோசியல் மீடியா (Social Media)",
+                                            "இதர வழிகள் (Others)"
+                                        ]
+                                        c_source = st.selectbox("லீடு எதன் மூலம் வந்தது? (Lead Source):", lead_sources)
+
+                                    with col_n2:
+                                        # வணிகப் பிரிவு
+                                        c_business = st.selectbox("எந்த வணிகம் தொடர்பானது? (Business Requirement):", [
+                                            "நகைக் கடன்", "நகை விற்க", "நகை வாங்க", "ஆர்டி (RD)", "எப்டி (FD)", "பிற"
+                                        ])
+
+                                    col_s1, col_s2 = st.columns(2)
+                                    with col_s1:
+                                        init_status = st.selectbox("ஆரம்ப நிலை (Initial Status):", [
+                                            "ஹாட் லீடு (Hot Lead)",
+                                            "பியுச்சர் லீடு (Future Lead)",
+                                            "கன்வெர்ட்டட் லீடு (Converted Lead)",
+                                            "விளக்கம் கேட்டுள்ளார் (Enquiry)"
+                                        ])
+                                    with col_s2:
+                                        init_follow_date = st.date_input("அடுத்த தொடர்பு தேதி (Follow-up Date):")
+
+                                    c_remarks = st.text_area("குறிப்புகள் (Remarks):")
+
+                                    btn_create_lead = st.form_submit_button("🚀 புதிய லீடைச் சேமி", type="primary")
+
+                                    if btn_create_lead:
+                                        if not c_name or not c_phone:
+                                            st.warning("⚠️ தயவுசெய்து வாடிக்கையாளர் பெயர் மற்றும் தொலைபேசி எண்ணை உள்ளிடவும்.")
+                                        else:
+                                            new_lead_dict = {
+                                                "customer_name": c_name,
+                                                "phone": c_phone,
+                                                "city": c_city,
+                                                "lead_source": c_source.split(" (")[0],
+                                                "business_type": c_business,
+                                                "status": init_status.split(" (")[0],
+                                                "followup_date": str(init_follow_date) if init_follow_date else None,
+                                                "remarks": c_remarks,
+                                                "assigned_branch_id": user_branch_id,
+                                                "created_by": current_user_name
+                                            }
+
+                                            try:
+                                                supabase.table("leads").insert(new_lead_dict).execute()
+                                                st.success("🎉 புதிய லீடு வெற்றிகரமாகப் பதிவு செய்யப்பட்டது!")
+                                                st.rerun()
+                                            except Exception as err:
+                                                st.error(f"லீடு பதிவில் பிழை: {err}")
 
                         # -------------------------------------------------------------
                         # டேப் 4: அட்மின் கண்காணிப்பு (Analytics)
