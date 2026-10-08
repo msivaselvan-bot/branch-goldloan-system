@@ -10115,7 +10115,7 @@ if st.session_state.get("logged_in", False):
                                         "⚠️ கூடுதல் விளக்கம் கேட்டு கிளைக்கு அனுப்பப்பட்டது!"
                                     )
                                     st.rerun()
-        # தேர்வு செய்யப்படும் போது CRM பக்கத்தை இயக்குதல்
+                                    
         elif selected_section == "📞 CRM & டெலிகாலிங் மேசை":
             st.subheader("📞 CRM, மார்க்கெட்டிங் லீடுகள் மற்றும் டெலிகாலிங் மேசை")
             st.caption("மார்க்கெட்டிங் லீடுகள் பதிவேற்றம், டெலிகாலர் பின்தொடர்தல் மற்றும் கிளைகளுக்கு லீடு ஒதுக்கீடு செய்யும் பகுதி.")
@@ -10142,7 +10142,7 @@ if st.session_state.get("logged_in", False):
                                 lead_data = {
                                     "customer_name": str(row.get("customer_name", row.get("Name", row.get("Customer Name", "")))),
                                     "phone": str(row.get("phone", row.get("Phone", row.get("Mobile", "")))),
-                                    "address": str(row.get("address", row.get("Address", ""))),
+                                    "address": str(row.get("address", row.get("Address", "")))),
                                     "city": str(row.get("city", row.get("City", row.get("Place", "Nagercoil")))),
                                     "status": "New",
                                     "telecaller_name": st.session_state.get("username", "Admin")
@@ -10151,6 +10151,8 @@ if st.session_state.get("logged_in", False):
                                 success_count += 1
                             st.success(f"🎉 வெற்றிகரமாக {success_count} லீடுகள் டேட்டாபேஸில் சேர்க்கப்பட்டன!")
                             st.rerun()
+                    except Exception as e:
+                        st.error(f"கோப்பைப் படிப்பதில் பிழை: {e}")
 
             with crm_tab2:
                 st.markdown("##### 🎧 டெலிகாலிங் பின்தொடர்தல் மேசை")
@@ -10247,5 +10249,3 @@ if st.session_state.get("logged_in", False):
                 st.info("📈 டெலிகாலர்களின் தினசரி அழைப்புகள் மற்றும் கிளைகளின் லீடு செயல்பாடுகள்.")
 
             st.stop()
-    
-        
