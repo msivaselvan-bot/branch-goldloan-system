@@ -10406,5 +10406,16 @@ if st.session_state.get("logged_in", False):
                         elif t_key == "analytics":
                             st.markdown("##### 📊 அட்மின் கண்காணிப்பு மற்றும் செயல்திறன் அறிக்கை")
                             st.info("📈 டெலிகாலர்களின் தினசரி அழைப்புகள் மற்றும் கிளைகளின் லீடு செயல்பாடுகள்.")
+                            st.subheader("🌐 இணையதள லீட்ஸ் & விசாரணைகள் (Website Leads)")
+
+                            # Supabase-ல் இருந்து லீட்களை எடுத்தல்
+                            leads_res = supabase.table("website_leads").select("*").order("created_at", desc=True).execute()
+                            leads_data = leads_res.data or []
+
+                            if leads_data:
+                                df_leads = pd.DataFrame(leads_data)
+                                st.dataframe(df_leads[["created_at", "lead_type", "customer_name", "phone", "location", "service_or_budget", "message"]], use_container_width=True)
+                            else:
+                                st.info("இணையதளத்தில் இருந்து புதிய விசாரணைகள் எதுவும் வரவில்லை.")
 
             st.stop()
