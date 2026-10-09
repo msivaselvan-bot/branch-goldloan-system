@@ -2342,9 +2342,10 @@ else:
 # A. நிர்வாக மேலாண்மை திரை (ADMIN PANEL WITH PERMISSION FILTERING)
 # ----------------------------------------------------
 if st.session_state.get("logged_in", False):
-    # 1. நிறுவனத்தின் அனைத்து நிர்வாகப் பிரிவுகளின் பட்டியல் (Emojis உடன்)
+    # 1. நிறுவனத்தின் அனைத்து நிர்வாகப் பிரிவுகளின் பட்டியல் (புதிய விலை நிர்ணயப் பிரிவு சேர்க்கப்பட்டுள்ளது)
     all_admin_sections = [
         "🏢 நேரடி கல்லா & தினசரி வணிகம்",
+        "🪙 தினசரி தங்க/வெள்ளி விலை நிர்ணயம்",  # <-- புதிதாக சேர்க்கப்பட்ட பிரிவு
         "📦 பாக்கெட் & லாக்கர் மேலாண்மை",
         "🏢 கிளைகள்",
         "👥 பணியாளர்கள்",
@@ -2394,7 +2395,9 @@ if st.session_state.get("logged_in", False):
             "நிர்வாகப் பிரிவு தேர்வு:", allowed_sections, horizontal=True
         )
 
-        # தேர்ந்தெடுக்கப்பட்ட பிரிவிற்கான உங்களின் பழைய if / elif நிபந்தனைகள்:
+        # -------------------------------------------------------------
+        # பிரிவு 1: நேரடி கல்லா & தினசரி வணிகம்
+        # -------------------------------------------------------------
         if selected_section == "🏢 நேரடி கல்லா & தினசரி வணிகம்":
             st.subheader("🏢 அனைத்துக் கிளைகள் நேரடி கல்லா, வங்கி & வணிக அறிக்கை")
             st.caption(
@@ -2424,7 +2427,6 @@ if st.session_state.get("logged_in", False):
             end_iso = f"{sel_date_str}T23:59:59.999999"
 
             # 2. கிளைகள் விவரங்களை எடுத்தல்
-            # ✅ புதிய அதிவேக அழைப்பு (0.001 வினாடியில் நினைவகத்திலிருந்து எடுத்துவிடும்):
             branches_list = get_cached_branches()
 
             if not branches_list:
@@ -2435,7 +2437,6 @@ if st.session_state.get("logged_in", False):
             with st.spinner(
                 "கிளை வாரியான விரிவான நிதி மற்றும் வணிகத் தரவுகள் திரட்டப்படுகின்றன..."
             ):
-                # அ. அன்றைய வருகைப் பதிவுகள் & வங்கி/ரொக்கப் பிரிப்பு
                 try:
                     visits_res = (
                         supabase.table("customer_visits")
@@ -2450,7 +2451,6 @@ if st.session_state.get("logged_in", False):
 
                 visit_mode_map = {v["id"]: v for v in day_visits}
 
-                # ஆ. அன்றைய பரிவர்த்தனைகள்
                 try:
                     txns_res = (
                         supabase.table("transactions")
@@ -2463,7 +2463,6 @@ if st.session_state.get("logged_in", False):
                 except Exception:
                     day_txns = []
 
-                # இ. அன்றைய அங்கீகரிக்கப்பட்ட கிளைச் செலவுகள்
                 try:
                     exp_res = (
                         supabase.table("branch_expenses")
@@ -2477,7 +2476,6 @@ if st.session_state.get("logged_in", False):
                 except Exception:
                     day_expenses = []
 
-                # ஈ. அன்றைய அங்கீகரிக்கப்பட்ட HO பணப் பரிமாற்றங்கள்
                 try:
                     trans_res = (
                         supabase.table("branch_fund_transfers")
@@ -2491,7 +2489,6 @@ if st.session_state.get("logged_in", False):
                 except Exception:
                     day_transfers = []
 
-            # நோட்டுகளின் மதிப்பைக் கணக்கிடும் ஃபங்க்ஷன்
             def calc_stock_val(stock_dict):
                 mults = {
                     "500": 500,
@@ -2507,10 +2504,8 @@ if st.session_state.get("logged_in", False):
                     float(stock_dict.get(k, 0) or 0) * mults.get(k, 1) for k in mults
                 )
 
-            # 4. கிளை வாரியான நிதித் தொகுப்பு (Data Aggregation)
+            # 4. கிளை வாரியான நிதித் தொகுப்பு
             branch_summary = []
-
-            # தலைமைச் சுருக்க மாறிகள்
             gt_live_cash = 0.0
             gt_pledge = 0.0
             gt_loan_prin_rec = 0.0
@@ -2537,25 +2532,17 @@ if st.session_state.get("logged_in", False):
                 b_name = b.get("branch_name", f"கிளை {b_id}")
                 b_code = b.get("branch_code", "BR")
 
-                # நேரடி கல்லா கையிருப்பு
                 try:
                     drawer_stock = get_current_branch_cash_drawer(b_id)
                 except Exception:
                     drawer_stock = {
-                        "500": 0,
-                        "200": 0,
-                        "100": 0,
-                        "50": 0,
-                        "20": 0,
-                        "10": 0,
-                        "5": 0,
-                        "coins": 0,
+                        "500": 0, "200": 0, "100": 0, "50": 0,
+                        "20": 0, "10": 0, "5": 0, "coins": 0,
                     }
 
                 live_cash = calc_stock_val(drawer_stock)
                 gt_live_cash += live_cash
 
-                # அ. பரிவர்த்தனைகள் வகைப்பாடு
                 b_txns = [t for t in day_txns if t.get("branch_id") == b_id]
 
                 pledge_disbursed = 0.0
@@ -2584,7 +2571,6 @@ if st.session_state.get("logged_in", False):
                     if not isinstance(details, dict):
                         details = {}
 
-                    # ரொக்கம் vs வங்கி பிரிப்பு (Visit அடிப்படையில்)
                     v_info = visit_mode_map.get(t.get("visit_id"), {})
                     pmode = str(v_info.get("payment_mode", "Cash")).lower()
                     v_cash = float(v_info.get("cash_amount", 0) or 0)
@@ -2610,38 +2596,17 @@ if st.session_state.get("logged_in", False):
                         else:
                             b_cash_out += p_amt
 
-                    # 1. புதிய நகைக்கடன்
                     if "pledge" in t_type or "loan open" in t_type:
                         pledge_disbursed += p_amt
                         pledge_cnt += 1
-
-                    # 2. கடன் அசல் vs வட்டி
                     elif any(k in t_type for k in ["interest", "vattikattuthal", "வட்டி", "release", "close", "redemption", "part payment", "part"]):
-                        # பல்வேறு வடிவங்களில் வரும் அசல் மற்றும் வட்டி தொகைகளைத் துல்லியமாக எடுத்தல்
                         p_val = float(details.get("principal") or details.get("principal_amount") or t.get("principal_amount") or 0)
-                        
-                        # வட்டி மற்றும் இதர கட்டணங்கள் (Interest + Other Charges / Release Interest)
-                        i_val = float(
-                            details.get("interest") 
-                            or details.get("interest_amount") 
-                            or details.get("interest_paid") 
-                            or t.get("interest_amount") 
-                            or 0
-                        )
-                        
-                        other_chg = float(
-                            details.get("other_charges") 
-                            or details.get("charges") 
-                            or 0
-                        )
+                        i_val = float(details.get("interest") or details.get("interest_amount") or details.get("interest_paid") or t.get("interest_amount") or 0)
+                        other_chg = float(details.get("other_charges") or details.get("charges") or 0)
 
                         if p_val > 0 or i_val > 0 or other_chg > 0:
                             loan_prin_rec += p_val
-                            loan_int_rec += i_val + other_chg + (
-                                r_amt - (p_val + i_val + other_chg)
-                                if r_amt > (p_val + i_val + other_chg)
-                                else 0
-                            )
+                            loan_int_rec += i_val + other_chg + (r_amt - (p_val + i_val + other_chg) if r_amt > (p_val + i_val + other_chg) else 0)
                         elif "interest" in t_type or "வட்டி" in t_type or "vattikattuthal" in t_type:
                             loan_int_rec += r_amt
                         elif t.get("principal_amount") and float(t.get("principal_amount") or 0) > 0:
@@ -2649,26 +2614,11 @@ if st.session_state.get("logged_in", False):
                             loan_prin_rec += min(prin_db, r_amt)
                             loan_int_rec += max(0.0, r_amt - prin_db)
                         else:
-                            # விவரங்கள் இல்லாவிட்டால் முழு தொகையும் அசலாகச் செல்லாமல், டெம்ப்ளேட் அடிப்படையில் பிரித்தல்
                             loan_prin_rec += r_amt
-
-                    # 3. RD வசூல்
-                    elif (
-                        "rd" in t_type
-                        and r_amt > 0
-                        and not ("close" in t_type or "closure" in t_type)
-                    ):
+                    elif "rd" in t_type and r_amt > 0 and not ("close" in t_type or "closure" in t_type):
                         rd_rec += r_amt
-
-                    # 4. FD வசூல்
-                    elif (
-                        "fd" in t_type
-                        and r_amt > 0
-                        and not ("close" in t_type or "closure" in t_type)
-                    ):
+                    elif "fd" in t_type and r_amt > 0 and not ("close" in t_type or "closure" in t_type):
                         fd_rec += r_amt
-
-                    # 5. RD வட்டி & முதிர்வு பட்டுவாடா
                     elif "rd" in t_type and p_amt > 0:
                         if "int" in t_type or "வட்டி" in t_type:
                             rd_int_paid += p_amt
@@ -2681,8 +2631,6 @@ if st.session_state.get("logged_in", False):
                                 rd_closed_paid += p_amt
                         else:
                             other_outflow += p_amt
-
-                    # 6. FD வட்டி & முதிர்வு பட்டுவாடா
                     elif "fd" in t_type and p_amt > 0:
                         if "int" in t_type or "வட்டி" in t_type:
                             fd_int_paid += p_amt
@@ -2701,54 +2649,26 @@ if st.session_state.get("logged_in", False):
                         if p_amt > 0:
                             other_outflow += p_amt
 
-                # ஆ. கிளைச் செலவுகள்
                 b_exp_list = [e for e in day_expenses if e.get("branch_id") == b_id]
                 b_exp_amt = sum(float(e.get("amount", 0) or 0) for e in b_exp_list)
                 b_cash_out += b_exp_amt
 
-                # இ. தலைமையகப் பணப் பரிமாற்றம் (HO Transfers)
-                b_trans_list = [
-                    tr for tr in day_transfers if tr.get("branch_id") == b_id
-                ]
+                b_trans_list = [tr for tr in day_transfers if tr.get("branch_id") == b_id]
 
-                # HO-லிருந்து வாங்கியது
-                ho_rec_cash = sum(
-                    float(tr.get("amount", 0) or 0)
-                    for tr in b_trans_list
-                    if tr.get("transfer_type") == "HO_TO_BRANCH"
-                    and "cash" in str(tr.get("payment_mode", "")).lower()
-                )
-                ho_rec_bank = sum(
-                    float(tr.get("amount", 0) or 0)
-                    for tr in b_trans_list
-                    if tr.get("transfer_type") == "HO_TO_BRANCH"
-                    and "cash" not in str(tr.get("payment_mode", "")).lower()
-                )
+                ho_rec_cash = sum(float(tr.get("amount", 0) or 0) for tr in b_trans_list if tr.get("transfer_type") == "HO_TO_BRANCH" and "cash" in str(tr.get("payment_mode", "")).lower())
+                ho_rec_bank = sum(float(tr.get("amount", 0) or 0) for tr in b_trans_list if tr.get("transfer_type") == "HO_TO_BRANCH" and "cash" not in str(tr.get("payment_mode", "")).lower())
                 ho_rec_total = ho_rec_cash + ho_rec_bank
                 b_cash_in += ho_rec_cash
                 b_bank_in += ho_rec_bank
 
-                # HO-க்கு அனுப்பியது
-                ho_sent_cash = sum(
-                    float(tr.get("amount", 0) or 0)
-                    for tr in b_trans_list
-                    if tr.get("transfer_type") == "BRANCH_TO_HO"
-                    and "cash" in str(tr.get("payment_mode", "")).lower()
-                )
-                ho_sent_bank = sum(
-                    float(tr.get("amount", 0) or 0)
-                    for tr in b_trans_list
-                    if tr.get("transfer_type") == "BRANCH_TO_HO"
-                    and "cash" not in str(tr.get("payment_mode", "")).lower()
-                )
+                ho_sent_cash = sum(float(tr.get("amount", 0) or 0) for tr in b_trans_list if tr.get("transfer_type") == "BRANCH_TO_HO" and "cash" in str(tr.get("payment_mode", "")).lower())
+                ho_sent_bank = sum(float(tr.get("amount", 0) or 0) for tr in b_trans_list if tr.get("transfer_type") == "BRANCH_TO_HO" and "cash" not in str(tr.get("payment_mode", "")).lower())
                 ho_sent_total = ho_sent_cash + ho_sent_bank
                 b_cash_out += ho_sent_cash
                 b_bank_out += ho_sent_bank
 
-                # நிகர ரொக்கப் புழக்கம்
                 net_cash_flow = b_cash_in - b_cash_out
 
-                # தலைமைத் தொகைகளைக் கூட்டுதல்
                 gt_pledge += pledge_disbursed
                 gt_loan_prin_rec += loan_prin_rec
                 gt_loan_int_rec += loan_int_rec
@@ -2767,33 +2687,30 @@ if st.session_state.get("logged_in", False):
                 gt_cash_out += b_cash_out
                 gt_expenses += b_exp_amt
 
-                branch_summary.append(
-                    {
-                        "கிளை": f"{b_name} ({b_code})",
-                        "branch_id": b_id,
-                        "b_name": b_name,
-                        "கல்லா இருப்பு": live_cash,
-                        "புதிய கடன்": pledge_disbursed,
-                        "கடன் எண்ணிக்கை": pledge_cnt,
-                        "கடன் அசல் வசூல்": loan_prin_rec,
-                        "கடன் வட்டி வசூல்": loan_int_rec,
-                        "RD வசூல்": rd_rec,
-                        "FD வசூல்": fd_rec,
-                        "கொடுத்த RD வட்டி": rd_int_paid,
-                        "கொடுத்த FD வட்டி": fd_int_paid,
-                        "முடித்த RD": rd_closed_paid,
-                        "முடித்த FD": fd_closed_paid,
-                        # நிதி & வங்கி விவரங்கள்
-                        "HO-லிருந்து வாங்கியது": ho_rec_total,
-                        "HO-க்கு கொடுத்தது": ho_sent_total,
-                        "வங்கி வரவு": b_bank_in,
-                        "வங்கி செலுத்தியது": b_bank_out,
-                        "கிளைச் செலவு": b_exp_amt,
-                        "ரொக்க வரவு": b_cash_in,
-                        "ரொக்கப் பற்று": b_cash_out,
-                        "நிகர ரொக்கப் புழக்கம்": net_cash_flow,
-                    }
-                )
+                branch_summary.append({
+                    "கிளை": f"{b_name} ({b_code})",
+                    "branch_id": b_id,
+                    "b_name": b_name,
+                    "கல்லா இருப்பு": live_cash,
+                    "புதிய கடன்": pledge_disbursed,
+                    "கடன் எண்ணிக்கை": pledge_cnt,
+                    "கடன் அசல் வசூல்": loan_prin_rec,
+                    "கடன் வட்டி வசூல்": loan_int_rec,
+                    "RD வசூல்": rd_rec,
+                    "FD வசூல்": fd_rec,
+                    "கொடுத்த RD வட்டி": rd_int_paid,
+                    "கொடுத்த FD வட்டி": fd_int_paid,
+                    "முடித்த RD": rd_closed_paid,
+                    "முடித்த FD": fd_closed_paid,
+                    "HO-லிருந்து வாங்கியது": ho_rec_total,
+                    "HO-க்கு கொடுத்தது": ho_sent_total,
+                    "வங்கி வரவு": b_bank_in,
+                    "வங்கி செலுத்தியது": b_bank_out,
+                    "கிளைச் செலவு": b_exp_amt,
+                    "ரொக்க வரவு": b_cash_in,
+                    "ரொக்கப் பற்று": b_cash_out,
+                    "நிகர ரொக்கப் புழக்கம்": net_cash_flow,
+                })
 
                 branch_details_cache[b_id] = {
                     "drawer": drawer_stock,
@@ -2802,9 +2719,7 @@ if st.session_state.get("logged_in", False):
                     "transfers": b_trans_list,
                 }
 
-            # =========================================================================
-            # 5. தலைமை மேலோட்ட சுருக்க கார்டுகள் (Top KPI Cards)
-            # =========================================================================
+            # KPI Cards
             st.markdown("---")
             k1, k2, k3, k4 = st.columns(4)
             k1.metric("💰 மொத்த நேரடி கல்லா ரொக்கம்", f"₹{gt_live_cash:,.2f}")
@@ -2823,71 +2738,48 @@ if st.session_state.get("logged_in", False):
             k8.metric("📤 HO-க்கு கொடுத்தது", f"₹{gt_ho_sent:,.2f}")
             st.markdown("---")
 
-            # =========================================================================
-            # 6. இரண்டு தனித்தனி அட்டவணைகள் (Two Focused Tabs)
-            # =========================================================================
-            dash_tab_biz, dash_tab_cash = st.tabs(
-                [
-                    "📊 1. கிளை வாரியான வணிக ஒப்பீடு (Business Operations)",
-                    "💵 2. கல்லா, வங்கி, HO & செலவுகள் சமரசம் (Cash & Bank Flow)",
-                ]
-            )
+            # Two Focused Tabs
+            dash_tab_biz, dash_tab_cash = st.tabs([
+                "📊 1. கிளை வாரியான வணிக ஒப்பீடு (Business Operations)",
+                "💵 2. கல்லா, வங்கி, HO & செலவுகள் சமரசம் (Cash & Bank Flow)",
+            ])
 
-            # -------------------------------------------------------------
-            # டேப் 1: வணிகச் செயல்பாடுகள் (Business Performance)
-            # -------------------------------------------------------------
             with dash_tab_biz:
-                st.markdown(
-                    f"##### 📊 கிளை வாரியான வணிக விவரங்கள் ({selected_report_date.strftime('%d-%b-%Y')})"
-                )
-                df_biz = pd.DataFrame(
-                    [
-                        {
-                            "கிளை": r["கிளை"],
-                            "🪙 புதிய கடன்": f"₹{r['புதிய கடன்']:,.2f} ({r['கடன் எண்ணிக்கை']})",
-                            "🔓 கடன் அசல் வரவு": f"₹{r['கடன் அசல் வசூல்']:,.2f}",
-                            "🏷️ கடன் வட்டி வரவு": f"₹{r['கடன் வட்டி வசூல்']:,.2f}",
-                            "📥 RD வசூல்": f"₹{r['RD வசூல்']:,.2f}",
-                            "📥 FD வசூல்": f"₹{r['FD வசூல்']:,.2f}",
-                            "📤 கொடுத்த RD வட்டி": f"₹{r['கொடுத்த RD வட்டி']:,.2f}",
-                            "📤 கொடுத்த FD வட்டி": f"₹{r['கொடுத்த FD வட்டி']:,.2f}",
-                            "📕 முடித்த RD": f"₹{r['முடித்த RD']:,.2f}",
-                            "📘 முடித்த FD": f"₹{r['முடித்த FD']:,.2f}",
-                        }
-                        for r in branch_summary
-                    ]
-                )
-
+                st.markdown(f"##### 📊 கிளை வாரியான வணிக விவரங்கள் ({selected_report_date.strftime('%d-%b-%Y')})")
+                df_biz = pd.DataFrame([
+                    {
+                        "கிளை": r["கிளை"],
+                        "🪙 புதிய கடன்": f"₹{r['புதிய கடன்']:,.2f} ({r['கடன் எண்ணிக்கை']})",
+                        "🔓 கடன் அசல் வரவு": f"₹{r['கடன் அசல் வசூல்']:,.2f}",
+                        "🏷️ கடன் வட்டி வரவு": f"₹{r['கடன் வட்டி வசூல்']:,.2f}",
+                        "📥 RD வசூல்": f"₹{r['RD வசூல்']:,.2f}",
+                        "📥 FD வசூல்": f"₹{r['FD வசூல்']:,.2f}",
+                        "📤 கொடுத்த RD வட்டி": f"₹{r['கொடுத்த RD வட்டி']:,.2f}",
+                        "📤 கொடுத்த FD வட்டி": f"₹{r['கொடுத்த FD வட்டி']:,.2f}",
+                        "📕 முடித்த RD": f"₹{r['முடித்த RD']:,.2f}",
+                        "📘 முடித்த FD": f"₹{r['முடித்த FD']:,.2f}",
+                    } for r in branch_summary
+                ])
                 st.dataframe(df_biz, use_container_width=True)
 
-            # -------------------------------------------------------------
-            # டேப் 2: பணப்புழக்கம், வங்கி, HO & செலவுகள் (Cash, Bank, HO & Expenses)
-            # -------------------------------------------------------------
             with dash_tab_cash:
-                st.markdown(
-                    f"##### 💵 கிளை வாரியான கல்லா, வங்கி, HO பரிமாற்றம் & செலவுகள் ({selected_report_date.strftime('%d-%b-%Y')})"
-                )
-                df_cash = pd.DataFrame(
-                    [
-                        {
-                            "கிளை": r["கிளை"],
-                            "💵 நேரடி கல்லா": f"₹{r['கல்லா இருப்பு']:,.2f}",
-                            "📥 HO-லிருந்து வாங்கியது": f"₹{r['HO-லிருந்து வாங்கியது']:,.2f}",
-                            "📤 HO-க்கு கொடுத்தது": f"₹{r['HO-க்கு கொடுத்தது']:,.2f}",
-                            "🏦 வங்கி வரவு (UPI/QR)": f"₹{r['வங்கி வரவு']:,.2f}",
-                            "💳 வங்கி செலுத்தியது": f"₹{r['வங்கி செலுத்தியது']:,.2f}",
-                            "💸 கிளைச் செலவு": f"₹{r['கிளைச் செலவு']:,.2f}",
-                            "🟢 அன்றைய ரொக்க வரவு": f"₹{r['ரொக்க வரவு']:,.2f}",
-                            "🔴 அன்றைய ரொக்கப் பற்று": f"₹{r['ரொக்கப் பற்று']:,.2f}",
-                            "📈 நிகர ரொக்கப் புழக்கம்": f"₹{r['நிகர ரொக்கப் புழக்கம்']:+,.2f}",
-                        }
-                        for r in branch_summary
-                    ]
-                )
-
+                st.markdown(f"##### 💵 கிளை வாரியான கல்லா, வங்கி, HO பரிமாற்றம் & செலவுகள் ({selected_report_date.strftime('%d-%b-%Y')})")
+                df_cash = pd.DataFrame([
+                    {
+                        "கிளை": r["கிளை"],
+                        "💵 நேரடி கல்லா": f"₹{r['கல்லா இருப்பு']:,.2f}",
+                        "📥 HO-லிருந்து வாங்கியது": f"₹{r['HO-லிருந்து வாங்கியது']:,.2f}",
+                        "📤 HO-க்கு கொடுத்தது": f"₹{r['HO-க்கு கொடுத்தது']:,.2f}",
+                        "🏦 வங்கி வரவு (UPI/QR)": f"₹{r['வங்கி வரவு']:,.2f}",
+                        "💳 வங்கி செலுத்தியது": f"₹{r['வங்கி செலுத்தியது']:,.2f}",
+                        "💸 கிளைச் செலவு": f"₹{r['கிளைச் செலவு']:,.2f}",
+                        "🟢 அன்றைய ரொக்க வரவு": f"₹{r['ரொக்க வரவு']:,.2f}",
+                        "🔴 அன்றைய ரொக்கப் பற்று": f"₹{r['ரொக்கப் பற்று']:,.2f}",
+                        "📈 நிகர ரொக்கப் புழக்கம்": f"₹{r['நிகர ரொக்கப் புழக்கம்']:+,.2f}",
+                    } for r in branch_summary
+                ])
                 st.dataframe(df_cash, use_container_width=True)
 
-            # முழு எக்செல் பதிவிறக்கம்
             full_export_df = pd.DataFrame(branch_summary)
             csv_full = full_export_df.to_csv(index=False).encode("utf-8-sig")
             st.download_button(
@@ -2896,14 +2788,9 @@ if st.session_state.get("logged_in", False):
                 file_name=f"Muthusise_Full_Financial_Summary_{sel_date_str}.csv",
                 mime="text/csv",
             )
-
             st.markdown("---")
 
-            # =========================================================================
-            # 7. கிளை வாரியான நேரடி ஆய்வு (Drilldown Expanders)
-            # =========================================================================
             st.markdown("#### 🔍 கிளை வாரியான நேரடி நோட்டுகள், HO & செலவு விவரங்கள்")
-
             for r in branch_summary:
                 bid = r["branch_id"]
                 binfo = branch_details_cache.get(bid, {})
@@ -2915,152 +2802,182 @@ if st.session_state.get("logged_in", False):
                 with st.expander(
                     f"📍 {r['கிளை']} | 💵 நேரடி கல்லா: ₹{r['கல்லா இருப்பு']:,.2f} | 🏦 வங்கி வரவு: ₹{r['வங்கி வரவு']:,.2f} | 🏢 HO வரவு: ₹{r['HO-லிருந்து வாங்கியது']:,.2f} | 💸 செலவு: ₹{r['கிளைச் செலவு']:,.2f}"
                 ):
-                    sub_c1, sub_c2, sub_c3, sub_c4 = st.tabs(
-                        [
-                            "💵 கல்லா நோட்டுகள் (Drawer)",
-                            "🏢 HO பணப் பரிமாற்றம்",
-                            "💸 கிளைச் செலவுகள்",
-                            "📑 பரிவர்த்தனைகள்",
-                        ]
-                    )
+                    sub_c1, sub_c2, sub_c3, sub_c4 = st.tabs([
+                        "💵 கல்லா நோட்டுகள் (Drawer)",
+                        "🏢 HO பணப் பரிமாற்றம்",
+                        "💸 கிளைச் செலவுகள்",
+                        "📑 பரிவர்த்தனைகள்",
+                    ])
 
-                    # அ. கல்லா நோட்டுகள் கையிருப்பு
                     with sub_c1:
-                        st.caption(
-                            f"📍 {r['b_name']} கிளையின் கல்லாவில் உள்ள நேரடி நோட்டுகள் நிலவரம்:"
-                        )
+                        st.caption(f"📍 {r['b_name']} கிளையின் கல்லாவில் உள்ள நேரடி நோட்டுகள் நிலவரம்:")
                         cd1, cd2, cd3, cd4 = st.columns(4)
-                        cd1.metric(
-                            "₹500 தாள்கள்",
-                            f"{drw.get('500', 0)} nos",
-                            f"₹{int(drw.get('500', 0)) * 500:,.2f}",
-                        )
-                        cd1.metric(
-                            "₹20 தாள்கள்",
-                            f"{drw.get('20', 0)} nos",
-                            f"₹{int(drw.get('20', 0)) * 20:,.2f}",
-                        )
+                        cd1.metric("₹500 தாள்கள்", f"{drw.get('500', 0)} nos", f"₹{int(drw.get('500', 0)) * 500:,.2f}")
+                        cd1.metric("₹20 தாள்கள்", f"{drw.get('20', 0)} nos", f"₹{int(drw.get('20', 0)) * 20:,.2f}")
+                        cd2.metric("₹200 தாள்கள்", f"{drw.get('200', 0)} nos", f"₹{int(drw.get('200', 0)) * 200:,.2f}")
+                        cd2.metric("₹10 தாள்கள்", f"{drw.get('10', 0)} nos", f"₹{int(drw.get('10', 0)) * 10:,.2f}")
+                        cd3.metric("₹100 தாள்கள்", f"{drw.get('100', 0)} nos", f"₹{int(drw.get('100', 0)) * 100:,.2f}")
+                        cd3.metric("₹5 தாள்கள்", f"{drw.get('5', 0)} nos", f"₹{int(drw.get('5', 0)) * 5:,.2f}")
+                        cd4.metric("₹50 தாள்கள்", f"{drw.get('50', 0)} nos", f"₹{int(drw.get('50', 0)) * 50:,.2f}")
+                        cd4.metric("நாணயங்கள் (₹)", f"₹{float(drw.get('coins', 0)):,.2f}")
+                        st.success(f"**மொத்த ரொக்க மதிப்பு: ₹{r['கல்லா இருப்பு']:,.2f}**")
 
-                        cd2.metric(
-                            "₹200 தாள்கள்",
-                            f"{drw.get('200', 0)} nos",
-                            f"₹{int(drw.get('200', 0)) * 200:,.2f}",
-                        )
-                        cd2.metric(
-                            "₹10 தாள்கள்",
-                            f"{drw.get('10', 0)} nos",
-                            f"₹{int(drw.get('10', 0)) * 10:,.2f}",
-                        )
-
-                        cd3.metric(
-                            "₹100 தாள்கள்",
-                            f"{drw.get('100', 0)} nos",
-                            f"₹{int(drw.get('100', 0)) * 100:,.2f}",
-                        )
-                        cd3.metric(
-                            "₹5 தாள்கள்",
-                            f"{drw.get('5', 0)} nos",
-                            f"₹{int(drw.get('5', 0)) * 5:,.2f}",
-                        )
-
-                        cd4.metric(
-                            "₹50 தாள்கள்",
-                            f"{drw.get('50', 0)} nos",
-                            f"₹{int(drw.get('50', 0)) * 50:,.2f}",
-                        )
-                        cd4.metric(
-                            "நாணயங்கள் (₹)", f"₹{float(drw.get('coins', 0)):,.2f}"
-                        )
-                        st.success(
-                            f"**மொத்த ரொக்க மதிப்பு: ₹{r['கல்லா இருப்பு']:,.2f}**"
-                        )
-
-                    # ஆ. HO பரிமாற்றங்கள்
                     with sub_c2:
                         if not trans_list:
                             st.info("அன்று தலைமையகப் பணப் பரிமாற்றங்கள் ஏதும் இல்லை.")
                         else:
-                            st.dataframe(
-                                pd.DataFrame(
-                                    [
-                                        {
-                                            "வகை": (
-                                                "📥 HO ➔ கிளைக்கு வரவு"
-                                                if tr.get("transfer_type")
-                                                == "HO_TO_BRANCH"
-                                                else "📤 கிளை ➔ HO-க்கு அனுப்பியது"
-                                            ),
-                                            "தொகை": f"₹{float(tr.get('amount', 0)):,.2f}",
-                                            "முறை": tr.get("payment_mode", "-"),
-                                            "குறிப்பு / UTR": tr.get(
-                                                "reference_no", "-"
-                                            ),
-                                            "நிலை": tr.get("status", "-"),
-                                        }
-                                        for tr in trans_list
-                                    ]
-                                ),
-                                use_container_width=True,
-                            )
+                            st.dataframe(pd.DataFrame([
+                                {
+                                    "வகை": "📥 HO ➔ கிளைக்கு வரவு" if tr.get("transfer_type") == "HO_TO_BRANCH" else "📤 கிளை ➔ HO-க்கு அனுப்பியது",
+                                    "தொகை": f"₹{float(tr.get('amount', 0)):,.2f}",
+                                    "முறை": tr.get("payment_mode", "-"),
+                                    "குறிப்பு / UTR": tr.get("reference_no", "-"),
+                                    "நிலை": tr.get("status", "-"),
+                                } for tr in trans_list
+                            ]), use_container_width=True)
 
-                    # இ. கிளைச் செலவுகள்
                     with sub_c3:
                         if not exp_list:
-                            st.info(
-                                "அன்று அங்கீகரிக்கப்பட்ட கிளைச் செலவுகள் ஏதும் இல்லை."
-                            )
+                            st.info("அன்று அங்கீகரிக்கப்பட்ட கிளைச் செலவுகள் ஏதும் இல்லை.")
                         else:
-                            st.dataframe(
-                                pd.DataFrame(
-                                    [
-                                        {
-                                            "தலைப்பு / காரணம்": e.get(
-                                                "title", e.get("expense_category", "-")
-                                            ),
-                                            "தொகை": f"₹{float(e.get('amount', 0) or 0):,.2f}",
-                                            "விளக்கம்": e.get("description", "-"),
-                                            "பதிவு செய்தவர்": e.get("created_by", "-"),
-                                        }
-                                        for e in exp_list
-                                    ]
-                                ),
-                                use_container_width=True,
-                            )
+                            st.dataframe(pd.DataFrame([
+                                {
+                                    "தலைப்பு / காரணம்": e.get("title", e.get("expense_category", "-")),
+                                    "தொகை": f"₹{float(e.get('amount', 0) or 0):,.2f}",
+                                    "விளக்கம்": e.get("description", "-"),
+                                    "பதிவு செய்தவர்": e.get("created_by", "-"),
+                                } for e in exp_list
+                            ]), use_container_width=True)
 
-                    # ஈ. வாடிக்கையாளர் பரிவர்த்தனைகள்
                     with sub_c4:
                         if not tx_list:
                             st.info("அன்று வாடிக்கையாளர் பரிவர்த்தனைகள் ஏதும் இல்லை.")
                         else:
-                            st.dataframe(
-                                pd.DataFrame(
-                                    [
-                                        {
-                                            "நேரம்": (
-                                                str(t.get("created_at", ""))[-8:-3]
-                                                if t.get("created_at")
-                                                else "-"
-                                            ),
-                                            "வாடிக்கையாளர்": t.get(
-                                                "customer_name", "-"
-                                            ),
-                                            "பரிவர்த்தனை வகை": t.get(
-                                                "transaction_type", "-"
-                                            ),
-                                            "கொடுத்தது (Paid)": f"₹{float(t.get('paid_amount', 0) or 0):,.2f}",
-                                            "பெற்றது (Received)": f"₹{float(t.get('received_amount', 0) or 0):,.2f}",
-                                            "பணியாளர்": t.get("staff_name", "-"),
-                                            "குறிப்பு": t.get("remarks", "-"),
-                                        }
-                                        for t in tx_list
-                                    ]
-                                ),
-                                use_container_width=True,
-                            )
-            # ==============================================================================
-            # 📦 தலைமையக நகைப் பெட்டகம், லாக்கர் & GP உருக்குதல் மேலாண்மை
-            # ==============================================================================
-        elif selected_section == "📦 பாக்கெட் & லாக்கர் மேலாண்மை":
+                            st.dataframe(pd.DataFrame([
+                                {
+                                    "நேரம்": str(t.get("created_at", ""))[-8:-3] if t.get("created_at") else "-",
+                                    "வாடிக்கையாளர்": t.get("customer_name", "-"),
+                                    "பரிவர்த்தனை வகை": t.get("transaction_type", "-"),
+                                    "கொடுத்தது (Paid)": f"₹{float(t.get('paid_amount', 0) or 0):,.2f}",
+                                    "பெற்றது (Received)": f"₹{float(t.get('received_amount', 0) or 0):,.2f}",
+                                    "பணியாளர்": t.get("staff_name", "-"),
+                                    "குறிப்பு": t.get("remarks", "-"),
+                                } for t in tx_list
+                            ]), use_container_width=True)
+
+        # -------------------------------------------------------------
+        # புதிதாக இணைக்கப்பட்ட பிரிவு: தினசரி தங்க/வெள்ளி விலை நிர்ணயம்
+        # -------------------------------------------------------------
+        elif selected_section == "🪙 தினசரி தங்க/வெள்ளி விலை நிர்ணயம்":
+            st.subheader("🪙 தினசரி தங்க/வெள்ளி விலை நிர்ணயம் (Daily Rates Update)")
+            st.caption(
+                "இங்கு உள்ளிடப்படும் விலைகள் நேரடியாக **www.muthusisegold.com** இணையதளத்தின் நேரலை ஸ்க்ரோலிங்கில் உடனுக்குடன் பிரதிபலிக்கும்."
+            )
+
+            # Supabase-ல் இருந்து நடப்பு விலைகளை எடுத்தல்
+            try:
+                rate_res = supabase.table("daily_rates").select("*").eq("id", 1).execute()
+                curr_rates = rate_res.data[0] if (rate_res and rate_res.data) else {}
+            except Exception as e:
+                curr_rates = {}
+                st.error(f"விலைத் தகவல்களைப் பெறுவதில் பிழை: {e}")
+
+            # கடைசி அப்டேட் விவரம்
+            if curr_rates.get("updated_at"):
+                last_time = str(curr_rates.get("updated_at", ""))[:19].replace("T", " ")
+                updated_by = curr_rates.get("updated_by", "நிர்வாகம்")
+                st.info(f"🕒 **கடைசியாக புதுப்பிக்கப்பட்டது:** {last_time} | **பதிவு செய்தவர்:** {updated_by}")
+
+            st.markdown("---")
+
+            # விலை உள்ளீட்டு படிவம்
+            with st.form("admin_gold_rate_update_form"):
+                col_g1, col_g2 = st.columns(2)
+
+                with col_g1:
+                    st.markdown("##### 🟡 தங்க விலை நிலவரம் (Gold Rates)")
+                    new_g22_1g = st.number_input(
+                        "22K தங்கம் (1 கிராம்) ₹",
+                        min_value=1000,
+                        max_value=25000,
+                        value=int(curr_rates.get("gold_22k_1g", 7150)),
+                        step=10,
+                    )
+                    new_g22_8g = st.number_input(
+                        "22K தங்கம் 1 பவுன் (8 கிராம்) ₹",
+                        min_value=8000,
+                        max_value=200000,
+                        value=int(curr_rates.get("gold_22k_8g", 57200)),
+                        step=50,
+                    )
+                    new_g24_1g = st.number_input(
+                        "24K சுத்த தங்கம் (1 கிராம்) ₹",
+                        min_value=1000,
+                        max_value=30000,
+                        value=int(curr_rates.get("gold_24k_1g", 7790)),
+                        step=10,
+                    )
+
+                with col_g2:
+                    st.markdown("##### ⚪ வெள்ளி & கடன் நிலவரம் (Silver & Loan)")
+                    new_s_1g = st.number_input(
+                        "வெள்ளி (1 கிராம்) ₹",
+                        min_value=10.0,
+                        max_value=500.0,
+                        value=float(curr_rates.get("silver_1g", 99.0)),
+                        step=0.5,
+                        format="%.2f",
+                    )
+                    new_s_1kg = st.number_input(
+                        "வெள்ளி (1 கிலோ) ₹",
+                        min_value=10000,
+                        max_value=500000,
+                        value=int(curr_rates.get("silver_1kg", 99000)),
+                        step=100,
+                    )
+                    new_j_loan = st.number_input(
+                        "நகைக் கடன் உச்சவரம்பு (கிராமிற்கு) ₹",
+                        min_value=1000,
+                        max_value=20000,
+                        value=int(curr_rates.get("jewel_loan_max", 5600)),
+                        step=50,
+                    )
+
+                st.write("")
+                btn_rate_submit = st.form_submit_button(
+                    "🚀 இணையதளத்தில் விலையை உடனே புதுப்பிக்குக",
+                    type="primary",
+                    use_container_width=True,
+                )
+
+                if btn_rate_submit:
+                    user_disp = st.session_state.get("user_name") or st.session_state.get("staff_name") or "Authorized Staff"
+                    payload = {
+                        "gold_22k_1g": int(new_g22_1g),
+                        "gold_22k_8g": int(new_g22_8g),
+                        "gold_24k_1g": int(new_g24_1g),
+                        "silver_1g": float(new_s_1g),
+                        "silver_1kg": int(new_s_1kg),
+                        "jewel_loan_max": int(new_j_loan),
+                        "updated_at": datetime.now().isoformat(),
+                        "updated_by": user_disp,
+                    }
+
+                    try:
+                        supabase.table("daily_rates").upsert({
+                            "id": 1,
+                            **payload
+                        }).execute()
+                        st.success("🎉 வாழ்த்துகள்! புதிய தங்க/வெள்ளி விலைகள் வெற்றிகரமாக சேமிக்கப்பட்டு இணையதளத்தில் உடனுக்குடன் நேரலையாகிவிட்டன!")
+                        st.balloons()
+                        st.rerun()
+                    except Exception as err:
+                        st.error(f"விலையைப் புதுப்பிப்பதில் பிழை ஏற்பட்டது: {err}")
+
+        # -------------------------------------------------------------
+        # பிரிவு: பாக்கெட் & லாக்கர் மேலாண்மை (தொடர்ச்சி)
+        # -------------------------------------------------------------
+        elif selected_section == "📦 பாக்கெட் & லாக்கர் மேலாண்மை":            
             st.subheader(
                 "📦 நகைப் பாக்கெட் நகர்வு, வங்கி லாக்கர் & GP உருக்குதல் மேலாண்மை"
             )
