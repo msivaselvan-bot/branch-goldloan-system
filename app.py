@@ -1584,6 +1584,7 @@ def render_staff_attribution_report(selected_branch_id=None):
         else 15.0
     )
 
+    # இன்சென்டிவ் விதிகளை எடுத்தல்
     inc_rules = (
         supabase.table("staff_incentive_rules")
         .select("*")
@@ -1594,18 +1595,18 @@ def render_staff_attribution_report(selected_branch_id=None):
     )
     rule_dict = {}
     for r in inc_rules:
-        t_type = r.get("transaction_type")
-        sch_name = r.get("scheme_name", "All")
+        t_type = r.get("transaction_type", "").strip()
+        sch_name = r.get("scheme_name", "All").strip()
         rule_dict[(t_type, sch_name)] = r
 
     # -------------------------------------------------------------
-    # 🎯 recurring_deposits அட்டவணையில் இருந்து RD துவக்கத் தேதிகளை எடுத்தல்
+    # 🎯 recurring_deposits அட்டவணையில் இருந்து துவக்கத் தேதி & திட்டப் பெயரை எடுத்தல்
     # -------------------------------------------------------------
-    rd_open_dates = {}
+    rd_accounts_info = {}
     try:
         rd_acc_res = (
             supabase.table("recurring_deposits")
-            .select("rd_account_no, created_at")
+            .select("rd_account_no, created_at, scheme_name")
             .execute()
             .data
             or []
@@ -1613,10 +1614,12 @@ def render_staff_attribution_report(selected_branch_id=None):
         for r in rd_acc_res:
             acc_no = str(r.get("rd_account_no", "")).strip().upper()
             if acc_no:
-                # துவக்கத் தேதியை 'YYYY-MM-DD' வடிவத்தில் சேமித்தல்
-                rd_open_dates[acc_no] = str(r.get("created_at", ""))[:10]
+                rd_accounts_info[acc_no] = {
+                    "open_date": str(r.get("created_at", ""))[:10],
+                    "scheme_name": (r.get("scheme_name") or "All").strip(),
+                }
     except Exception as e:
-        st.warning(f"RD கணக்குகளின் விவரங்களைப் பெறுவதில் சிக்கல்: {e}")
+        st.warning(f"RD விவரங்களைப் பெறுவதில் பிழை: {e}")
 
     rd_cutoff_date = date(2026, 10, 1)
 
@@ -1727,39 +1730,93 @@ def render_staff_attribution_report(selected_branch_id=None):
             else:
                 effective_vol = paid_val if paid_val > 0 else rec_val
 
+            # தொடக்க திட்டப் பெயர் (Fallback)
             detected_scheme = "All"
             try:
                 if "ஸ்கீம்:" in remarks_str:
-                    detected_scheme = (
-                        remarks_str.split("ஸ்கீம்:")[1].split("|")[0].strip()
-                    )
+                    detected_scheme = remarks_str.split("ஸ்கீம்:")[1].split("|")[0].strip()
                 elif "Scheme:" in remarks_str:
-                    detected_scheme = (
-                        remarks_str.split("Scheme:")[1].split("|")[0].strip()
-                    )
+                    detected_scheme = remarks_str.split("Scheme:")[1].split("|")[0].strip()
             except Exception:
                 detected_scheme = "All"
 
-            # விதியைப் பொருத்துதல்
-            matched_rule = None
+            is_pre_cutoff = False
+
+            # -------------------------------------------------------------
+            # ⭐ RD தவணை: திட்டப் பெயர் மற்றும் வெட்டுத் தேதி பொருத்துதல்
+            # -------------------------------------------------------------
             if "RD Due" in txn_type or "RD தவணை" in txn_type:
+                extracted_acc_no = (
+                    t.get("account_no")
+                    or t.get("rd_account_no")
+                    or t.get("ref_no")
+                )
+
+                if not extracted_acc_no:
+                    # Remarks-லிருந்து RD கணக்கு எண்ணைப் பிரித்தல் (எ.கா: MYL/GSS/0003, KMK/RD/0002)
+                    match = re.search(r"\b([A-Z]{3}/[A-Z]{2,3}/\d+)\b", remarks_str, re.IGNORECASE)
+                    if not match:
+                        match = re.search(r"\b(RD[-\s]?\d+)\b", remarks_str, re.IGNORECASE)
+                    if match:
+                        extracted_acc_no = match.group(1).strip()
+
+                if extracted_acc_no:
+                    norm_acc_no = str(extracted_acc_no).strip().upper()
+                    acc_info = rd_accounts_info.get(norm_acc_no)
+
+                    # ஸ்லாஷ்/ஹைபன் இல்லாமல் இருந்தால் தேடுதல்
+                    if not acc_info:
+                        norm_clean = re.sub(r"[^A-Z0-9]", "", norm_acc_no)
+                        for k, v_info in rd_accounts_info.items():
+                            if re.sub(r"[^A-Z0-9]", "", k) == norm_clean:
+                                acc_info = v_info
+                                break
+
+                    if acc_info:
+                        # 1. டேட்டாபேஸில் உள்ள திட்டப் பெயரை நேரடியாகப் பொருத்துதல்
+                        if acc_info.get("scheme_name") and acc_info.get("scheme_name") != "All":
+                            detected_scheme = acc_info.get("scheme_name")
+
+                        # 2. தொடக்கத் தேதி 01/10/2026-க்கு முந்தையதா எனச் சரிபார்த்தல்
+                        open_dt_str = acc_info.get("open_date")
+                        if open_dt_str:
+                            try:
+                                acc_dt = datetime.strptime(open_dt_str[:10], "%Y-%m-%d").date()
+                                if acc_dt < rd_cutoff_date:
+                                    is_pre_cutoff = True
+                            except Exception:
+                                pass
+
+            # -------------------------------------------------------------
+            # 🎯 குறிப்பிட்ட திட்டத்திற்கான விதியைப் பொருத்துதல்
+            # -------------------------------------------------------------
+            matched_rule = None
+            for (rt_type, r_sch), r_obj in rule_dict.items():
+                is_type_match = (rt_type == txn_type) or (
+                    ("RD Due" in txn_type or "RD தவணை" in txn_type)
+                    and ("RD Due" in rt_type or "RD தவணை" in rt_type)
+                )
+                if is_type_match and r_sch == detected_scheme:
+                    matched_rule = r_obj
+                    break
+
+            # குறிப்பிட்ட திட்டம் கிடைக்கவில்லை எனில் 'All' விதியைப் பொருத்துதல்
+            if not matched_rule:
                 for (rt_type, r_sch), r_obj in rule_dict.items():
-                    if ("RD Due" in rt_type or "RD தவணை" in rt_type) and (
-                        r_sch == detected_scheme or r_sch == "All"
-                    ):
+                    is_type_match = (rt_type == txn_type) or (
+                        ("RD Due" in txn_type or "RD தவணை" in txn_type)
+                        and ("RD Due" in rt_type or "RD தவணை" in rt_type)
+                    )
+                    if is_type_match and r_sch == "All":
                         matched_rule = r_obj
                         break
 
             if not matched_rule:
-                matched_rule = (
-                    rule_dict.get((txn_type, detected_scheme))
-                    or rule_dict.get((txn_type, "All"))
-                    or {
-                        "basis_type": "Amount",
-                        "unit_value": 1000.0 if ("RD Due" in txn_type or "RD தவணை" in txn_type) else 100000.0,
-                        "points_per_unit": 10.0,
-                    }
-                )
+                matched_rule = {
+                    "basis_type": "Amount",
+                    "unit_value": 1000.0 if ("RD Due" in txn_type or "RD தவணை" in txn_type) else 100000.0,
+                    "points_per_unit": 10.0,
+                }
 
             basis = matched_rule.get("basis_type", "Amount")
             unit_val = float(matched_rule.get("unit_value", 100000.0) or 100000.0)
@@ -1791,48 +1848,10 @@ def render_staff_attribution_report(selected_branch_id=None):
                     calc_pts = abs(base_calc)
                 disp_val = f"₹{effective_vol:,.2f}"
 
-            # -------------------------------------------------------------
-            # ⭐ 01/10/2026-க்கு முந்தைய RD கணக்கா எனச் சரிபார்த்தல் ⭐
-            # -------------------------------------------------------------
-            if "RD Due" in txn_type or "RD தவணை" in txn_type:
-                # 1. கணக்கு எண்ணைப் பரிவர்த்தனைப் புலங்கள் அல்லது remarks-லிருந்து கண்டறிதல்
-                extracted_acc_no = (
-                    t.get("account_no")
-                    or t.get("rd_account_no")
-                    or t.get("ref_no")
-                )
-
-                if not extracted_acc_no:
-                    # remarks-ல் RD எண் உள்ளதா என Regex மூலம் தேடுதல் (எ.கா: RD-001, RD101)
-                    match = re.search(r"\b(RD[-\s]?\d+)\b", remarks_str, re.IGNORECASE)
-                    if match:
-                        extracted_acc_no = match.group(1).strip()
-
-                is_pre_cutoff = False
-                if extracted_acc_no:
-                    norm_acc_no = str(extracted_acc_no).strip().upper()
-                    # recurring_deposits வரைபடத்தில் தேடுதல்
-                    open_dt_str = rd_open_dates.get(norm_acc_no)
-                    if not open_dt_str:
-                        # இடைவெளி அல்லது ஹைபன் இல்லாமல் இருந்தால் தேடுதல்
-                        norm_clean = re.sub(r"[-\s]", "", norm_acc_no)
-                        for k, v_dt in rd_open_dates.items():
-                            if re.sub(r"[-\s]", "", k) == norm_clean:
-                                open_dt_str = v_dt
-                                break
-
-                    if open_dt_str:
-                        try:
-                            acc_dt = datetime.strptime(open_dt_str[:10], "%Y-%m-%d").date()
-                            if acc_dt < rd_cutoff_date:
-                                is_pre_cutoff = True
-                        except Exception:
-                            pass
-
-                # 01/10/2026-க்கு முன்பு உருவாக்கப்பட்ட RD கணக்கு எனில் 0 புள்ளிகள்
-                if is_pre_cutoff:
-                    calc_pts = 0.0
-                    remarks_str += f" | (பழைய RD: {extracted_acc_no} - 01/10/2026-க்கு முந்தையது என்பதால் 0 புள்ளிகள்)"
+            # 01/10/2026-க்கு முந்தைய கணக்கு எனில் புள்ளிகள் = 0
+            if ("RD Due" in txn_type or "RD தவணை" in txn_type) and is_pre_cutoff:
+                calc_pts = 0.0
+                remarks_str += f" | (பழைய RD - திட்டப் பெயர்: {detected_scheme} - 01/10/2026-க்கு முந்தையது என்பதால் 0 புள்ளிகள்)"
 
             # பணியாளர் ஒதுக்கீடு
             assigned_staff_list = []
