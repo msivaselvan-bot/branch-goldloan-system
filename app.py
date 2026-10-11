@@ -2364,7 +2364,7 @@ if st.session_state.get("logged_in", False):
         "⚠️ விளக்கங்கள்",
         "💼 கிளை கல்லா",
         "🏦 HO பணப் பரிமாற்றம்",
-        "📈 காரணப் பணியாளர் அறிக்கை",
+        "📈 கிளை காரணப் பணியாளர் அறிக்கை",
         "📦 நகைப் பாக்கெட்கள் மேலாண்மை",
         "🏦 நிதிப் பரிமாற்ற ஒப்புதல்",
         "👤 புதிய வாடிக்கையாளர் KYC",
@@ -3826,7 +3826,7 @@ if st.session_state.get("logged_in", False):
                             "⚠️ விளக்கங்கள்",
                             "💼 கிளை கல்லா",
                             "🏦 HO பணப் பரிமாற்றம்",
-                            "📈 காரணப் பணியாளர் அறிக்கை",
+                            "📈 கிளை காரணப் பணியாளர் அறிக்கை",
                             "📦 நகைப் பாக்கெட்கள் மேலாண்மை",
                             "🏦 நிதிப் பரிமாற்ற ஒப்புதல்",
                             "👤 புதிய வாடிக்கையாளர் KYC",
@@ -8794,7 +8794,7 @@ if st.session_state.get("logged_in", False):
                     use_container_width=True,
                 )
 
-        elif selected_section == "📈 காரணப் பணியாளர் அறிக்கை":
+        elif selected_section == "📈 கிளை காரணப் பணியாளர் அறிக்கை":
             render_staff_attribution_report(
                 selected_branch_id=st.session_state.branch_id
             )
