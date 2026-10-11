@@ -1635,6 +1635,9 @@ def render_staff_attribution_report(selected_branch_id=None):
             staff_points_map[name] = 0.0
         staff_points_map[name] += pts
 
+    # RD கணக்குகளின் தொடக்கத் தேதியைச் சரிபார்க்கும் வெட்டுத் தேதி
+    rd_cutoff_date = date(2026, 10, 1)
+
     for v in visits:
         b_id = v.get("branch_id")
         b_name = (
@@ -1716,19 +1719,31 @@ def render_staff_attribution_report(selected_branch_id=None):
             except Exception:
                 detected_scheme = "All"
 
-            rule_info = (
-                rule_dict.get((txn_type, detected_scheme))
-                or rule_dict.get((txn_type, "All"))
-                or {
-                    "basis_type": "Amount",
-                    "unit_value": 100000.0,
-                    "points_per_unit": 10.0,
-                }
-            )
+            # -------------------------------------------------------------
+            # 🎯 விதியைப் பொருத்துதல் (Match Incentive Rule)
+            # -------------------------------------------------------------
+            # RD Due-க்கு முழுப் பெயரிலோ அல்லது சுருக்கமான பெயரிலோ உள்ள விதியைப் பொருத்துதல்
+            matched_rule = None
+            if "RD Due" in txn_type or "RD தவணை" in txn_type:
+                for (rt_type, r_sch), r_obj in rule_dict.items():
+                    if ("RD Due" in rt_type or "RD தவணை" in rt_type) and (r_sch == detected_scheme or r_sch == "All"):
+                        matched_rule = r_obj
+                        break
+            
+            if not matched_rule:
+                matched_rule = (
+                    rule_dict.get((txn_type, detected_scheme))
+                    or rule_dict.get((txn_type, "All"))
+                    or {
+                        "basis_type": "Amount",
+                        "unit_value": 1000.0 if ("RD Due" in txn_type or "RD தவணை" in txn_type) else 100000.0,
+                        "points_per_unit": 10.0,
+                    }
+                )
 
-            basis = rule_info.get("basis_type", "Amount")
-            unit_val = float(rule_info.get("unit_value", 100000.0) or 100000.0)
-            pts_per_unit = float(rule_info.get("points_per_unit", 10.0) or 0.0)
+            basis = matched_rule.get("basis_type", "Amount")
+            unit_val = float(matched_rule.get("unit_value", 100000.0) or 100000.0)
+            pts_per_unit = float(matched_rule.get("points_per_unit", 10.0) or 0.0)
 
             calc_pts = 0.0
             if basis == "Weight_Grams":
@@ -1756,6 +1771,47 @@ def render_staff_attribution_report(selected_branch_id=None):
                     calc_pts = abs(base_calc)
                 disp_val = f"₹{effective_vol:,.2f}"
 
+            # -------------------------------------------------------------
+            # ⭐ 01/10/2026-க்கு முந்தைய RD கணக்குகளுக்கு 0 புள்ளிகள் விதி ⭐
+            # -------------------------------------------------------------
+            if "RD Due" in txn_type or "RD தவணை" in txn_type:
+                is_pre_cutoff = False
+                
+                # 1. கணக்குத் துவக்கத் தேதி (account_open_date / rd_created_date) ட்ரான்ஸாக்ஷனில் இருந்தால்
+                acc_open_str = t.get("account_open_date") or t.get("rd_created_at") or t.get("created_at")
+                
+                # 2. அல்லது remarks-ல் "துவக்கம்:" / "Open Date:" என இருந்தால்
+                if "துவக்கம்:" in remarks_str:
+                    try:
+                        acc_open_str = remarks_str.split("துவக்கம்:")[1].split("|")[0].strip()
+                    except Exception:
+                        pass
+                elif "Open Date:" in remarks_str:
+                    try:
+                        acc_open_str = remarks_str.split("Open Date:")[1].split("|")[0].strip()
+                    except Exception:
+                        pass
+
+                # தேதியைச் சரிபார்த்தல்
+                if acc_open_str:
+                    try:
+                        parsed_dt = datetime.strptime(str(acc_open_str)[:10], "%Y-%m-%d").date()
+                        if parsed_dt < rd_cutoff_date:
+                            is_pre_cutoff = True
+                    except Exception:
+                        try:
+                            parsed_dt = datetime.strptime(str(acc_open_str)[:10], "%d/%m/%Y").date()
+                            if parsed_dt < rd_cutoff_date:
+                                is_pre_cutoff = True
+                        except Exception:
+                            pass
+                
+                # 01/10/2026-க்கு முந்தைய கணக்கு எனில் புள்ளிகள் = 0
+                if is_pre_cutoff:
+                    calc_pts = 0.0
+                    remarks_str += " | (01/10/2026-க்கு முந்தைய RD - 0 புள்ளிகள்)"
+
+            # பணியாளர்களுக்குப் புள்ளிகளைப் பிரித்து ஒதுக்குதல்
             assigned_staff_list = []
             if "Walk-in" in raw_staff or not raw_staff or "நேரடி" in raw_staff:
                 if total_staff_count == 2 and head_staff and other_staff:
@@ -4362,12 +4418,19 @@ if st.session_state.get("logged_in", False):
                     )
                 with ir_c4:
                     ir_unit = st.number_input(
-                        "அலகு மதிப்பு (Unit Value) *:", value=100000.0, step=100.0
+                        "அலகு மதிப்பு (Unit Value) *:", value=1000.0 if "RD" in ir_txn_type else 100000.0, step=100.0
                     )
                 with ir_c5:
                     ir_pts = st.number_input(
                         "புள்ளிகள் (Points Per Unit) *:", value=10.0, step=1.0
                     )
+
+                # RD Due-க்கு மட்டும் தொடக்க வெட்டுத் தேதி நிபந்தனை
+                from datetime import date
+                effective_from_date = None
+                if "RD Due" in ir_txn_type:
+                    st.info("ℹ️ RD தவணை வரவுக்கு 01/10/2026 முதல் துவங்கும் கணக்குகளுக்கு மட்டுமே புள்ளிகள் கணக்கிடப்படும். முந்தைய கணக்குகளுக்கு 0 புள்ளிகள் வழங்கப்படும்.")
+                    effective_from_date = date(2026, 10, 1)
 
                 if st.form_submit_button("ஸ்கீம் விதியைச் சேமி", type="primary"):
                     try:
@@ -4380,6 +4443,7 @@ if st.session_state.get("logged_in", False):
                             "basis_type": clean_basis,
                             "unit_value": float(ir_unit),
                             "points_per_unit": float(ir_pts),
+                            "effective_from": str(effective_from_date) if effective_from_date else None,
                             "is_active": True,
                         }
                         check_existing = (
@@ -4414,7 +4478,10 @@ if st.session_state.get("logged_in", False):
             if rules_view:
                 for r in rules_view:
                     rc1, rc2, rc3, rc4, rc5 = st.columns([2.5, 2, 1.5, 1.5, 1])
-                    rc1.write(f"**{r['transaction_type']}**")
+                    txn_name = r['transaction_type']
+                    if r.get('effective_from'):
+                        txn_name += f" *(துவக்கம்: {r['effective_from']} முதல் மட்டும்)*"
+                    rc1.write(f"**{txn_name}**")
                     rc2.write(f"ஸ்கீம்: `{r.get('scheme_name', 'All')}`")
                     rc3.write(
                         f"யூனிட்: ₹{float(r.get('unit_value', 1)):,.0f}"
