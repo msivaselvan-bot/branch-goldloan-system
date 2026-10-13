@@ -8734,9 +8734,14 @@ if st.session_state.get("logged_in", False):
                     "செலவுத் தொகைக்கு நாம் கொடுத்த நோட்டுகளையும், கடைக்காரர் திருப்பிக்"
                     " கொடுத்த மீதி சில்லறையையும் (Cash Return) சரியாக உள்ளிடவும்."
                 )
-
+                raw_b_id = st.session_state.get("branch_id")
+                try:
+                    clean_b_id = int(raw_b_id) if raw_b_id not in (None, "", "null") else 1
+                except (ValueError, TypeError):
+                    clean_b_id = 1
+                    
                 # 1. கிளையின் நடப்பு கல்லா நோட்டுகளின் எண்ணிக்கை மற்றும் இருப்பு
-                curr_b_drawer = get_current_branch_cash_drawer(st.session_state.branch_id)
+                curr_b_drawer = get_current_branch_cash_drawer(clean_b_id)
                 total_drawer_cash = (
                     (int(curr_b_drawer.get("500", 0)) * 500)
                     + (int(curr_b_drawer.get("200", 0)) * 200)
