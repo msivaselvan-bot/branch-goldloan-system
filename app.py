@@ -86,6 +86,18 @@ if selected_page == "📊 கிளை தினசரி ரிப்போர�
     # கீழே உள்ள வழக்கமான பரிவர்த்தனைப் பக்கம் தெரியக்கூடாது என்பதற்காக இதை நிறுத்தவும்:
     st.stop()
 
+    # -------------------------------------------------------------
+# 👇👇 இதற்கு கீழே சரியாக இங்கே ஒட்டவும் 👇👇
+# -------------------------------------------------------------
+user_branch_id = (
+    st.session_state.get("branch_id")
+    or st.session_state.get("user", {}).get("branch_id")
+)
+
+# கிளை ஐடி இருந்தால், பரிவர்த்தனை படிவங்களுக்கு மேலே கல்லா கார்டைக் காட்டுதல்:
+if user_branch_id:
+    render_branch_cash_header_card(user_branch_id)
+# -------------------------------------------------------------
 # ==============================================================================
 # ⚡ அதிவேக கேச்சிங் ஃபங்க்ஷன்கள் (Cache Data with TTL)
 # ==============================================================================
@@ -1544,7 +1556,112 @@ def get_current_branch_cash_drawer(branch_id):
     except Exception as e:
         return empty_stock
 
+# -------------------------------------------------------------
+# 💼 கிளை கல்லா நேரலை விட்ஜெட் ஃபங்ஷன்
+# -------------------------------------------------------------
+def render_branch_cash_header_card(branch_id):
+    if not branch_id:
+        return
 
+    # 1. கல்லா மாஸ்டர் மற்றும் நோட்டு விவரங்கள்
+    drawer_data = {}
+    try:
+        cash_drawer_res = (
+            supabase.table("branch_cash_drawer")
+            .select("*")
+            .eq("branch_id", branch_id)
+            .execute()
+            .data or []
+        )
+        if cash_drawer_res:
+            drawer_data = cash_drawer_res[0]
+    except Exception:
+        pass
+
+    approved_balance = float(drawer_data.get("current_cash_balance", 0.0) or 0.0)
+
+    # 2. அப்ரூவல் / போன் கால் வெரிஃபிகேஷனில் பெண்டிங் உள்ளவை
+    pending_inflow = 0.0
+    pending_outflow = 0.0
+
+    try:
+        pending_txns = (
+            supabase.table("transactions")
+            .select("transaction_type, cash_amount, received_amount, paid_amount, verification_status")
+            .eq("branch_id", branch_id)
+            .in_("verification_status", ["Pending Approval", "Pending Verification", "Pending Call Verification"])
+            .execute()
+            .data or []
+        )
+
+        for pt in pending_txns:
+            rec_amt = float(pt.get("received_amount") or pt.get("cash_amount") or 0.0)
+            paid_amt = float(pt.get("paid_amount") or 0.0)
+            if paid_amt > 0:
+                pending_outflow += paid_amt
+            else:
+                pending_inflow += rec_amt
+    except Exception:
+        pass
+
+    net_pending_diff = pending_inflow - pending_outflow
+    projected_final_balance = approved_balance + net_pending_diff
+
+    # 3. திரையில் தோன்றும் கார்டுகள்
+    st.markdown("### 💼 கிளை நேரலை கல்லா நிலவரம் (Live Cash Drawer)")
+    
+    m_col1, m_col2, m_col3 = st.columns(3)
+    with m_col1:
+        st.metric(
+            label="✅ உறுதிசெய்யப்பட்ட கல்லா இருப்பு",
+            value=f"₹{approved_balance:,.2f}",
+            help="ஆப்பரேஷன்ஸ் அணியால் அப்ரூவ் செய்யப்பட்ட நடப்பு இருப்பு"
+        )
+    with m_col2:
+        pending_sign = "+" if net_pending_diff >= 0 else "-"
+        st.metric(
+            label="⏳ சரிபார்ப்பில் உள்ள தொகை (Pending)",
+            value=f"₹{abs(net_pending_diff):,.2f}",
+            delta=f"{pending_sign}₹{abs(net_pending_diff):,.2f} (அப்ரூவல் நிலுவை)",
+            delta_color="off" if net_pending_diff == 0 else ("normal" if net_pending_diff > 0 else "inverse"),
+            help="ஆப்பரேஷன்ஸ் டீம் அப்ரூவல் மற்றும் தொலைபேசி அழைப்பு சரிபார்ப்பில் உள்ளவை"
+        )
+    with m_col3:
+        st.metric(
+            label="🎯 பெண்டிங் சரியானால் இறுதி கையிருப்பு",
+            value=f"₹{projected_final_balance:,.2f}",
+            delta="எதிர்பார்க்கப்படும் ரொக்கம்",
+            help="நிலுவைகள் சரியானால் கையில் இருக்கும் உண்மை இருப்பு"
+        )
+
+    # 4. நோட்டுகள் விவரம் (Expander)
+    with st.expander("🔍 நடப்பு ரூபாய் நோட்டு விவரங்கள் (Denomination Details)", expanded=False):
+        d_500 = int(drawer_data.get("notes_500", 0) or 0)
+        d_200 = int(drawer_data.get("notes_200", 0) or 0)
+        d_100 = int(drawer_data.get("notes_100", 0) or 0)
+        d_50  = int(drawer_data.get("notes_50", 0) or 0)
+        d_20  = int(drawer_data.get("notes_20", 0) or 0)
+        d_10  = int(drawer_data.get("notes_10", 0) or 0)
+        d_coins = float(drawer_data.get("coins", 0.0) or 0.0)
+
+        denom_records = [
+            {"ரூபாய் நோட்டு": "₹500", "எண்ணிக்கை": d_500, "மதிப்பு": f"₹{d_500 * 500:,.2f}"},
+            {"ரூபாய் நோட்டு": "₹200", "எண்ணிக்கை": d_200, "மதிப்பு": f"₹{d_200 * 200:,.2f}"},
+            {"ரூபாய் நோட்டு": "₹100", "எண்ணிக்கை": d_100, "மதிப்பு": f"₹{d_100 * 100:,.2f}"},
+            {"ரூபாய் நோட்டு": "₹50",  "எண்ணிக்கை": d_50,  "மதிப்பு": f"₹{d_50 * 50:,.2f}"},
+            {"ரூபாய் நோட்டு": "₹20",  "எண்ணிக்கை": d_20,  "மதிப்பு": f"₹{d_20 * 20:,.2f}"},
+            {"ரூபாய் நோட்டு": "₹10",  "எண்ணிக்கை": d_10,  "மதிப்பு": f"₹{d_10 * 10:,.2f}"},
+            {"ரூபாய் நோட்டு": "சில்லறை", "எண்ணிக்கை": "-", "மதிப்பு": f"₹{d_coins:,.2f}"},
+        ]
+
+        tbl_col, summary_col = st.columns([1.8, 1.2])
+        with tbl_col:
+            st.dataframe(denom_records, use_container_width=True, hide_index=True)
+        with summary_col:
+            st.info(f"**நோட்டுகளின் மொத்தம்:**\n### ₹{approved_balance:,.2f}")
+            st.caption("ஆப்பரேஷன்ஸ் அழைப்பு சரிபார்ப்பு முடிந்ததும் பெண்டிங் தொகைகள் இதில் சேரும்.")
+
+    st.markdown("<hr style='margin: 10px 0 20px 0;'>", unsafe_allow_html=True)
 # ==============================================================================
 # காரணப் பணியாளர் அறிக்கை (Incentive & Attribution Report)
 # ==============================================================================
