@@ -8623,7 +8623,7 @@ if st.session_state.get("logged_in", False):
                     .eq("branch_id", cur_b_id)
                     .gte("created_at", f"{report_date_str} 00:00:00")
                     .lte("created_at", f"{report_date_str} 23:59:59")
-                    .neq("verification_status", "Rejected")
+                    .neq("status", "Rejected")        # 👈 verification_status நீக்கப்பட்டு status என மாற்றப்பட்டது
                     .neq("status", "Draft_Locked")
                     .order("id", desc=False)
                     .execute()
