@@ -8535,9 +8535,12 @@ if st.session_state.get("logged_in", False):
             # =========================================================================
             # டேப் 1: 📊 தினசரி கிளைக் கணக்கு ஏடு (Opening/Closing, Cash & Bank Ledger)
             # =========================================================================
+            # =========================================================================
+            # டேப் 1: 📊 தினசரி கிளைக் கணக்கு ஏடு (கல்லா கையிருப்புடன் 100% ஒத்திசைக்கப்பட்டது)
+            # =========================================================================
             with tab_daily_cashbook:
                 st.subheader("📊 தினசரி கிளைக் கணக்கு ஏடு & பரிவர்த்தனை அறிக்கை")
-                st.caption("தேர்ந்தெடுக்கப்பட்ட கிளை மற்றும் நாளுக்கான தொடக்க இருப்பு, ரொக்க வரவு/செலவுகள் மற்றும் இறுதி இருப்பு அறிக்கை.")
+                st.caption("தேர்ந்தெடுக்கப்பட்ட கிளை மற்றும் நாளுக்கான தொடக்க இருப்பு, அங்கீகரிக்கப்பட்ட ரொக்க வரவு/செலவுகள் மற்றும் இறுதி இருப்பு அறிக்கை.")
 
                 # 1. கிளை மற்றும் தேதி தேர்வு
                 col_cb_b, col_cb_d = st.columns(2)
@@ -8545,14 +8548,12 @@ if st.session_state.get("logged_in", False):
                     branches_data = supabase.table("branches").select("id, branch_name").execute().data or []
                     branch_map = {b["branch_name"]: b["id"] for b in branches_data}
                     
-                    # 🌟 1. branch_id-ஐ பாதுகாப்பாக integer-ஆக மாற்றுதல் (Null / None பிழையைத் தடுக்கிறது)
                     raw_b_id = st.session_state.get("branch_id")
                     try:
-                        user_b_id = int(raw_b_id) if raw_b_id not in (None, "", "null") else 1
+                        clean_cb_id = int(raw_b_id) if raw_b_id not in (None, "", "null") else 1
                     except (ValueError, TypeError):
-                        user_b_id = 1
+                        clean_cb_id = 1
                     
-                    # 🌟 2. user_role மற்றும் role இரண்டையும் சேர்த்துச் சரிபார்த்தல்
                     current_role = str(st.session_state.get("user_role") or st.session_state.get("role") or "").strip()
                     user_is_admin = (
                         current_role in ["Admin", "Operations", "Auditor"]
@@ -8564,7 +8565,7 @@ if st.session_state.get("logged_in", False):
                         sel_b_name = st.selectbox("கிளையைத் தேர்ந்தெடுக்கவும் *:", list(branch_map.keys()), key="cb_b_sel")
                         cur_b_id = branch_map[sel_b_name]
                     else:
-                        cur_b_id = user_b_id
+                        cur_b_id = clean_cb_id
                         matched_b = next((name for name, bid in branch_map.items() if bid == cur_b_id), f"கிளை #{cur_b_id}")
                         st.info(f"🏛️ **நடப்பு கிளை:** {matched_b}")
                         sel_b_name = matched_b
@@ -8606,18 +8607,7 @@ if st.session_state.get("logged_in", False):
                         if c_box_res:
                             op_balance = float(c_box_res[0].get("opening_balance", 0.0) or 0.0)
 
-                # 3. குறிப்பிட்ட தேதியில் நடந்த பரிவர்த்தனைகளை எடுத்தல்
-                day_txns = (
-                    supabase.table("transactions")
-                    .select("*")
-                    .eq("branch_id", cur_b_id)
-                    .gte("created_at", f"{report_date_str} 00:00:00")
-                    .lte("created_at", f"{report_date_str} 23:59:59")
-                    .order("id", desc=False)
-                    .execute()
-                    .data or []
-                )
-
+                # 3. துல்லியமான வரவு-செலவு விவரங்கள் சேகரிப்பு
                 tot_cash_in = 0.0
                 tot_cash_out = 0.0
                 tot_bank_in = 0.0
@@ -8625,6 +8615,20 @@ if st.session_state.get("logged_in", False):
 
                 cash_table_rows = []
                 bank_table_rows = []
+
+                # A. அங்கீகரிக்கப்பட்ட நேரடி வணிகப் பரிவர்த்தனைகள் (Transactions Table)
+                day_txns = (
+                    supabase.table("transactions")
+                    .select("*")
+                    .eq("branch_id", cur_b_id)
+                    .gte("created_at", f"{report_date_str} 00:00:00")
+                    .lte("created_at", f"{report_date_str} 23:59:59")
+                    .neq("verification_status", "Rejected")
+                    .neq("status", "Draft_Locked")
+                    .order("id", desc=False)
+                    .execute()
+                    .data or []
+                )
 
                 for t in day_txns:
                     pm = str(t.get("payment_mode", "Cash")).lower()
@@ -8639,12 +8643,12 @@ if st.session_state.get("logged_in", False):
                         tot_cash_out += paid
                         cash_table_rows.append({
                             "நேரம்": t_time,
-                            "வாடிக்கையாளர்": cust,
+                            "வகை": "வணிக நடவடிக்கை",
+                            "விவரம் / வாடிக்கையாளர்": cust,
                             "நடவடிக்கை": t_type,
                             "வரவு (Cash IN)": f"₹{rec:,.2f}" if rec > 0 else "-",
                             "பற்று (Cash OUT)": f"₹{paid:,.2f}" if paid > 0 else "-",
-                            "பணியாளர்": t.get("staff_name", "-"),
-                            "குறிப்பு": t.get("remarks", "-")
+                            "பணியாளர்": t.get("staff_name", "-")
                         })
                     else:
                         tot_bank_in += rec
@@ -8660,9 +8664,73 @@ if st.session_state.get("logged_in", False):
                             "பணியாளர்": t.get("staff_name", "-")
                         })
 
+                # B. அன்றைய அங்கீகரிக்கப்பட்ட கிளைச் செலவுகள் (Approved Branch Expenses)
+                day_expenses = (
+                    supabase.table("branch_expenses")
+                    .select("*")
+                    .eq("branch_id", cur_b_id)
+                    .eq("expense_date", report_date_str)
+                    .eq("status", "Approved")
+                    .execute()
+                    .data or []
+                )
+
+                for ex in day_expenses:
+                    ex_amt = float(ex.get("amount", 0.0) or 0.0)
+                    tot_cash_out += ex_amt
+                    cash_table_rows.append({
+                        "நேரம்": "-",
+                        "வகை": "கிளைச் செலவு",
+                        "விவரம் / வாடிக்கையாளர்": f"செலவு: {ex.get('expense_head')}",
+                        "நடவடிக்கை": ex.get("description", "-"),
+                        "வரவு (Cash IN)": "-",
+                        "பற்று (Cash OUT)": f"₹{ex_amt:,.2f}",
+                        "பணியாளர்": ex.get("created_by", "-")
+                    })
+
+                # C. அன்றைய அங்கீகரிக்கப்பட்ட தலைமையக நிதிப் பரிமாற்றங்கள் (Approved Fund Transfers)
+                day_funds = (
+                    supabase.table("branch_fund_transfers")
+                    .select("*")
+                    .eq("branch_id", cur_b_id)
+                    .gte("created_at", f"{report_date_str} 00:00:00")
+                    .lte("created_at", f"{report_date_str} 23:59:59")
+                    .eq("status", "Approved")
+                    .execute()
+                    .data or []
+                )
+
+                for f in day_funds:
+                    f_amt = float(f.get("amount", 0.0) or 0.0)
+                    f_type = str(f.get("transfer_type", "")).upper()
+                    
+                    if "HO_TO_BRANCH" in f_type:
+                        tot_cash_in += f_amt
+                        cash_table_rows.append({
+                            "நேரம்": "-",
+                            "வகை": "HQ நிதி வரவு",
+                            "விவரம் / வாடிக்கையாளர்": "தலைமையக நிதி ஒதுக்கீடு",
+                            "நடவடிக்கை": "HO to Branch Transfer",
+                            "வரவு (Cash IN)": f"₹{f_amt:,.2f}",
+                            "பற்று (Cash OUT)": "-",
+                            "பணியாளர்": f.get("approved_by", "-")
+                        })
+                    elif "BRANCH_TO_HO" in f_type:
+                        tot_cash_out += f_amt
+                        cash_table_rows.append({
+                            "நேரம்": "-",
+                            "வகை": "HQ நிதி பற்று",
+                            "விவரம் / வாடிக்கையாளர்": "தலைமையகத்திற்கு அனுப்பியது",
+                            "நடவடிக்கை": "Branch to HO Remittance",
+                            "வரவு (Cash IN)": "-",
+                            "பற்று (Cash OUT)": f"₹{f_amt:,.2f}",
+                            "பணியாளர்": f.get("created_by", "-")
+                        })
+
+                # இறுதி இருப்பு கணக்கீடு
                 cl_balance = op_balance + tot_cash_in - tot_cash_out
 
-                # 4. முக்கிய அளவீடுகள் (Top Cards)
+                # 4. முகப்பு முக்கிய நிதி அளவீடுகள் (Top Cards)
                 st.markdown(f"#### 💼 {sel_b_name} - {sel_report_date.strftime('%d-%m-%Y')} நிதி நிலை")
                 m_c1, m_c2, m_c3, m_c4 = st.columns(4)
                 m_c1.metric("🌅 காலை தொடக்க இருப்பு", f"₹{op_balance:,.2f}")
@@ -8676,6 +8744,7 @@ if st.session_state.get("logged_in", False):
 
                 st.markdown("---")
 
+                # 5. விரிவான அட்டவணைகள்
                 inner_tab_cash, inner_tab_bank = st.tabs(["💵 ரொக்கப் பதிவேடு (Cash Ledger)", "🏛️ வங்கி & UPI பதிவேடு (Bank Log)"])
                 
                 with inner_tab_cash:
@@ -8699,7 +8768,7 @@ if st.session_state.get("logged_in", False):
                     else:
                         st.info("அன்றைய நாளில் வங்கி / UPI பரிவர்த்தனைகள் எதுவும் இல்லை.")
 
-                # நாள் முடிவில் கல்லா பூட்டும் பகுதி
+                # 6. நாள் முடிவில் கல்லா மூடுதல் (Day Close & Lock)
                 st.markdown("---")
                 with st.expander("🔒 நாள் முடிவில் கல்லா மூடுதல் (Day-Close Lock)"):
                     st.caption("நாள் முடிவில் பணியாளர் இறுதி ரொக்கத்தை உறுதிசெய்து கணக்கை லாக் செய்யும் வசதி.")
@@ -8739,7 +8808,7 @@ if st.session_state.get("logged_in", False):
                     clean_b_id = int(raw_b_id) if raw_b_id not in (None, "", "null") else 1
                 except (ValueError, TypeError):
                     clean_b_id = 1
-                    
+
                 # 1. கிளையின் நடப்பு கல்லா நோட்டுகளின் எண்ணிக்கை மற்றும் இருப்பு
                 curr_b_drawer = get_current_branch_cash_drawer(clean_b_id)
                 total_drawer_cash = (
