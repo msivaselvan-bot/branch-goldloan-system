@@ -9471,7 +9471,7 @@ if st.session_state.get("logged_in", False):
                                     t_type = f_item.get("transfer_type")  # எ.கா: HO_TO_BRANCH அல்லது BRANCH_TO_HO
                                     amt = float(f_item.get("amount", 0))
                                     
-                                    # கல்லா கணக்கிற்கான என்ட்ரி தயாரித்தல்
+                                    # கல்லா  கணக்கிற்கான என்ட்ரி தயாரித்தல்
                                     # (HO_TO_BRANCH என்றால் கல்லாவில் வரவு/Cash In, BRANCH_TO_HO என்றால் செலவு/Cash Out)
                                     trans_type_db = "Cash In" if "HO_TO_BRANCH" in str(t_type).upper() else "Cash Out"
                                     desc_text = f"HQ Fund Transfer Approved ({t_type}) - Approv by {current_user}"
