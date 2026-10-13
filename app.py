@@ -7556,7 +7556,7 @@ if st.session_state.get("logged_in", False):
                             st.rerun()
 
             # ---------------------------------------------------------------------
-            # படி 3: பணம் மற்றும் OTP சரிபார்ப்பு (CASH_OTP)
+            # படி 3: பணம் மற்றும் OTP  சரிபார்ப்பு (CASH_OTP)
             # ---------------------------------------------------------------------
             elif st.session_state.current_visit and st.session_state.current_visit.get("step") == "CASH_OTP":
                 visit = st.session_state.current_visit
@@ -7581,7 +7581,7 @@ if st.session_state.get("logged_in", False):
                         st.rerun()
 
                 st.subheader("படி 3: பணம் செலுத்தும் முறை மற்றும் OTP சரிபார்ப்பு")
-                
+
                 hdr_text = (
                     f"💸 வாடிக்கையாளருக்கு வழங்க வேண்டிய நிகரத் தொகை (Pay-OUT): ₹{net_target:,.2f}"
                     if net_target > 0
