@@ -6657,14 +6657,14 @@ if st.session_state.get("logged_in", False):
                     [
                         "ஏற்கனவே உள்ள வாடிக்கையாளர் (Existing Customer)", 
                         "புதிய வாடிக்கையாளர் பதிவு (New Customer)",
-                        "📑 தற்காலிக வருகைகள் (Draft Visits - Pending OTP)" # 👈 புதிய வசதி
+                        "📑 தற்காலிக வருகைகள் (Draft Visits - Pending OTP)"
                     ],
                     horizontal=True,
                     key="visit_v_type_radio"
                 )
 
                 # =========================================================================
-                # 🌟 புதிய வசதி: தற்காலிக வருகைகளை மீட்டெடுத்து OTP முடிக்கும் பகுதி (Read-Only)
+                # 📑 தற்காலிக வருகைகளை மீட்டெடுத்து OTP முடிக்கும் பகுதி (Read-Only)
                 # =========================================================================
                 if "Draft Visits" in v_type:
                     st.markdown("##### 📑 OTP நிலுவையில் உள்ள தற்காலிக வருகைகள்")
@@ -6684,13 +6684,11 @@ if st.session_state.get("logged_in", False):
                         selected_draft = draft_map[sel_draft_key]
                         d_vno = selected_draft["visit_no"]
 
-                        # 🔒 வாடிக்கையாளர் நடவடிக்கைகளை Read-Only வடிவில் காட்டுதல்
                         st.markdown(f"###### 🔒 வாடிக்கையாளர் நடவடிக்கைகள் - `{d_vno}`")
                         st.caption("⚠️ பாதுகாப்பு விதி: தற்காலிகமாக சேமிக்கப்பட்ட நடவடிக்கைகளை எக்காரணம் கொண்டும் மாற்றவோ எடிட் செய்யவோ இயலாது!")
 
                         saved_txns = supabase.table("transactions").select("*").eq("visit_id", selected_draft["id"]).execute().data or []
                         if not saved_txns:
-                            # visit_id கிடைக்காதபட்சத்தில் visit_no மூலம் தேடுதல்
                             saved_txns = supabase.table("transactions").select("*").eq("visit_no", d_vno).execute().data or []
 
                         if saved_txns:
@@ -7504,15 +7502,16 @@ if st.session_state.get("logged_in", False):
                         )
 
                 # =========================================================================
-                # 🛒 கார்ட் பட்டியல் (தனித்தனி நடவடிக்கைகளை நீக்கும் வசதியுடன்)
+                # 🛒 கார்ட் பட்டியல் (கீழிருந்து மட்டுமே நீக்கும் பாதுகாப்புடன் - LIFO Rule)
                 # =========================================================================
                 st.markdown("---")
-                if len(st.session_state.transactions_cart) > 0:
+                cart_len = len(st.session_state.transactions_cart)
+                if cart_len > 0:
                     st.markdown("### 🛒 நடவடிக்கைகள் பட்டியல்:")
                     
-                    # 🌟 புதிய வசதி: கார்ட்டில் உள்ள ஒவ்வொரு நடவடிக்கைக்கும் நீக்கும் பட்டன்
+                    # கார்ட்டில் உள்ள நடவடிக்கைகள் காட்சி
                     for idx, c_item in enumerate(st.session_state.transactions_cart):
-                        it_c1, it_c2, it_c3, it_c4 = st.columns([4, 2, 2, 1])
+                        it_c1, it_c2, it_c3, it_c4 = st.columns([4, 2, 2, 1.2])
                         with it_c1:
                             st.write(f"**{idx + 1}. {c_item.get('transaction_type')}**")
                             if c_item.get("remarks"):
@@ -7522,10 +7521,14 @@ if st.session_state.get("logged_in", False):
                         with it_c3:
                             st.write(f"வரவு: ₹{float(c_item.get('received_amount', 0)):,.2f}")
                         with it_c4:
-                            # ❌ குறிப்பிட்ட நடவடிக்கையை மட்டும் நீக்குதல்
-                            if st.button("❌", key=f"btn_del_cart_item_{idx}", help="இந்த நடவடிக்கையை நீக்கு"):
-                                st.session_state.transactions_cart.pop(idx)
-                                st.rerun()
+                            # 🌟 பாதுகாப்பு விதி: கடைசி நடவடிக்கைக்கு மட்டுமே நீக்கும் பட்டன் தோன்றும்!
+                            # இடையில் உள்ளதோ அல்லது முந்தையதோ நீக்கப்பட மாட்டாது.
+                            if idx == cart_len - 1:
+                                if st.button("❌ நீக்கு", key=f"btn_del_last_cart_item_{idx}", help="கடைசியாகச் சேர்த்த இந்த நடவடிக்கையை நீக்கு"):
+                                    st.session_state.transactions_cart.pop()
+                                    st.rerun()
+                            else:
+                                st.caption("🔒 நிலையானது")
 
                     total_paid = sum(float(x.get("paid_amount", 0)) for x in st.session_state.transactions_cart)
                     total_received = sum(float(x.get("received_amount", 0)) for x in st.session_state.transactions_cart)
@@ -7563,9 +7566,9 @@ if st.session_state.get("logged_in", False):
                 otp_already_sent = "generated_otp" in st.session_state and st.session_state.generated_otp is not None
 
                 # =========================================================================
-                # 🌟 புதிய வசதி: பின்னோக்கிச் சென்று கூடுதல் நடவடிக்கை சேர்க்கும் பட்டன்
+                # 🌟 பின்னோக்கிச் சென்று கூடுதல் நடவடிக்கை சேர்க்கும் வசதி
                 # =========================================================================
-                top_b1, top_b2 = st.columns([2, 5])
+                top_b1, top_b2 = st.columns([2.5, 4.5])
                 with top_b1:
                     if st.button("⬅️ பின் சென்று கூடுதல் நடவடிக்கை சேர்க்க", type="secondary", use_container_width=True):
                         st.session_state.current_visit["step"] = "TRANSACTIONS"
@@ -7789,7 +7792,7 @@ if st.session_state.get("logged_in", False):
                                             st.error(f"கோரிக்கை அனுப்புவதில் பிழை: {e}")
 
                     # =========================================================================
-                    # 🌟 பொத்தான்கள் பகுதி (நிறைவு செய்க & தற்காலிகமாகச் சேமிக்க)
+                    # பொத்தான்கள் பகுதி (நிறைவு செய்க & தற்காலிகமாகச் சேமிக்க)
                     # =========================================================================
                     if st.session_state.get("current_visit"):
                         st.markdown("---")
@@ -7996,7 +7999,7 @@ if st.session_state.get("logged_in", False):
                                         st.error(f"❌ வருகையைச் சேமிப்பதில் பிழை ஏற்பட்டது: {save_err}")
 
                         # =========================================================================
-                        # 🌟 புதிய வசதி: விருப்பம் 2 - OTP வர தாமதமானால் தற்காலிகச் சேமிப்பு (Save as Draft)
+                        # விருப்பம் 2: OTP வர தாமதமானால் தற்காலிகச் சேமிப்பு (Save as Draft)
                         # =========================================================================
                         with act_col2:
                             if st.button("💾 தற்காலிகமாகச் சேமி (Save as Draft - OTP Pending)", type="secondary", use_container_width=True, help="OTP தாமதமானால் அடுத்த வாடிக்கையாளரைக் கவனிக்க இதைச் சேமிக்கவும்"):
@@ -8035,12 +8038,11 @@ if st.session_state.get("logged_in", False):
                                                     "net_change": total_cash_in - total_cash_out,
                                                 },
                                                 "otp_verified": False,
-                                                "status": "Draft_Pending_OTP" # 👈 எடிட் செய்ய முடியாதபடி லாக் செய்யப்படுகிறது
+                                                "status": "Draft_Pending_OTP"
                                             }
                                             v_ins = supabase.table("customer_visits").insert(draft_visit_data).execute()
                                             new_v_id = v_ins.data[0]["id"]
 
-                                            # கார்ட் நடவடிக்கைகளைப் பூட்டிச் சேமித்தல்
                                             for item in st.session_state.transactions_cart:
                                                 p_amt = float(item.get("paid_amount", 0.0) or 0.0)
                                                 r_amt = float(item.get("received_amount", 0.0) or 0.0)
@@ -8054,11 +8056,10 @@ if st.session_state.get("logged_in", False):
                                                     "net_weight": float(item.get("net_weight", 0.0) or 0.0),
                                                     "item_details": item.get("ornament_details", ""), "remarks": item.get("remarks", ""),
                                                     "transaction_details": item.get("extra_meta_data") or item,
-                                                    "status": "Draft_Locked" # 👈 லாக் செய்யப்பட்டது
+                                                    "status": "Draft_Locked"
                                                 }
                                                 supabase.table("transactions").insert(gen_txn).execute()
 
-                                            # கார்ட்டை காலி செய்துவிட்டு அடுத்த வாடிக்கையாளருக்கு திரையைத் தயார்படுத்துதல்
                                             st.session_state.transactions_cart = []
                                             st.session_state.current_visit = None
                                             st.session_state.otp_cleared = False
