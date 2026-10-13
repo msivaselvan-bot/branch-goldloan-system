@@ -1640,48 +1640,122 @@ def get_current_branch_cash_drawer(branch_id):
 # =============================================================================
 # 💼 கிளை நேரலை கல்லா விட்ஜெட் ஃபங்ஷன் (Header Card Definition)
 # =============================================================================
+
 def render_branch_cash_header_card(branch_id):
-    """
-    முகப்புப் பக்கத்தின் மேற்பகுதியில் எப்போதும் தெரியும்படியான 
-    லைவ் கல்லா இருப்பு, நிலுவை சரிபார்ப்பு மற்றும் நோட்டு விவர விட்ஜெட்.
-    """
     if not branch_id:
         return
 
-    # 1. கல்லா மாஸ்டர் மற்றும் நோட்டு விவரங்களை எடுத்தல்
-    drawer_data = {}
     try:
-        cash_drawer_res = (
-            supabase.table("branch_cash_drawer")
-            .select("*")
-            .eq("branch_id", branch_id)
-            .execute()
-            .data or []
-        )
-        if cash_drawer_res:
-            drawer_data = cash_drawer_res[0]
+        clean_branch_id = int(branch_id)
     except Exception:
-        pass
+        clean_branch_id = branch_id
 
-    approved_balance = float(drawer_data.get("current_cash_balance", 0.0) or 0.0)
+    approved_balance = 0.0
+    drawer_data = {}
 
-    # 2. அப்ரூவல் / போன் கால் சரிபார்ப்பில் பெண்டிங் உள்ளவை
+    # 1. கல்லா இருப்பு மற்றும் நோட்டுகளை எடுத்தல் (Hybrid: branch_cash_box & branch_cash_drawer)
+    try:
+        # A. முதலில் branch_cash_box அட்டவணையில் தேடுதல்
+        box_res = (
+            supabase.table("branch_cash_box")
+            .select("*")
+            .eq("branch_id", clean_branch_id)
+            .order("id", desc=True)
+            .limit(1)
+            .execute()
+        )
+        if box_res.data:
+            b_data = box_res.data[0]
+            # current_balance அல்லது opening_balance எடுத்தல்
+            approved_balance = float(
+                b_data.get("current_balance")
+                if b_data.get("current_balance") is not None
+                else (b_data.get("opening_balance") or 0.0)
+            )
+
+            # நோட்டுகள் விவரம்
+            notes_dict = (
+                b_data.get("current_denominations")
+                or b_data.get("opening_denominations")
+                or b_data.get("denomination_details")
+                or {}
+            )
+            drawer_data = {
+                "notes_500": int(notes_dict.get("500", 0) or 0),
+                "notes_200": int(notes_dict.get("200", 0) or 0),
+                "notes_100": int(notes_dict.get("100", 0) or 0),
+                "notes_50": int(notes_dict.get("50", 0) or 0),
+                "notes_20": int(notes_dict.get("20", 0) or 0),
+                "notes_10": int(notes_dict.get("10", 0) or 0),
+                "notes_5": int(notes_dict.get("5", 0) or 0),
+                "coins": float(notes_dict.get("coins", 0.0) or 0.0),
+            }
+
+        # B. box-ல் இருப்பு இல்லை என்றால் branch_cash_drawer-ல் தேடுதல் (Fallback)
+        if approved_balance == 0.0:
+            drawer_res = (
+                supabase.table("branch_cash_drawer")
+                .select("*")
+                .eq("branch_id", clean_branch_id)
+                .execute()
+            )
+            if drawer_res.data:
+                d_data = drawer_res.data[0]
+                approved_balance = float(
+                    d_data.get("current_cash_balance")
+                    or d_data.get("current_balance")
+                    or 0.0
+                )
+                drawer_data = {
+                    "notes_500": int(d_data.get("notes_500", 0) or 0),
+                    "notes_200": int(d_data.get("notes_200", 0) or 0),
+                    "notes_100": int(d_data.get("notes_100", 0) or 0),
+                    "notes_50": int(d_data.get("notes_50", 0) or 0),
+                    "notes_20": int(d_data.get("notes_20", 0) or 0),
+                    "notes_10": int(d_data.get("notes_10", 0) or 0),
+                    "notes_5": int(d_data.get("notes_5", 0) or 0),
+                    "coins": float(d_data.get("coins", 0.0) or 0.0),
+                }
+
+    except Exception as e:
+        st.caption(f"கல்லா விவரம் எடுப்பதில் குறிப்பு: {e}")
+
+    # நோட்டுகளின் கூட்டுத்தொகை இருப்பை விட அதிகமாக இருந்தால் அதை உறுதிப்படுத்துதல்
+    calc_notes_sum = (
+        drawer_data.get("notes_500", 0) * 500
+        + drawer_data.get("notes_200", 0) * 200
+        + drawer_data.get("notes_100", 0) * 100
+        + drawer_data.get("notes_50", 0) * 50
+        + drawer_data.get("notes_20", 0) * 20
+        + drawer_data.get("notes_10", 0) * 10
+        + drawer_data.get("coins", 0.0)
+    )
+    if approved_balance == 0.0 and calc_notes_sum > 0:
+        approved_balance = calc_notes_sum
+
+    # 2. அப்ரூவல் / போன் கால் சரிபார்ப்பில் பெண்டிங் உள்ள வரவு & செலவுகள்
     pending_inflow = 0.0
     pending_outflow = 0.0
 
     try:
         pending_txns = (
             supabase.table("transactions")
-            .select("transaction_type, cash_amount, received_amount, paid_amount, verification_status")
-            .eq("branch_id", branch_id)
-            .in_("verification_status", ["Pending Approval", "Pending Verification", "Pending Call Verification"])
+            .select("transaction_type, cash_amount, received_amount, paid_amount, payment_mode, verification_status")
+            .eq("branch_id", clean_branch_id)
+            .ilike("verification_status", "%Pending%")
             .execute()
             .data or []
         )
 
         for pt in pending_txns:
+            # ரொக்கப் பரிவர்த்தனைகளை மட்டும் கணக்கிடுதல் (Cash Mode)
+            p_mode = str(pt.get("payment_mode", "Cash")).lower()
+            if "bank" in p_mode or "online" in p_mode or "gpay" in p_mode:
+                continue
+
             rec_amt = float(pt.get("received_amount") or pt.get("cash_amount") or 0.0)
             paid_amt = float(pt.get("paid_amount") or 0.0)
+
             if paid_amt > 0:
                 pending_outflow += paid_amt
             else:
@@ -1692,8 +1766,61 @@ def render_branch_cash_header_card(branch_id):
     net_pending_diff = pending_inflow - pending_outflow
     projected_final_balance = approved_balance + net_pending_diff
 
-    # 3. முகப்பில் தோன்றும் கார்டுகள்
+    # 3. முகப்பில் தோன்றும் அளவீடுகள் (Metrics Card)
     st.markdown("### 💼 கிளை நேரலை கல்லா நிலவரம் (Live Cash Drawer)")
+
+    m_col1, m_col2, m_col3 = st.columns(3)
+    with m_col1:
+        st.metric(
+            label="✅ உறுதிசெய்யப்பட்ட கல்லா இருப்பு",
+            value=f"₹{approved_balance:,.2f}",
+            help="ஆப்பரேஷன்ஸ் அணியால் அப்ரூவ் செய்யப்பட்ட நடப்பு ரொக்க இருப்பு"
+        )
+    with m_col2:
+        pending_sign = "+" if net_pending_diff >= 0 else "-"
+        st.metric(
+            label="⏳ சரிபார்ப்பில் உள்ள தொகை (Pending)",
+            value=f"₹{abs(net_pending_diff):,.2f}",
+            delta=f"{pending_sign}₹{abs(net_pending_diff):,.2f} (அப்ரூவல் நிலுவை)",
+            delta_color="off" if net_pending_diff == 0 else ("normal" if net_pending_diff > 0 else "inverse"),
+            help="ஆப்பரேஷன்ஸ் டீம் அப்ரூவல் மற்றும் அழைப்பு சரிபார்ப்பில் உள்ளவை"
+        )
+    with m_col3:
+        st.metric(
+            label="🎯 பெண்டிங் சரியானால் இறுதி கையிருப்பு",
+            value=f"₹{projected_final_balance:,.2f}",
+            delta="எதிர்பார்க்கப்படும் ரொக்கம்",
+            help="நிலுவைகள் சரியானால் கையில் இருக்க வேண்டிய உண்மை இருப்பு"
+        )
+
+    # 4. நோட்டுகள் விவரம் (Denomination Breakdown)
+    with st.expander("🔍 நடப்பு ரூபாய் நோட்டு விவரங்கள் (Denomination Details)", expanded=False):
+        d_500 = drawer_data.get("notes_500", 0)
+        d_200 = drawer_data.get("notes_200", 0)
+        d_100 = drawer_data.get("notes_100", 0)
+        d_50  = drawer_data.get("notes_50", 0)
+        d_20  = drawer_data.get("notes_20", 0)
+        d_10  = drawer_data.get("notes_10", 0)
+        d_coins = drawer_data.get("coins", 0.0)
+
+        denom_records = [
+            {"ரூபாய் நோட்டு": "₹500", "எண்ணிக்கை": d_500, "மதிப்பு": f"₹{d_500 * 500:,.2f}"},
+            {"ரூபாய் நோட்டு": "₹200", "எண்ணிக்கை": d_200, "மதிப்பு": f"₹{d_200 * 200:,.2f}"},
+            {"ரூபாய் நோட்டு": "₹100", "எண்ணிக்கை": d_100, "மதிப்பு": f"₹{d_100 * 100:,.2f}"},
+            {"ரூபாய் நோட்டு": "₹50",  "எண்ணிக்கை": d_50,  "மதிப்பு": f"₹{d_50 * 50:,.2f}"},
+            {"ரூபாய் நோட்டு": "₹20",  "எண்ணிக்கை": d_20,  "மதிப்பு": f"₹{d_20 * 20:,.2f}"},
+            {"ரூபாய் நோட்டு": "₹10",  "எண்ணிக்கை": d_10,  "மதிப்பு": f"₹{d_10 * 10:,.2f}"},
+            {"ரூபாய் நோட்டு": "சில்லறை", "எண்ணிக்கை": "-", "மதிப்பு": f"₹{d_coins:,.2f}"},
+        ]
+
+        tbl_col, summary_col = st.columns([1.8, 1.2])
+        with tbl_col:
+            st.dataframe(denom_records, use_container_width=True, hide_index=True)
+        with summary_col:
+            st.info(f"**நோட்டுகளின் மொத்தம்:**\n### ₹{approved_balance:,.2f}")
+            st.caption("ஆப்பரேஷன்ஸ் அழைப்பு சரிபார்ப்பு முடிந்ததும் பெண்டிங் தொகைகள் இதில் சேரும்.")
+
+    st.markdown("<hr style='margin: 10px 0 20px 0;'>", unsafe_allow_html=True)
     
     m_col1, m_col2, m_col3 = st.columns(3)
     with m_col1:
