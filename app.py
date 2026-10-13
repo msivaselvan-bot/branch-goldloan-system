@@ -7566,15 +7566,22 @@ if st.session_state.get("logged_in", False):
                 otp_already_sent = "generated_otp" in st.session_state and st.session_state.generated_otp is not None
 
                 # =========================================================================
-                # 🌟 பின்னோக்கிச் சென்று கூடுதல் நடவடிக்கை சேர்க்கும் வசதி
+                # 🌟 பின்னோக்கிச் சென்று கூடுதல் நடவடிக்கை சேர்க்கும் பட்டன் (சரிசெய்யப்பட்டது)
                 # =========================================================================
-                top_b1, top_b2 = st.columns([2.5, 4.5])
+                top_b1, top_b2 = st.columns([3, 4])
                 with top_b1:
-                    if st.button("⬅️ பின் சென்று கூடுதல் நடவடிக்கை சேர்க்க", type="secondary", use_container_width=True):
+                    # 👈 key கொடுத்து, செஷன் ஸ்டேட்டை உறுதியாக TRANSACTIONS-க்கு மாற்றுதல்:
+                    if st.button("⬅️ பின் சென்று கூடுதல் நடவடிக்கை சேர்க்க", type="secondary", use_container_width=True, key="btn_back_to_txns_step"):
                         st.session_state.current_visit["step"] = "TRANSACTIONS"
+                        # தற்காலிக OTP மற்றும் லாக் நிலைகளை ரீசெட் செய்தல்:
+                        st.session_state.otp_already_sent = False
+                        st.session_state.generated_otp = None
+                        st.session_state.otp_cleared = False
+                        st.session_state.otp_verified = False
                         st.rerun()
 
                 st.subheader("படி 3: பணம் செலுத்தும் முறை மற்றும் OTP சரிபார்ப்பு")
+                
                 hdr_text = (
                     f"💸 வாடிக்கையாளருக்கு வழங்க வேண்டிய நிகரத் தொகை (Pay-OUT): ₹{net_target:,.2f}"
                     if net_target > 0
