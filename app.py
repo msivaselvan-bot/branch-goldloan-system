@@ -9097,13 +9097,15 @@ if st.session_state.get("logged_in", False):
                             except Exception as e:
                                 st.error(f"பிழை: {e}")
                         else:
-                            st.error(
-                                "⚠️ உண்மையான செலவுத் தொகையும், (கொடுத்த பணம் - மீதிப் பணம்)"
-                                " கணக்கீடும் சரியாகப் பொருந்த வேண்டும்."
-                            )
+                        st.error(
+                            "⚠️ உண்மையான செலவுத் தொகையும், (கொடுத்த பணம் - மீதிப் பணம்)"
+                            " கணக்கீடும் சரியாகப் பொருந்த வேண்டும்."
+                        )
 
                 st.markdown("---")
                 st.subheader("📋 கிளை செலவுகளின் சமீபத்திய நிலை (Expense Logs)")
+
+                # 🌟 clean_b_id-ஐ பாதுகாப்பாகப் பயன்படுத்தி கிளைச் செலவுகளை எடுத்தல்
                 b_exp_logs = (
                     supabase.table("branch_expenses")
                     .select("*")
@@ -9140,6 +9142,59 @@ if st.session_state.get("logged_in", False):
                         ),
                         use_container_width=True,
                     )
+                else:
+                    st.info("💡 சமீபத்திய செலவுப் பதிவுகள் எதுவும் இல்லை.")
+
+                # =========================================================================
+                # 🏦 கிளை நிதிப் பரிமாற்ற வரலாற்றுப் பதிவுகள் (Fund Transfer Logs)
+                # =========================================================================
+                st.markdown("---")
+                st.subheader("🏛️ கிளை & தலைமையக நிதிப் பரிமாற்றப் பதிவுகள் (Fund Transfers)")
+
+                # அட்மின் என்றால் எல்லாக் கிளையும், கிளைப் பணியாளர் என்றால் சொந்தக் கிளையும் வடிகட்டுதல்
+                fund_query = supabase.table("branch_fund_transfers").select("*")
+                current_role = str(st.session_state.get("user_role") or st.session_state.get("role") or "").strip()
+                user_is_admin = (
+                    current_role in ["Admin", "Operations", "Auditor"]
+                    or st.session_state.get("is_admin", False)
+                    or str(st.session_state.get("username", "")).lower() == "admin"
+                )
+
+                if not user_is_admin:
+                    fund_query = fund_query.eq("branch_id", clean_b_id)
+
+                b_fund_logs = (
+                    fund_query
+                    .order("id", desc=True)
+                    .limit(15)
+                    .execute()
+                    .data
+                    or []
+                )
+
+                if b_fund_logs:
+                    st.dataframe(
+                        pd.DataFrame(
+                            [
+                                {
+                                    "தேதி": f.get("created_at", "-")[:10] if f.get("created_at") else "-",
+                                    "பரிமாற்ற வகை": f.get("transfer_type", "-"),
+                                    "தொகை (₹)": f"₹{float(f.get('amount', 0)):,.2f}",
+                                    "நிலை (Status)": (
+                                        "🟢 Approved" if f.get("status") == "Approved"
+                                        else ("🔴 Rejected" if f.get("status") == "Rejected"
+                                        else "🟡 Pending Approval")
+                                    ),
+                                    "அனுப்பியவர்": f.get("created_by", "-"),
+                                    "அங்கீகரித்தவர்": f.get("approved_by", "-"),
+                                }
+                                for f in b_fund_logs
+                            ]
+                        ),
+                        use_container_width=True,
+                    )
+                else:
+                    st.info("💡 நிதிப் பரிமாற்றப் பதிவுகள் எதுவும் இல்லை.")
 
         elif selected_section == "🏦 HO பணப் பரிமாற்றம்":
             st.subheader(
