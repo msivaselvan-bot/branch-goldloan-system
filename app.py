@@ -9601,6 +9601,9 @@ if st.session_state.get("logged_in", False):
         elif selected_section == "🏦 நிதிப் பரிமாற்ற ஒப்புதல்":
             st.subheader("🏦 தலைமையக & கிளை நிதிப் பரிமாற்ற ஒப்புதல் மேசை")
 
+            # -------------------------------------------------------------
+            # 1. தலைமையக & கிளை நிதிப் பரிமாற்றம் (Fund Transfers)
+            # -------------------------------------------------------------
             try:
                 pending_fund_transfers = (
                     supabase.table("branch_fund_transfers")
@@ -9645,7 +9648,7 @@ if st.session_state.get("logged_in", False):
                                     )
                                     if count > 0:
                                         f_items.append(f"**₹{k}:** {count}")
-                                except (ValueError, TypeError):
+                                Except (ValueError, TypeError):
                                     continue
                             denom_text = " | ".join(f_items)
                             st.info(
@@ -9664,7 +9667,6 @@ if st.session_state.get("logged_in", False):
                                 use_container_width=True,
                             ):
                                 try:
-                                    # 1. நிலையை Approved என மாற்றுதல்
                                     supabase.table("branch_fund_transfers").update(
                                         {
                                             "status": "Approved",
@@ -9672,13 +9674,10 @@ if st.session_state.get("logged_in", False):
                                         }
                                     ).eq("id", f_item["id"]).execute()
 
-                                    # 🌟 2. ஆப்பரேஷன்ஸ் ஒப்புதல் அளித்த பிறகு கிளை கல்லாவில் (Transactions) சேர்ப்பது / கழிப்பது
                                     b_id = f_item.get("branch_id")
-                                    t_type = f_item.get("transfer_type")  # எ.கா: HO_TO_BRANCH அல்லது BRANCH_TO_HO
+                                    t_type = f_item.get("transfer_type")
                                     amt = float(f_item.get("amount", 0))
                                     
-                                    # கல்லா  கணக்கிற்கான என்ட்ரி தயாரித்தல்
-                                    # (HO_TO_BRANCH என்றால் கல்லாவில் வரவு/Cash In, BRANCH_TO_HO என்றால் செலவு/Cash Out)
                                     trans_type_db = "Cash In" if "HO_TO_BRANCH" in str(t_type).upper() else "Cash Out"
                                     desc_text = f"HQ Fund Transfer Approved ({t_type}) - Approv by {current_user}"
 
@@ -9712,10 +9711,7 @@ if st.session_state.get("logged_in", False):
                                             "approved_by": current_user,
                                         }
                                     ).eq("id", f_item["id"]).execute()
-                                    st.warning(
-                                        "⚠️ நிதிப் பரிமாற்றம் நிராகரிக்கப்பட்டது / ரத்து"
-                                        " செய்யப்பட்டது."
-                                    )
+                                    st.warning("⚠️ நிதிப் பரிமாற்றம் நிராகரிக்கப்பட்டது / ரத்து செய்யப்பட்டது.")
                                     st.rerun()
                                 except Exception as e:
                                     st.error(f"பிழை: {e}")
@@ -9723,7 +9719,7 @@ if st.session_state.get("logged_in", False):
             st.markdown("---")
 
             # -------------------------------------------------------------
-            # 💸 கிளைச் செலவு ஒப்புதல் மேசை
+            # 2. கிளைச் செலவு ஒப்புதல் மேசை (Branch Expenses)
             # -------------------------------------------------------------
             st.subheader(
                 "💸 கிளைச் செலவு ஒப்புதல் மேசை (Branch Expenses Approval Desk)"
@@ -9838,6 +9834,105 @@ if st.session_state.get("logged_in", False):
                                     st.rerun()
                                 except Exception as e:
                                     st.error(f"பிழை: {e}")
+
+            st.markdown("---")
+
+            # -------------------------------------------------------------
+            # 🌟 3. வாடிக்கையாளர் வங்கிப் பரிமாற்ற ஒப்புதல் மேசை (Customer Bank Transfers)
+            # -------------------------------------------------------------
+            st.subheader("💳 வாடிக்கையாளர் வங்கிப் பரிமாற்ற மேசை (Customer Bank Payout Queue)")
+            st.caption("கிளைகளில் பதிவு செய்யப்பட்ட ஆன்லைன்/ஸ்ப்ளிட் பரிவர்த்தனைகளுக்கான வங்கிப் பரிமாற்றம் மற்றும் UTR பதிவு.")
+
+            try:
+                pending_payouts = (
+                    supabase.table("customer_visits")
+                    .select("*, branches(branch_name)")
+                    .eq("bank_transfer_status", "Pending_Transfer")
+                    .order("id", desc=True)
+                    .execute()
+                    .data
+                    or []
+                )
+            except Exception as e:
+                st.error(f"வங்கிப் பரிமாற்றத் தரவுகளைப் பெறுவதில் பிழை: {e}")
+                pending_payouts = []
+
+            if not pending_payouts:
+                st.info("✅ தற்போது நிலுவையில் உள்ள வாடிக்கையாளர் வங்கிப் பரிமாற்றங்கள் எதுவும் இல்லை.")
+            else:
+                for p in pending_payouts:
+                    b_p_name = p.get("branches", {}).get("branch_name", "கிளை")
+                    p_amt = float(p.get("bank_amount", 0.0) or 0.0)
+                    t_mode = p.get("bank_transfer_type", "வாடிக்கையாளர்")
+
+                    with st.expander(f"🏦 {p.get('visit_no')} | {p.get('customer_name')} | கிளை: {b_p_name} | ₹{p_amt:,.2f}"):
+                        col_v1, col_v2, col_v3 = st.columns([1.8, 2, 1.4])
+                        with col_v1:
+                            st.markdown(f"**வருகை எண்:** `{p.get('visit_no')}`")
+                            st.write(f"• **வாடிக்கையாளர்:** {p.get('customer_name')}")
+                            st.write(f"• **டிரான்ஸ்பர் வகை:** `{t_mode}`")
+                            st.write(f"• **கிளை:** {b_p_name}")
+                            st.markdown(f"### அனுப்ப வேண்டிய தொகை: `₹{p_amt:,.2f}`")
+
+                        with col_v2:
+                            st.markdown("##### 🏛️ வங்கி கணக்கு விவரங்கள்:")
+                            st.write(f"• **பெயர்:** {p.get('bank_acc_holder_name', '-')}")
+                            st.write(f"• **A/C எண்:** `{p.get('bank_acc_number', '-')}` ({p.get('bank_acc_type', 'Savings')})")
+                            st.write(f"• **வங்கி & கிளை:** {p.get('bank_name', '-')} - {p.get('bank_branch', '-')}")
+                            st.write(f"• **IFSC:** `{p.get('bank_ifsc_code', '-')}`")
+                            if p.get("bank_upi_id"):
+                                st.caption(f"UPI ID: {p.get('bank_upi_id')} | மொபைல்: {p.get('bank_upi_phone', '-')}")
+
+                        with col_v3:
+                            st.markdown("##### 📎 சரிபார்ப்பு ஆவணங்கள்:")
+                            if p.get("bank_passbook_doc_url"):
+                                st.link_button("📄 பாஸ்புக் நகல் பார்க்க", p["bank_passbook_doc_url"], use_container_width=True)
+                            else:
+                                st.caption("பாஸ்புக் நகல் இல்லை")
+
+                            if p.get("bank_consent_doc_url"):
+                                st.link_button("📝 ஒப்புதல் படிவம் பார்க்க", p["bank_consent_doc_url"], use_container_width=True)
+                            else:
+                                st.caption("ஒப்புதல் படிவம் இல்லை")
+
+                        st.markdown("---")
+                        # UTR உள்ளீடு மற்றும் உறுதிப்படுத்தல்
+                        utr_c1, utr_c2 = st.columns([3, 1])
+                        with utr_c1:
+                            utr_no = st.text_input(
+                                f"வங்கி UTR / Ref எண் உள்ளிடவும் * ({p.get('visit_no')}):",
+                                placeholder="எ.கா: UTR1234567890 / IMPS / NEFT Ref",
+                                key=f"utr_in_{p['id']}"
+                            )
+                        with utr_c2:
+                            st.write("")
+                            st.write("")
+                            if st.button("பரிமாற்றம் முடிந்தது (Confirm Payout)", key=f"btn_confirm_pay_{p['id']}", type="primary", use_container_width=True):
+                                if not utr_no.strip():
+                                    st.error("⚠️ தயவுசெய்து வங்கி UTR எண்ணை உள்ளிடவும்!")
+                                else:
+                                    try:
+                                        curr_user = st.session_state.get("username", "Admin")
+                                        now_time = str(datetime.now())
+
+                                        # 1. customer_visits அட்டவணையில் UTR பதிவு செய்து நிலையை மாற்றுதல்
+                                        supabase.table("customer_visits").update({
+                                            "bank_reference_no": utr_no.strip(),
+                                            "bank_transfer_status": "Transferred",
+                                            "bank_transferred_by": curr_user,
+                                            "bank_transferred_at": now_time
+                                        }).eq("id", p["id"]).execute()
+
+                                        # 2. transactions அட்டவணையிலும் இந்த வருகைக்கான வங்கிப் பதிவுகளைப் புதுப்பித்தல்
+                                        supabase.table("transactions").update({
+                                            "verification_status": "Approved",
+                                            "status": "Completed"
+                                        }).eq("visit_id", p["id"]).execute()
+
+                                        st.success(f"✅ வருகை `{p.get('visit_no')}`-க்கான UTR எண் ({utr_no.strip()}) பதியப்பட்டு கணக்கில் இணைக்கப்பட்டது!")
+                                        st.rerun()
+                                    except Exception as utr_err:
+                                        st.error(f"UTR பதிவு செய்வதில் பிழை: {utr_err}")
 
         elif selected_section == "👤 புதிய வாடிக்கையாளர் KYC":
             st.subheader("👤 புதிய வாடிக்கையாளர் KYC ஒப்புதல்")
