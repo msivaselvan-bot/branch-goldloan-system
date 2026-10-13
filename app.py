@@ -1556,14 +1556,19 @@ def get_current_branch_cash_drawer(branch_id):
     except Exception as e:
         return empty_stock
 
-# -------------------------------------------------------------
-# 💼 கிளை கல்லா நேரலை விட்ஜெட் ஃபங்ஷன்
-# -------------------------------------------------------------
+
+# =============================================================================
+# 💼 கிளை நேரலை கல்லா விட்ஜெட் ஃபங்ஷன் (Header Card Definition)
+# =============================================================================
 def render_branch_cash_header_card(branch_id):
+    """
+    முகப்புப் பக்கத்தின் மேற்பகுதியில் எப்போதும் தெரியும்படியான 
+    லைவ் கல்லா இருப்பு, நிலுவை சரிபார்ப்பு மற்றும் நோட்டு விவர விட்ஜெட்.
+    """
     if not branch_id:
         return
 
-    # 1. கல்லா மாஸ்டர் மற்றும் நோட்டு விவரங்கள்
+    # 1. கல்லா மாஸ்டர் மற்றும் நோட்டு விவரங்களை எடுத்தல்
     drawer_data = {}
     try:
         cash_drawer_res = (
@@ -1580,7 +1585,7 @@ def render_branch_cash_header_card(branch_id):
 
     approved_balance = float(drawer_data.get("current_cash_balance", 0.0) or 0.0)
 
-    # 2. அப்ரூவல் / போன் கால் வெரிஃபிகேஷனில் பெண்டிங் உள்ளவை
+    # 2. அப்ரூவல் / போன் கால் சரிபார்ப்பில் பெண்டிங் உள்ளவை
     pending_inflow = 0.0
     pending_outflow = 0.0
 
@@ -1607,7 +1612,7 @@ def render_branch_cash_header_card(branch_id):
     net_pending_diff = pending_inflow - pending_outflow
     projected_final_balance = approved_balance + net_pending_diff
 
-    # 3. திரையில் தோன்றும் கார்டுகள்
+    # 3. முகப்பில் தோன்றும் கார்டுகள்
     st.markdown("### 💼 கிளை நேரலை கல்லா நிலவரம் (Live Cash Drawer)")
     
     m_col1, m_col2, m_col3 = st.columns(3)
@@ -1624,7 +1629,7 @@ def render_branch_cash_header_card(branch_id):
             value=f"₹{abs(net_pending_diff):,.2f}",
             delta=f"{pending_sign}₹{abs(net_pending_diff):,.2f} (அப்ரூவல் நிலுவை)",
             delta_color="off" if net_pending_diff == 0 else ("normal" if net_pending_diff > 0 else "inverse"),
-            help="ஆப்பரேஷன்ஸ் டீம் அப்ரூவல் மற்றும் தொலைபேசி அழைப்பு சரிபார்ப்பில் உள்ளவை"
+            help="ஆப்பரேஷன்ஸ் டீம் அப்ரூவல் மற்றும் அழைப்பு சரிபார்ப்பில் உள்ளவை"
         )
     with m_col3:
         st.metric(
@@ -1634,7 +1639,7 @@ def render_branch_cash_header_card(branch_id):
             help="நிலுவைகள் சரியானால் கையில் இருக்கும் உண்மை இருப்பு"
         )
 
-    # 4. நோட்டுகள் விவரம் (Expander)
+    # 4. நோட்டுகள் விவரம் (Denomination Breakdown)
     with st.expander("🔍 நடப்பு ரூபாய் நோட்டு விவரங்கள் (Denomination Details)", expanded=False):
         d_500 = int(drawer_data.get("notes_500", 0) or 0)
         d_200 = int(drawer_data.get("notes_200", 0) or 0)
