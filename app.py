@@ -8545,18 +8545,26 @@ if st.session_state.get("logged_in", False):
                     branches_data = supabase.table("branches").select("id, branch_name").execute().data or []
                     branch_map = {b["branch_name"]: b["id"] for b in branches_data}
                     
-                    user_b_id = st.session_state.get("branch_id")
+                    # 🌟 1. branch_id-ஐ பாதுகாப்பாக integer-ஆக மாற்றுதல் (Null / None பிழையைத் தடுக்கிறது)
+                    raw_b_id = st.session_state.get("branch_id")
+                    try:
+                        user_b_id = int(raw_b_id) if raw_b_id not in (None, "", "null") else 1
+                    except (ValueError, TypeError):
+                        user_b_id = 1
+                    
+                    # 🌟 2. user_role மற்றும் role இரண்டையும் சேர்த்துச் சரிபார்த்தல்
+                    current_role = str(st.session_state.get("user_role") or st.session_state.get("role") or "").strip()
                     user_is_admin = (
-                        st.session_state.get("role") in ["Admin", "Operations", "Auditor"]
+                        current_role in ["Admin", "Operations", "Auditor"]
                         or st.session_state.get("is_admin", False)
-                        or st.session_state.get("username") == "admin"
+                        or str(st.session_state.get("username", "")).lower() == "admin"
                     )
                     
                     if user_is_admin and branch_map:
                         sel_b_name = st.selectbox("கிளையைத் தேர்ந்தெடுக்கவும் *:", list(branch_map.keys()), key="cb_b_sel")
                         cur_b_id = branch_map[sel_b_name]
                     else:
-                        cur_b_id = int(user_b_id) if user_b_id else 1
+                        cur_b_id = user_b_id
                         matched_b = next((name for name, bid in branch_map.items() if bid == cur_b_id), f"கிளை #{cur_b_id}")
                         st.info(f"🏛️ **நடப்பு கிளை:** {matched_b}")
                         sel_b_name = matched_b
@@ -9099,7 +9107,7 @@ if st.session_state.get("logged_in", False):
                 b_exp_logs = (
                     supabase.table("branch_expenses")
                     .select("*")
-                    .eq("branch_id", st.session_state.branch_id)
+                    .eq("branch_id", clean_b_id)
                     .order("id", desc=True)
                     .limit(15)
                     .execute()
@@ -9350,15 +9358,37 @@ if st.session_state.get("logged_in", False):
             st.subheader(
                 "📋 உங்கள் கிளையின் சமீபத்திய பணப் பரிமாற்றங்கள் & ஒப்புதல் நிலை"
             )
+            # -------------------------------------------------------------
+            # 🏦 நிதிப் பரிமாற்றப் பதிவுகள் (Fund Transfer Logs) - பாதுகாப்பான வினவல்
+            # -------------------------------------------------------------
+            # 1. branch_id-ஐ பாதுகாப்பான Integer-ஆக மாற்றுதல்
+            raw_b_id = st.session_state.get("branch_id")
+            try:
+                clean_b_id = int(raw_b_id) if raw_b_id not in (None, "", "null") else 1
+            except (ValueError, TypeError):
+                clean_b_id = 1
+
+            # 2. வினவலைத் தயார் செய்தல்
+            fund_query = supabase.table("branch_fund_transfers").select("*")
+
+            # 3. அட்மின் அல்லது தணிக்கையாளர் இல்லையெனில் மட்டும் கிளையை வடிகட்டவும்
+            current_role = str(st.session_state.get("user_role") or st.session_state.get("role") or "").strip()
+            user_is_admin = (
+                current_role in ["Admin", "Operations", "Auditor"]
+                or st.session_state.get("is_admin", False)
+                or str(st.session_state.get("username", "")).lower() == "admin"
+            )
+
+            if not user_is_admin:
+                fund_query = fund_query.eq("branch_id", clean_b_id)
+
+            # 4. பதிவுகளைப் பெறுதல்
             b_fund_logs = (
-                supabase.table("branch_fund_transfers")
-                .select("*")
-                .eq("branch_id", st.session_state.branch_id)
+                fund_query
                 .order("id", desc=True)
                 .limit(20)
                 .execute()
-                .data
-                or []
+                .data or []
             )
             if b_fund_logs:
                 st.dataframe(
