@@ -61,8 +61,120 @@ except Exception:
     supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 
+# ==============================================================================
+# 💼 கிளை நேரலை கல்லா விட்ஜெட் ஃபங்ஷன் (Header Card Definition)
+# ==============================================================================
+def render_branch_cash_header_card(branch_id):
+    """
+    முகப்புப் பக்கத்தின் மேற்பகுதியில் எப்போதும் தெரியும்படியான 
+    லைவ் கல்லா இருப்பு, நிலுவை சரிபார்ப்பு மற்றும் நோட்டு விவர விட்ஜெட்.
+    """
+    if not branch_id:
+        return
+
+    # 1. கல்லா மாஸ்டர் மற்றும் நோட்டு விவரங்களை எடுத்தல்
+    drawer_data = {}
+    try:
+        cash_drawer_res = (
+            supabase.table("branch_cash_drawer")
+            .select("*")
+            .eq("branch_id", branch_id)
+            .execute()
+            .data or []
+        )
+        if cash_drawer_res:
+            drawer_data = cash_drawer_res[0]
+    except Exception:
+        pass
+
+    approved_balance = float(drawer_data.get("current_cash_balance", 0.0) or 0.0)
+
+    # 2. அப்ரூவல் / போன் கால் சரிபார்ப்பில் பெண்டிங் உள்ளவை
+    pending_inflow = 0.0
+    pending_outflow = 0.0
+
+    try:
+        pending_txns = (
+            supabase.table("transactions")
+            .select("transaction_type, cash_amount, received_amount, paid_amount, verification_status")
+            .eq("branch_id", branch_id)
+            .in_("verification_status", ["Pending Approval", "Pending Verification", "Pending Call Verification"])
+            .execute()
+            .data or []
+        )
+
+        for pt in pending_txns:
+            rec_amt = float(pt.get("received_amount") or pt.get("cash_amount") or 0.0)
+            paid_amt = float(pt.get("paid_amount") or 0.0)
+            if paid_amt > 0:
+                pending_outflow += paid_amt
+            else:
+                pending_inflow += rec_amt
+    except Exception:
+        pass
+
+    net_pending_diff = pending_inflow - pending_outflow
+    projected_final_balance = approved_balance + net_pending_diff
+
+    # 3. முகப்பில் தோன்றும் கார்டுகள்
+    st.markdown("### 💼 கிளை நேரலை கல்லா நிலவரம் (Live Cash Drawer)")
+    
+    m_col1, m_col2, m_col3 = st.columns(3)
+    with m_col1:
+        st.metric(
+            label="✅ உறுதிசெய்யப்பட்ட கல்லா இருப்பு",
+            value=f"₹{approved_balance:,.2f}",
+            help="ஆப்பரேஷன்ஸ் அணியால் அப்ரூவ் செய்யப்பட்ட நடப்பு இருப்பு"
+        )
+    with m_col2:
+        pending_sign = "+" if net_pending_diff >= 0 else "-"
+        st.metric(
+            label="⏳ சரிபார்ப்பில் உள்ள தொகை (Pending)",
+            value=f"₹{abs(net_pending_diff):,.2f}",
+            delta=f"{pending_sign}₹{abs(net_pending_diff):,.2f} (அப்ரூவல் நிலுவை)",
+            delta_color="off" if net_pending_diff == 0 else ("normal" if net_pending_diff > 0 else "inverse"),
+            help="ஆப்பரேஷன்ஸ் டீம் அப்ரூவல் மற்றும் அழைப்பு சரிபார்ப்பில் உள்ளவை"
+        )
+    with m_col3:
+        st.metric(
+            label="🎯 பெண்டிங் சரியானால் இறுதி கையிருப்பு",
+            value=f"₹{projected_final_balance:,.2f}",
+            delta="எதிர்பார்க்கப்படும் ரொக்கம்",
+            help="நிலுவைகள் சரியானால் கையில் இருக்கும் உண்மை இருப்பு"
+        )
+
+    # 4. நோட்டுகள் விவரம் (Denomination Breakdown)
+    with st.expander("🔍 நடப்பு ரூபாய் நோட்டு விவரங்கள் (Denomination Details)", expanded=False):
+        d_500 = int(drawer_data.get("notes_500", 0) or 0)
+        d_200 = int(drawer_data.get("notes_200", 0) or 0)
+        d_100 = int(drawer_data.get("notes_100", 0) or 0)
+        d_50  = int(drawer_data.get("notes_50", 0) or 0)
+        d_20  = int(drawer_data.get("notes_20", 0) or 0)
+        d_10  = int(drawer_data.get("notes_10", 0) or 0)
+        d_coins = float(drawer_data.get("coins", 0.0) or 0.0)
+
+        denom_records = [
+            {"ரூபாய் நோட்டு": "₹500", "எண்ணிக்கை": d_500, "மதிப்பு": f"₹{d_500 * 500:,.2f}"},
+            {"ரூபாய் நோட்டு": "₹200", "எண்ணிக்கை": d_200, "மதிப்பு": f"₹{d_200 * 200:,.2f}"},
+            {"ரூபாய் நோட்டு": "₹100", "எண்ணிக்கை": d_100, "மதிப்பு": f"₹{d_100 * 100:,.2f}"},
+            {"ரூபாய் நோட்டு": "₹50",  "எண்ணிக்கை": d_50,  "மதிப்பு": f"₹{d_50 * 50:,.2f}"},
+            {"ரூபாய் நோட்டு": "₹20",  "எண்ணிக்கை": d_20,  "மதிப்பு": f"₹{d_20 * 20:,.2f}"},
+            {"ரூபாய் நோட்டு": "₹10",  "எண்ணிக்கை": d_10,  "மதிப்பு": f"₹{d_10 * 10:,.2f}"},
+            {"ரூபாய் நோட்டு": "சில்லறை", "எண்ணிக்கை": "-", "மதிப்பு": f"₹{d_coins:,.2f}"},
+        ]
+
+        tbl_col, summary_col = st.columns([1.8, 1.2])
+        with tbl_col:
+            st.dataframe(denom_records, use_container_width=True, hide_index=True)
+        with summary_col:
+            st.info(f"**நோட்டுகளின் மொத்தம்:**\n### ₹{approved_balance:,.2f}")
+            st.caption("ஆப்பரேஷன்ஸ் அழைப்பு சரிபார்ப்பு முடிந்ததும் பெண்டிங் தொகைகள் இதில் சேரும்.")
+
+    st.markdown("<hr style='margin: 10px 0 20px 0;'>", unsafe_allow_html=True)
+
+
 # ==========================================
-# 🌟 2. இப்போது இந்த மெனு கோடை இங்கே ஒட்டவும்:
+# 🌟 மெனு மற்றும் நேவிகேஷன் பகுதிகள்
 # ==========================================
 
 # 1. அட்மின் அனுமதி சரிபார்ப்பு
@@ -82,12 +194,11 @@ if selected_page == "📊 கிளை தினசரி ரிப்போர�
     # தனி ஃபைலில் உள்ள ரிப்போர்ட்டைக் காட்டுதல்
     branch_report.show_branch_daily_transaction_report(supabase)
     
-    # மிக முக்கியமானது: ரிப்போர்ட் பக்கம் மட்டும் தெரிய வேண்டும், 
-    # கீழே உள்ள வழக்கமான பரிவர்த்தனைப் பக்கம் தெரியக்கூடாது என்பதற்காக இதை நிறுத்தவும்:
+    # ரிப்போர்ட் பக்கம் மட்டும் தெரிய வேண்டும் என்பதால் நிறுத்துதல்:
     st.stop()
 
-    # -------------------------------------------------------------
-# 👇👇 இதற்கு கீழே சரியாக இங்கே ஒட்டவும் 👇👇
+# -------------------------------------------------------------
+# 👇👇 பரிவர்த்தனை பக்கத்தின் முகப்பில் கல்லா கார்டைக் காட்டுதல் 👇👇
 # -------------------------------------------------------------
 user_branch_id = (
     st.session_state.get("branch_id")
@@ -98,13 +209,12 @@ user_branch_id = (
 if user_branch_id:
     render_branch_cash_header_card(user_branch_id)
 # -------------------------------------------------------------
+
 # ==============================================================================
 # ⚡ அதிவேக கேச்சிங் ஃபங்க்ஷன்கள் (Cache Data with TTL)
 # ==============================================================================
 
 # 1. கிளைகள் விவரங்களை 10 நிமிடங்களுக்கு நினைவகத்தில் வைத்தல்
-
-
 @st.cache_data(ttl=600)
 def get_cached_branches():
     try:
@@ -120,8 +230,6 @@ def get_cached_branches():
 
 
 # 2. ஸ்கீம்கள் விவரங்களை 10 நிமிடங்களுக்கு நினைவகத்தில் வைத்தல்
-
-
 @st.cache_data(ttl=600)
 def get_cached_schemes():
     try:
@@ -132,8 +240,6 @@ def get_cached_schemes():
 
 
 # 3. பணியாளர்கள் பட்டியலை 5 நிமிடங்களுக்கு நினைவகத்தில் வைத்தல்
-
-
 @st.cache_data(ttl=300)
 def get_cached_staff():
     try:
@@ -150,8 +256,6 @@ def get_cached_staff():
 # -------------------------------------------------------------
 # ⚡ மின்னல் வேக மாஸ்டர் திட்டங்கள் கேச்சிங் (10 நிமிடங்களுக்கு ஒருமுறை மட்டும் எடுக்கும்)
 # -------------------------------------------------------------
-
-
 @st.cache_data(ttl=600)
 def get_cached_master_schemes():
     try:
@@ -187,8 +291,6 @@ def get_cached_master_schemes():
 # ==============================================================================
 # 🌟 இணைப்பு துண்டிக்கப்படுவதைத் தடுக்கும் பாதுகாப்பு செயல்பாடு (Safe Query Runner)
 # ==============================================================================
-
-
 def safe_execute(query_builder, retries=2):
     """சர்வர் இணைப்பு துண்டிக்கப்பட்டால் தானாக மீண்டும் இயக்கும் செயல்பாடு"""
     for attempt in range(retries):
@@ -204,8 +306,6 @@ def safe_execute(query_builder, retries=2):
 # ==============================================================================
 # நகை படம் பதிவேற்றும் செயல்பாடு (Supabase Storage Bucket: ornaments)
 # ==============================================================================
-
-
 def upload_ornament_image(file_obj):
     if not file_obj:
         return None
@@ -399,7 +499,7 @@ st.markdown(
 
 
 # ==========================================
-# 2.  Supabase இணைப்பு
+# 2. Supabase இணைப்பு
 # ==========================================
 @st.cache_resource
 def get_supabase_client() -> Client:
@@ -417,8 +517,6 @@ except Exception as e:
 # ==========================================
 # 3. ஆவணப் பதிவேற்றம், SMS & கல்லா செயல்பாடுகள்
 # ==========================================
-
-
 def upload_single_file(file_obj, folder_name):
     if not file_obj:
         return None
@@ -464,8 +562,6 @@ def upload_files_to_supabase(files, visit_no):
 # ==============================================================================
 # கடன் உறுதி ஆவணம் உருவாக்கும் செயல்பாடு (Declaration Form HTML Generator)
 # ==============================================================================
-
-
 def generate_declaration_html(data):
     """தமிழ் டிக்ளரேஷன் உறுதி ஆவணம் உருவாக்கும் முறை"""
     try:
@@ -577,8 +673,6 @@ def generate_declaration_html(data):
 # -------------------------------------------------------------
 # 💰 கிளை நேரலை கல்லா ரொக்க இருப்பைப் பெறும் செயல்பாடு (Synced with Notes)
 # -------------------------------------------------------------
-
-
 def get_branch_current_cash(branch_id):
     """கல்லா டிராயரில் உள்ள நேரடி நோட்டுகளின் மொத்த மதிப்பை துல்லியமாக வழங்கும்"""
     try:
@@ -603,8 +697,6 @@ def get_branch_current_cash(branch_id):
 # -------------------------------------------------------------
 # 🔄 கல்லா இருப்பைப் புதுப்பிக்கும் செயல்பாடு
 # -------------------------------------------------------------
-
-
 def update_branch_cash_box(branch_id, cash_in=0.0, cash_out=0.0):
     """பரிவர்த்தனைக்கு ஏற்ப கல்லா இருப்பைப் புதுப்பிக்கும் செயல்பாடு"""
     try:
@@ -643,8 +735,6 @@ def update_branch_cash_box(branch_id, cash_in=0.0, cash_out=0.0):
 # ---------------------------------------------------------------------
 # 💰 கல்லா ரொக்கம் & நோட்டுகளின் எண்ணிக்கையைப் புதுப்பிக்கும் முழுமையான செயல்பாடு
 # ---------------------------------------------------------------------
-
-
 def update_branch_cash_and_denominations(
     branch_id, cash_in=0.0, cash_out=0.0, denom_in=None, denom_out=None
 ):
@@ -683,7 +773,6 @@ def update_branch_cash_and_denominations(
         new_total_bal = prev_bal + net_cash_change
 
         # 2. முந்தைய நோட்டுகளின் எண்ணிக்கை (Current Denominations)
-        # current_denominations இல்லையென்றால் opening_denominations-ஐ எடுக்கும்
         curr_notes = c_box.get("current_denominations")
         if not curr_notes:
             curr_notes = (
@@ -733,8 +822,6 @@ def update_branch_cash_and_denominations(
 # ==============================================================================
 # வருகை வரிசை எண் உருவாக்கும் செயல்பாடு (Unique Incrementing Visit No)
 # ==============================================================================
-
-
 def generate_branch_visit_no(branch_id, branch_code="BR"):
     """கிளை வாரியாக வரிசை எண்ணுடன் கூடிய வருகை எண்ணை உருவாக்குதல் (எ.கா: VST-TGL-0001)"""
     try:
@@ -762,19 +849,12 @@ def generate_branch_visit_no(branch_id, branch_code="BR"):
         return f"VST-{b_code}-{str(next_num).zfill(4)}"
 
     except Exception as e:
-        # ஏதேனும் பிழை வந்தால் பாதுகாப்புக்காக நேரத்தை வைத்து உருவாக்குதல்:
         return f"VST-{branch_code}-{datetime.now().strftime('%d%H%M%S')}"
 
-
-# -------------------------------------------------------------
-# 🪙 கிளை வாரியான ஜீபி எண் உருவாக்கும் செயல்பாடு (Format: AVL/GP/001)
-# -------------------------------------------------------------
 
 # ---------------------------------------------------------------------------------
 # 🪙 கிளை வாரியான ஜீபி எண் உருவாக்கும் செயல்பாடு (Format: AVL/GP/001, AVL/GP/002...)
 # ---------------------------------------------------------------------------------
-
-
 def generate_gp_number(branch_identifier=None) -> str:
     """
     1. gold_purchases அட்டவணையில் உள்ள 'purchase_bill_no' பத்தியைத் தேடும்.
@@ -814,7 +894,6 @@ def generate_gp_number(branch_identifier=None) -> str:
             if gp_res.data:
                 for row in gp_res.data:
                     val = str(row.get("purchase_bill_no") or "")
-                    # Regex மூலம் GP/ க்குப் பின் வரும் எண்களை மட்டும் பிரித்தெடுத்தல்:
                     m = re.search(r"GP/(\d+)", val, re.IGNORECASE)
                     if m:
                         max_num = max(max_num, int(m.group(1)))
@@ -849,7 +928,6 @@ def generate_gp_number(branch_identifier=None) -> str:
         # 5. அடுத்த எண்ணைக் கணக்கிடுதல் (1 + 1 = 2):
         next_gp_no = max_num + gp_in_cart + 1
 
-        # 3 இலக்க வடிவம்: AVL/GP/002
         formatted_no = f"{next_gp_no:03d}" if next_gp_no < 1000 else f"{next_gp_no}"
         return f"{prefix}/GP/{formatted_no}"
 
@@ -860,8 +938,6 @@ def generate_gp_number(branch_identifier=None) -> str:
 # -------------------------------------------------------------------------------------------------
 # 📜 சட்டபூர்வ தங்கக் கொள்முதல் உறுதிமொழிப் படிவம் (Legal GP Declaration & Indemnity Bond Generator)
 # -------------------------------------------------------------------------------------------------
-
-
 def generate_gp_declaration_html(gp_data):
     """
     Direct மற்றும் Takeover இரண்டிற்கும் சட்டப்படி செல்லுபடியாகும்
@@ -869,7 +945,6 @@ def generate_gp_declaration_html(gp_data):
     """
     is_takeover = "Takeover" in str(gp_data.get("gp_mode", ""))
 
-    # நகைகள் அட்டவணை வரிசைகள்
     ornament_rows_html = ""
     for idx, item in enumerate(gp_data.get("ornaments", [])):
         ornament_rows_html += f"""
@@ -883,7 +958,6 @@ def generate_gp_declaration_html(gp_data):
         </tr>
         """
 
-    # டேக் ஓவர் நிதி விவரங்கள் (Takeover ஆக இருந்தால் மட்டும்)
     takeover_section_html = ""
     if is_takeover:
         takeover_section_html = f"""
@@ -1055,7 +1129,6 @@ def generate_fd_account_no(branch_id: int) -> str:
     max_seq = 0
     pattern = re.compile(rf"{re.escape(b_code)}/FD/(\d+)", re.IGNORECASE)
 
-    # 1. Supabase database-ல் உள்ள அதிகபட்ச எண்ணை எடுத்தல்
     try:
         res = (
             supabase.table("fixed_deposits")
@@ -1069,7 +1142,6 @@ def generate_fd_account_no(branch_id: int) -> str:
             if m:
                 max_seq = max(max_seq, int(m.group(1)))
 
-        # transactions டேபிளிலும் சரிபார்த்தல் (பழைய பல்க் பதிவுகள்)
         txns = (
             supabase.table("transactions")
             .select("transaction_details, remarks, customer_visits!inner(branch_id)")
@@ -1089,7 +1161,6 @@ def generate_fd_account_no(branch_id: int) -> str:
     except Exception:
         pass
 
-    # 2. 🌟 தற்போதைய கார்ட்டில் (transactions_cart) உள்ள "FD Open" பதிவுகளைச் சரிபார்த்தல்
     try:
         cart_items = st.session_state.get("transactions_cart", [])
         for item in cart_items:
@@ -1122,7 +1193,6 @@ def generate_rd_account_no(branch_id: int) -> str:
     max_seq = 0
     pattern = re.compile(rf"{re.escape(b_code)}/RD/(\d+)", re.IGNORECASE)
 
-    # 1. Supabase database-ல் உள்ள அதிகபட்ச எண்ணை எடுத்தல்
     try:
         res = (
             supabase.table("recurring_deposits")
@@ -1136,7 +1206,6 @@ def generate_rd_account_no(branch_id: int) -> str:
             if m:
                 max_seq = max(max_seq, int(m.group(1)))
 
-        # transactions டேபிளிலும் சரிபார்த்தல் (பழைய பல்க் பதிவுகள்)
         txns = (
             supabase.table("transactions")
             .select("transaction_details, remarks, customer_visits!inner(branch_id)")
@@ -1156,12 +1225,10 @@ def generate_rd_account_no(branch_id: int) -> str:
     except Exception:
         pass
 
-    # 2. 🌟 தற்போதைய கார்ட்டில் (transactions_cart) உள்ள "RD Open" பதிவுகளைச் சரிபார்த்தல்
     try:
         cart_items = st.session_state.get("transactions_cart", [])
         for item in cart_items:
             t_type = str(item.get("transaction_type", ""))
-            # புதிய RD Open பதிவுகளுக்கு மட்டுமே வரிசை எண்ணைக் கணக்கிட வேண்டும்
             if (
                 "RD Open" in t_type
                 or ("RD" in t_type and "Open" in t_type)
@@ -1187,12 +1254,9 @@ def generate_rd_account_no(branch_id: int) -> str:
 # =========================================================================
 # 🔍 வாடிக்கையாளரின் ஆக்டிவ் RD கணக்குகளை எடுக்கும் ஃபங்க்ஷன் (Hybrid Mode)
 # =========================================================================
-
-
 def get_customer_rd_accounts(customer_id: int):
     """வாடிக்கையாளரின் முடிவடையாத (Active) RD கணக்குகளை எடுத்தல்"""
     try:
-        # 1. recurring_deposits அட்டவணையில் முதலில் தேடுதல்
         res = (
             supabase.table("recurring_deposits")
             .select("rd_account_no, monthly_installment")
@@ -1209,7 +1273,6 @@ def get_customer_rd_accounts(customer_id: int):
                 for r in res.data
             ]
 
-        # 2. அட்டவணையில் இல்லை எனில் transactions பதிவுகளில் தேடுதல் (Fallback)
         v_res = (
             supabase.table("customer_visits")
             .select("id")
@@ -1264,12 +1327,9 @@ def get_customer_rd_accounts(customer_id: int):
 # =========================================================================
 # 🔍 வாடிக்கையாளரின் ஆக்டிவ் FD கணக்குகளை எடுக்கும் ஃபங்க்ஷன் (Hybrid Mode)
 # =========================================================================
-
-
 def get_customer_fd_accounts(customer_id: int):
     """வாடிக்கையாளரின் முடிவடையாத (Active) FD கணக்குகளை எடுத்தல்"""
     try:
-        # 1. fixed_deposits அட்டவணையில் முதலில் தேடுதல்
         res = (
             supabase.table("fixed_deposits")
             .select("fd_account_no, deposit_amount")
@@ -1286,7 +1346,6 @@ def get_customer_fd_accounts(customer_id: int):
                 for r in res.data
             ]
 
-        # 2. அட்டவணையில் இல்லை எனில் transactions பதிவுகளில் தேடுதல் (Fallback)
         v_res = (
             supabase.table("customer_visits")
             .select("id")
@@ -1399,6 +1458,27 @@ def get_current_branch_cash_drawer(branch_id):
     try:
         clean_b_id = int(branch_id)
         stock = empty_stock.copy()
+
+        # branch_cash_drawer அட்டவணையில் இருந்து நேரடி நோட்டுகளின் எண்ணிக்கையை எடுத்தல்
+        res = (
+            supabase.table("branch_cash_drawer")
+            .select("*")
+            .eq("branch_id", clean_b_id)
+            .execute()
+        )
+        if res.data:
+            d = res.data[0]
+            stock["500"] = int(d.get("notes_500", 0) or 0)
+            stock["200"] = int(d.get("notes_200", 0) or 0)
+            stock["100"] = int(d.get("notes_100", 0) or 0)
+            stock["50"] = int(d.get("notes_50", 0) or 0)
+            stock["20"] = int(d.get("notes_20", 0) or 0)
+            stock["10"] = int(d.get("notes_10", 0) or 0)
+            stock["5"] = int(d.get("notes_5", 0) or 0)
+            stock["coins"] = float(d.get("coins", 0.0) or 0.0)
+        return stock
+    except Exception:
+        return empty_stock
 
         # =========================================================================
         # 1. அட்மின் பதிவு செய்த மிகச் சமீபத்திய துவக்க இருப்பை எடுத்தல் (Opening Stock)
