@@ -10529,103 +10529,180 @@ if st.session_state.get("logged_in", False):
                                 st.dataframe(df_leads[["created_at", "lead_type", "customer_name", "phone", "location", "service_or_budget", "message"]], use_container_width=True)
                             else:
                                 st.info("இணையதளத்தில் இருந்து புதிய விசாரணைகள் எதுவும் வரவில்லை.")
+        
         # =========================================================================
-        # 🛍️ நகை அங்காடி மேலாண்மை (Jewellery Showcase Manager)
+        # 🛍️ நகை அங்காடி மேலாண்மை (Categories, Add, Edit & Images)
         # =========================================================================
         elif selected_section == "🛍️ நகை அங்காடி மேலாண்மை":
-            st.subheader("🛍️ நகை அங்காடி தயாரிப்புகள் மேலாண்மை (Jewellery Showcase)")
-            st.caption("இங்கு நீங்கள் பதிவேற்றும் நகைகள், புகைப்படங்கள் மற்றும் எடைகள் நேரடியாக www.muthusisegold.com தளத்தில் தோன்றும்.")
+            st.subheader("🛍️ நகை அங்காடி தயாரிப்புகள் & கேட்டகிரி மேலாண்மை")
 
-            tab_add, tab_list = st.tabs(["➕ புதிய நகை சேர்த்தல்", "📋 நடப்பு நகைப் பட்டியல்"])
+            # 1. கேட்டகிரிகளை எடுத்தல்
+            cat_res = supabase.table("jewellery_categories").select("*").order("id").execute()
+            categories = cat_res.data or []
 
-            with tab_add:
-                with st.form("add_jewellery_form", clear_on_submit=True):
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        p_code = st.text_input("நகை குறியீட்டு எண் (Product Code)*", placeholder="எ.கா: MGS-RNG-101")
-                        p_title = st.text_input("நகை பெயர் (Title)*", placeholder="எ.கா: பாரம்பரிய 916 தங்க வளையல்")
-                        p_category = st.selectbox("வகைப்பாடு (Category)*", [
-                            ("rings", "மோதிரங்கள் (Rings)"),
-                            ("bangles", "வளையல்கள் (Bangles)"),
-                            ("necklaces", "நெக்லஸ் & ஹாரம் (Necklaces)"),
-                            ("earrings", "கம்மல் & ஜிமிக்கி (Earrings)"),
-                            ("chains", "தாலி & செயின்கள் (Chains)"),
-                            ("coins", "தங்க நாணயங்கள் (Coins)")
-                        ], format_func=lambda x: x[1])[0]
-                        p_who = st.selectbox("யார் பயன்படுத்தலாம்?", ["பெண்கள் (Women)", "ஆண்கள் (Men)", "மணப்பெண் (Bridal)", "குழந்தைகள் (Kids)", "அனைவருக்கும் (Unisex)"])
-                        p_size = st.text_input("அளவு (Size)", placeholder="எ.கா: 2.4, 2.6 / 18 Inches / 22 mm")
+            tab_items, tab_add, tab_cats = st.tabs(["📋 நடப்பு நகைகள் (எடிட் / நீக்கு)", "➕ புதிய நகை சேர்த்தல்", "🏷️ கேட்டகிரி மேலாண்மை"])
 
-                    with col2:
-                        p_gross = st.number_input("மொத்த எடை (Gross Wt in Grams)*", min_value=0.1, max_value=500.0, value=8.0, step=0.05, format="%.3f")
-                        p_net = st.number_input("நிகர எடை (Net Gold Wt in Grams)*", min_value=0.1, max_value=500.0, value=8.0, step=0.05, format="%.3f")
-                        p_wastage = st.number_input("சேதாரம் % (VA)", min_value=0.0, max_value=30.0, value=7.5, step=0.1, format="%.2f")
-                        p_making = st.number_input("செய்கூலி % (Making Charges)", min_value=0.0, max_value=25.0, value=2.5, step=0.1, format="%.2f")
-                        p_other = st.number_input("பிற செலவு ₹ (HUID / Stones)", min_value=0, value=45, step=5)
-
-                    p_desc = st.text_area("விளக்கம் (Description)", placeholder="நகையின் சிறப்பு அம்சங்கள், வடிவம் பற்றிய சிறு குறிப்பு...")
-
-                    st.markdown("##### 📸 நகைப் புகைப்படங்கள் (4 கோணங்கள்)")
-                    uploaded_files = st.file_uploader("4 புகைப்படங்களைத் தேர்வு செய்க (Front, Side, Close-up, Angle)", type=["jpg", "jpeg", "png", "webp"], accept_multiple_files=True)
-
-                    btn_save_jewel = st.form_submit_button("💎 இணையதளத்தில் நகையை உடனே வெளியிடுக", type="primary", use_container_width=True)
-
-                    if btn_save_jewel:
-                        if not p_code or not p_title:
-                            st.error("குறியீட்டு எண் மற்றும் நகை பெயர் கட்டாயமாகும்!")
-                        elif not uploaded_files or len(uploaded_files) < 1:
-                            st.error("குறைந்தது 1 புகைப்படமாவது பதிவேற்ற வேண்டும் (4 படங்கள் பரிந்துரைக்கப்படுகிறது).")
-                        else:
-                            with st.spinner("படங்கள் பதிவேற்றப்பட்டு இணையதளத்திற்குத் தயாராகிறது..."):
-                                img_urls = []
-                                for idx, f in enumerate(uploaded_files[:4]):
-                                    file_ext = f.name.split(".")[-1]
-                                    file_path = f"products/{p_code}_{idx+1}_{int(datetime.now().timestamp())}.{file_ext}"
-                                    
-                                    # Supabase Storage Bucket Upload
-                                    res_upload = supabase.storage.from_("jewellery-images").upload(file_path, f.getvalue(), {"content-type": f.type})
-                                    public_url = supabase.storage.from_("jewellery-images").get_public_url(file_path)
-                                    img_urls.append(public_url)
-
-                                # Database Insert
-                                payload = {
-                                    "product_code": p_code,
-                                    "category": p_category,
-                                    "title": p_title,
-                                    "who_can_wear": p_who,
-                                    "size": p_size,
-                                    "gross_weight": float(p_gross),
-                                    "net_weight": float(p_net),
-                                    "wastage_pct": float(p_wastage),
-                                    "making_pct": float(p_making),
-                                    "other_cost": float(p_other),
-                                    "description": p_desc,
-                                    "images": img_urls,
-                                    "is_active": True
-                                }
-                                supabase.table("jewellery_products").upsert(payload, on_conflict="product_code").execute()
-                                st.success(f"🎉 {p_title} ({p_code}) வெற்றிகரமாக இணையதளத்தில் நேரலையாகிவிட்டது!")
-                                st.balloons()
-                                st.rerun()
-
-            with tab_list:
+            # -------------------------------------------------------------
+            # டேப் 1: நகைகளை எடிட் செய்யும் வசதி (EDIT JEWELLERY)
+            # -------------------------------------------------------------
+            with tab_items:
                 j_res = supabase.table("jewellery_products").select("*").order("created_at", desc=True).execute()
                 items = j_res.data or []
                 if items:
                     for it in items:
-                        with st.expander(f"💎 {it['title']} ({it['product_code']}) - {it['gross_weight']}g | {it['category'].upper()}"):
-                            c1, c2 = st.columns([1, 2])
-                            with c1:
+                        with st.expander(f"💎 {it['title']} ({it['product_code']}) - {it['gross_weight']}g"):
+                            c_img, c_edit = st.columns([1, 2])
+                            with c_img:
                                 if it.get("images"):
-                                    st.image(it["images"][0], width=180)
-                            with c2:
-                                st.write(f"**நிகர எடை:** {it['net_weight']}g | **அளவு:** {it.get('size','-')}")
-                                st.write(f"**சேதாரம்:** {it['wastage_pct']}% | **செய்கூலி:** {it['making_pct']}% | **இதர:** ₹{it['other_cost']}")
-                                st.caption(it.get("description", ""))
-                                if st.button(f"🗑️ நீக்குக ({it['product_code']})", key=f"del_{it['id']}"):
-                                    supabase.table("jewellery_products").delete().eq("id", it["id"]).execute()
-                                    st.warning("தயாரிப்பு நீக்கப்பட்டது!")
-                                    st.rerun()
+                                    st.image(it["images"][0], caption="முக்கிய படம்", width=220)
+                            
+                            with c_edit:
+                                with st.form(f"edit_form_{it['id']}"):
+                                    e_title = st.text_input("நகை பெயர்", value=it.get("title", ""))
+                                    
+                                    cat_slugs = [c["slug"] for c in categories]
+                                    curr_cat_idx = cat_slugs.index(it.get("category")) if it.get("category") in cat_slugs else 0
+                                    e_cat = st.selectbox("கேட்டகிரி", categories, index=curr_cat_idx, format_func=lambda x: x["name_ta"])[ "slug"] if categories else it.get("category")
+
+                                    col_w1, col_w2 = st.columns(2)
+                                    with col_w1:
+                                        e_gross = st.number_input("மொத்த எடை (g)", value=float(it.get("gross_weight", 0)), step=0.01, format="%.3f")
+                                        e_net = st.number_input("நிகர எடை (g)", value=float(it.get("net_weight", 0)), step=0.01, format="%.3f")
+                                        e_size = st.text_input("அளவு (Size)", value=it.get("size", "") or "")
+                                    with col_w2:
+                                        e_waste = st.number_input("சேதாரம் %", value=float(it.get("wastage_pct", 0)), step=0.1)
+                                        e_make = st.number_input("செய்கூலி %", value=float(it.get("making_pct", 0)), step=0.1)
+                                        e_other = st.number_input("இதர செலவு ₹", value=int(it.get("other_cost", 45)), step=5)
+
+                                    e_who = st.text_input("யார் பயன்படுத்தலாம்?", value=it.get("who_can_wear", ""))
+                                    e_desc = st.text_area("விளக்கம்", value=it.get("description", "") or "")
+
+                                    st.caption("📸 புதிய படங்களை மாற்ற விரும்பினால் மட்டும் பதிவேற்றவும் (பழைய படங்களை மாற்றும்):")
+                                    new_uploaded = st.file_uploader("புதிய படங்கள் (1-4)", type=["jpg","png","jpeg","webp"], accept_multiple_files=True, key=f"up_{it['id']}")
+
+                                    col_b1, col_b2 = st.columns(2)
+                                    with col_b1:
+                                        btn_update = st.form_submit_button("💾 மாற்றங்களைச் சேமிக்குக", type="primary")
+                                    with col_b2:
+                                        btn_del = st.form_submit_button("🗑️ நகையை நீக்குக")
+
+                                    if btn_update:
+                                        img_urls = it.get("images", [])
+                                        if new_uploaded:
+                                            img_urls = []
+                                            for idx, f in enumerate(new_uploaded[:4]):
+                                                ext = f.name.split(".")[-1]
+                                                fpath = f"products/{it['product_code']}_{idx+1}_{int(datetime.now().timestamp())}.{ext}"
+                                                supabase.storage.from_("jewellery-images").upload(fpath, f.getvalue(), {"content-type": f.type})
+                                                img_urls.append(supabase.storage.from_("jewellery-images").get_public_url(fpath))
+
+                                        payload = {
+                                            "title": e_title,
+                                            "category": e_cat,
+                                            "gross_weight": float(e_gross),
+                                            "net_weight": float(e_net),
+                                            "size": e_size,
+                                            "wastage_pct": float(e_waste),
+                                            "making_pct": float(e_make),
+                                            "other_cost": float(e_other),
+                                            "who_can_wear": e_who,
+                                            "description": e_desc,
+                                            "images": img_urls,
+                                            "updated_at": datetime.now().isoformat()
+                                        }
+                                        supabase.table("jewellery_products").update(payload).eq("id", it["id"]).execute()
+                                        st.success("நகை விபரங்கள் வெற்றிகரமாகப் புதுப்பிக்கப்பட்டன!")
+                                        st.rerun()
+
+                                    if btn_del:
+                                        supabase.table("jewellery_products").delete().eq("id", it["id"]).execute()
+                                        st.warning("நகை நீக்கப்பட்டது!")
+                                        st.rerun()
                 else:
-                    st.info("இன்னும் நகைகள் ஏதும் சேர்க்கப்படவில்லை.")
+                    st.info("நகைகள் ஏதும் இல்லை.")
+
+            # -------------------------------------------------------------
+            # டேப் 2: புதிய நகை சேர்த்தல்
+            # -------------------------------------------------------------
+            with tab_add:
+                with st.form("add_jewel_form_new", clear_on_submit=True):
+                    c1, c2 = st.columns(2)
+                    with c1:
+                        p_code = st.text_input("நகை குறியீட்டு எண்*", placeholder="MGS-001")
+                        p_title = st.text_input("நகை பெயர்*", placeholder="பாரம்பரிய தங்க வளையல்")
+                        p_cat = st.selectbox("கேட்டகிரி*", categories, format_func=lambda x: x["name_ta"])["slug"] if categories else "general"
+                        p_who = st.selectbox("பயன்படுத்துபவர்", ["பெண்கள்", "ஆண்கள்", "மணப்பெண்", "குழந்தைகள்", "அனைவருக்கும்"])
+                        p_size = st.text_input("அளவு", placeholder="2.4, 2.6 / 18 Inches")
+                    with c2:
+                        p_gross = st.number_input("மொத்த எடை (g)*", value=8.0, step=0.01, format="%.3f")
+                        p_net = st.number_input("நிகர எடை (g)*", value=8.0, step=0.01, format="%.3f")
+                        p_waste = st.number_input("சேதாரம் %", value=7.5, step=0.1)
+                        p_make = st.number_input("செய்கூலி %", value=2.5, step=0.1)
+                        p_other = st.number_input("பிற செலவு ₹", value=45, step=5)
+
+                    p_desc = st.text_area("விளக்கம்", placeholder="சிறப்பம்சங்கள்...")
+                    up_files = st.file_uploader("நகைப் புகைப்படங்கள் (1-4)", type=["jpg","png","jpeg","webp"], accept_multiple_files=True)
+
+                    if st.form_submit_button("💎 புதிய நகையை வெளியிடுக", type="primary", use_container_width=True):
+                        if not p_code or not p_title or not up_files:
+                            st.error("குறியீட்டு எண், பெயர் மற்றும் புகைப்படம் கட்டாயம்!")
+                        else:
+                            img_urls = []
+                            for idx, f in enumerate(up_files[:4]):
+                                ext = f.name.split(".")[-1]
+                                fpath = f"products/{p_code}_{idx+1}_{int(datetime.now().timestamp())}.{ext}"
+                                supabase.storage.from_("jewellery-images").upload(fpath, f.getvalue(), {"content-type": f.type})
+                                img_urls.append(supabase.storage.from_("jewellery-images").get_public_url(fpath))
+
+                            payload = {
+                                "product_code": p_code,
+                                "title": p_title,
+                                "category": p_cat,
+                                "who_can_wear": p_who,
+                                "size": p_size,
+                                "gross_weight": float(p_gross),
+                                "net_weight": float(p_net),
+                                "wastage_pct": float(p_waste),
+                                "making_pct": float(p_make),
+                                "other_cost": float(p_other),
+                                "description": p_desc,
+                                "images": img_urls,
+                                "is_active": True
+                            }
+                            supabase.table("jewellery_products").insert(payload).execute()
+                            st.success("நகை வெற்றிகரமாக சேர்க்கப்பட்டது!")
+                            st.rerun()
+
+            # -------------------------------------------------------------
+            # டேப் 3: கேட்டகிரி மேலாண்மை (ADD / DELETE CATEGORY)
+            # -------------------------------------------------------------
+            with tab_cats:
+                st.markdown("##### 🏷️ புதிய கேட்டகிரி சேர்த்தல்")
+                col_c1, col_c2, col_c3 = st.columns([2, 2, 1.5])
+                with col_c1:
+                    new_cat_name = st.text_input("கேட்டகிரி பெயர் (தமிழ்)", placeholder="எ.கா: ஒட்டியாணம்")
+                with col_c2:
+                    new_cat_slug = st.text_input("ஆங்கில அடையாள சொல் (Slug)", placeholder="எ.கா: oddiyanam")
+                with col_c3:
+                    st.write("")
+                    st.write("")
+                    if st.button("➕ உருவாக்கு", type="primary"):
+                        if new_cat_name and new_cat_slug:
+                            supabase.table("jewellery_categories").insert({
+                                "slug": new_cat_slug.strip().lower(),
+                                "name_ta": new_cat_name.strip()
+                            }).execute()
+                            st.success("கேட்டகிரி சேர்க்கப்பட்டது!")
+                            st.rerun()
+
+                st.markdown("---")
+                st.markdown("##### 📋 நடப்பு கேட்டகிரிகள் (நீக்க விரும்பினால் நீக்கலாம்)")
+                for cat in categories:
+                    cc1, cc2 = st.columns([4, 1])
+                    cc1.write(f"🏷️ **{cat['name_ta']}** (`{cat['slug']}`)")
+                    if cc2.button("🗑️ நீக்கு", key=f"delcat_{cat['id']}"):
+                        supabase.table("jewellery_categories").delete().eq("id", cat["id"]).execute()
+                        st.warning("கேட்டகிரி நீக்கப்பட்டது!")
+                        st.rerun()
 
             st.stop()
