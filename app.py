@@ -7591,13 +7591,17 @@ if st.session_state.get("logged_in", False):
 
                 with st.container(border=True):
                     st.markdown("#### 💳 பணம் செலுத்தும் / பெறும் வழிகள் (Payment Split)")
-                    pm_c1, pm_c2, pm_c3 = st.columns(3)
+                    pm_c1, pm_c2 = st.columns([1.5, 2])
                     with pm_c1:
                         pay_option = st.selectbox(
-                            "பரிமாற்ற வகை:",
-                            ["முழுவதும் ரொக்கம் (100% Cash)", "முழுவதும் வங்கி / UPI (100% Online)", "பகுதி ரொக்கம் + பகுதி வங்கி (Split)"],
+                            "பரிமாற்ற வகை *:",
+                            [
+                                "முழுவதும் ரொக்கம் (100% Cash)",
+                                "முழுவதும் வங்கி / UPI (100% Online)",
+                                "பகுதி ரொக்கம் + பகுதி வங்கி (Split)",
+                            ],
                             disabled=otp_already_sent,
-                            key="pay_option_select"
+                            key="pay_option_select",
                         )
 
                     with pm_c2:
@@ -7609,21 +7613,165 @@ if st.session_state.get("logged_in", False):
                             bank_portion = total_needed_abs
                         else:
                             cash_portion = st.number_input(
-                                "ரொக்கப் பகுதி (₹):",
+                                "ரொக்கப் பகுதி (₹) *:",
                                 min_value=0.0,
                                 max_value=float(total_needed_abs),
                                 step=500.0,
                                 disabled=otp_already_sent,
-                                key="cash_portion_input"
+                                key="cash_portion_input",
                             )
                             bank_portion = total_needed_abs - cash_portion
-                        st.metric("நிகர ரொக்க இலக்கு (Net Cash Target)", f"₹{cash_portion:,.2f}")
 
-                    with pm_c3:
-                        st.metric("வங்கி / UPI தொகை", f"₹{bank_portion:,.2f}")
-                        bank_ref_no = st.text_input("UTR / Ref எண் *:", disabled=otp_already_sent, key="bank_ref_input") if bank_portion > 0 else ""
+                    m_col1, m_col2 = st.columns(2)
+                    m_col1.metric("கல்லா நிகர ரொக்கம்", f"₹{cash_portion:,.2f}")
+                    m_col2.metric("வங்கி வழியே செலுத்த வேண்டியது", f"₹{bank_portion:,.2f}")
 
-                    with st.expander("💼 தற்போதைய கல்லா கையிருப்பு நோட்டுகள் (Live Drawer Stock)", expanded=False):
+                    # =========================================================================
+                    # 🌟 வங்கி மற்றும் மூன்றாம் நபர் பரிமாற்ற விவரப் பிரிவு (கிளையில் UTR கேட்கப்படாது)
+                    # =========================================================================
+                    bank_transfer_type = None
+                    b_name, b_branch, b_holder, b_acc, b_ifsc, b_type, b_upi, b_phone = (
+                        "",
+                        "",
+                        "",
+                        "",
+                        "",
+                        "சேமிப்பு (Savings)",
+                        "",
+                        "",
+                    )
+                    passbook_file, consent_file = None, None
+                    is_bank_details_ready = True
+
+                    if bank_portion > 0:
+                        st.markdown("---")
+                        st.markdown(
+                            "##### 🏦 வங்கிப் பரிமாற்ற விவரங்கள் (ஆப்பரேஷன்ஸ் அனுப்புவதற்காக)"
+                        )
+
+                        b_type_sel = st.radio(
+                            "டிரான்ஸ்பர் யாருக்குச் செய்யப்பட வேண்டும்? *:",
+                            ["வாடிக்கையாளருக்கு (Customer / Self)", "மூன்றாம் நபருக்கு (Third Party)"],
+                            horizontal=True,
+                            disabled=otp_already_sent,
+                            key="b_transfer_type_radio",
+                        )
+                        bank_transfer_type = (
+                            "Customer" if "Customer" in b_type_sel else "Third Party"
+                        )
+
+                        # வங்கித் தகவல்கள் உள்ளீடு
+                        bk_col1, bk_col2, bk_col3 = st.columns(3)
+                        with bk_col1:
+                            b_holder = st.text_input(
+                                "கணக்கு உரிமையாளர் பெயர் *:",
+                                value=(
+                                    visit.get("customer_name", "")
+                                    if bank_transfer_type == "Customer"
+                                    else ""
+                                ),
+                                disabled=otp_already_sent,
+                                key="b_holder_in",
+                            )
+                            b_acc = st.text_input(
+                                "வங்கி கணக்கு எண் (A/C No) *:",
+                                disabled=otp_already_sent,
+                                key="b_acc_in",
+                            )
+                            b_type = st.selectbox(
+                                "கணக்கு வகை *:",
+                                ["சேமிப்பு (Savings)", "நடப்பு (Current)"],
+                                disabled=otp_already_sent,
+                                key="b_type_in",
+                            )
+                        with bk_col2:
+                            b_name = st.text_input(
+                                "வங்கி பெயர் (Bank Name) *:",
+                                placeholder="எ.கா: SBI / Canara",
+                                disabled=otp_already_sent,
+                                key="b_name_in",
+                            )
+                            b_ifsc = (
+                                st.text_input(
+                                    "IFSC கோடு *:",
+                                    placeholder="எ.கா: SBIN0001234",
+                                    disabled=otp_already_sent,
+                                    key="b_ifsc_in",
+                                )
+                                .upper()
+                                .strip()
+                            )
+                            b_upi = st.text_input(
+                                "UPI ID (விருப்பத்திற்குரியது):",
+                                placeholder="name@upi",
+                                disabled=otp_already_sent,
+                                key="b_upi_in",
+                            )
+                        with bk_col3:
+                            b_branch = st.text_input(
+                                "கிளை (Branch) *:",
+                                placeholder="எ.கா: நாகர்கோவில்",
+                                disabled=otp_already_sent,
+                                key="b_branch_in",
+                            )
+                            b_phone = st.text_input(
+                                "UPI மொபைல் எண்:",
+                                value=visit.get("mobile", ""),
+                                disabled=otp_already_sent,
+                                key="b_phone_in",
+                            )
+
+                        # ஆவணங்கள் பதிவேற்றம்
+                        st.markdown(
+                            "###### 📎 கட்டாய ஆவணங்கள் பதிவேற்றம் (Attachments)"
+                        )
+                        doc_c1, doc_c2 = st.columns(2)
+                        with doc_c1:
+                            passbook_file = st.file_uploader(
+                                "1. பாஸ்புக் முன் பகுதி / செக் இலை நகல் *",
+                                type=["jpg", "jpeg", "png", "pdf"],
+                                disabled=otp_already_sent,
+                                key="passbook_file_up",
+                            )
+                        with doc_c2:
+                            consent_file = st.file_uploader(
+                                "2. வாடிக்கையாளர் ஒப்புதல் ஆவணம் (Consent Letter) *",
+                                type=["jpg", "jpeg", "png", "pdf"],
+                                disabled=otp_already_sent,
+                                key="consent_file_up",
+                            )
+
+                        # ஆவணங்கள் மற்றும் விவரங்கள் சரிபார்ப்பு
+                        if not all(
+                            [
+                                b_holder.strip(),
+                                b_acc.strip(),
+                                b_name.strip(),
+                                b_ifsc.strip(),
+                                b_branch.strip(),
+                            ]
+                        ):
+                            st.warning(
+                                "⚠️ தயவுசெய்து வங்கி விவரங்கள் அனைத்தையும் (*) முழுமையாக உள்ளிடவும்!"
+                            )
+                            is_bank_details_ready = False
+                        elif not passbook_file or not consent_file:
+                            st.warning(
+                                "⚠️ பாஸ்புக் மற்றும் ஒப்புதல் ஆவணம் இரண்டையும் கட்டாயமாகப் பதிவேற்ற வேண்டும்!"
+                            )
+                            is_bank_details_ready = False
+                        else:
+                            is_bank_details_ready = True
+
+                    st.markdown("---")
+
+                    # =========================================================================
+                    # 💼 கல்லா கையிருப்பு நோட்டுகள் மற்றும் டினாமினேசன் பகுதி
+                    # =========================================================================
+                    with st.expander(
+                        "💼 தற்போதைய கல்லா கையிருப்பு நோட்டுகள் (Live Drawer Stock)",
+                        expanded=False,
+                    ):
                         ds1, ds2, ds3, ds4 = st.columns(4)
                         ds1.metric("₹500", f"{current_drawer['500']} தாள்கள்")
                         ds1.metric("₹20", f"{current_drawer['20']} தாள்கள்")
@@ -7635,33 +7783,96 @@ if st.session_state.get("logged_in", False):
                         ds4.metric("நாணயங்கள்", f"₹{current_drawer['coins']:,.2f}")
 
                     if otp_already_sent:
-                        st.warning("🔒 **OTP அனுப்பப்பட்டுவிட்டது! பணக் கணக்கீட்டில் இனி எந்த மாற்றமும் செய்ய முடியாது.**")
+                        st.warning(
+                            "🔒 **OTP அனுப்பப்பட்டுவிட்டது! பணக் கணக்கீட்டில் இனி எந்த மாற்றமும் செய்ய முடியாது.**"
+                        )
 
                     col_den1, col_den2 = st.columns([1.5, 1])
 
                     with col_den1:
                         st.markdown("#### 💵 நோட்டுகள் மற்றும் மீதி சில்லறை கணக்கீடு")
 
-                        with st.expander("📥 வாடிக்கையாளர் தந்த நோட்டுகள் (Cash IN)", expanded=True):
+                        with st.expander(
+                            "📥 வாடிக்கையாளர் தந்த நோட்டுகள் (Cash IN)", expanded=True
+                        ):
                             r1_1, r1_2, r1_3, r1_4 = st.columns(4)
-                            in_500 = r1_1.number_input("₹500 (IN)", min_value=0, step=1, disabled=otp_already_sent, key="in_500")
-                            in_200 = r1_2.number_input("₹200 (IN)", min_value=0, step=1, disabled=otp_already_sent, key="in_200")
-                            in_100 = r1_3.number_input("₹100 (IN)", min_value=0, step=1, disabled=otp_already_sent, key="in_100")
-                            in_50 = r1_4.number_input("₹50 (IN)", min_value=0, step=1, disabled=otp_already_sent, key="in_50")
+                            in_500 = r1_1.number_input(
+                                "₹500 (IN)",
+                                min_value=0,
+                                step=1,
+                                disabled=otp_already_sent,
+                                key="in_500",
+                            )
+                            in_200 = r1_2.number_input(
+                                "₹200 (IN)",
+                                min_value=0,
+                                step=1,
+                                disabled=otp_already_sent,
+                                key="in_200",
+                            )
+                            in_100 = r1_3.number_input(
+                                "₹100 (IN)",
+                                min_value=0,
+                                step=1,
+                                disabled=otp_already_sent,
+                                key="in_100",
+                            )
+                            in_50 = r1_4.number_input(
+                                "₹50 (IN)",
+                                min_value=0,
+                                step=1,
+                                disabled=otp_already_sent,
+                                key="in_50",
+                            )
 
                             r2_1, r2_2, r2_3, r2_4 = st.columns(4)
-                            in_20 = r2_1.number_input("₹20 (IN)", min_value=0, step=1, disabled=otp_already_sent, key="in_20")
-                            in_10 = r2_2.number_input("₹10 (IN)", min_value=0, step=1, disabled=otp_already_sent, key="in_10")
-                            in_5 = r2_3.number_input("₹5 (IN)", min_value=0, step=1, disabled=otp_already_sent, key="in_5")
-                            in_coins = r2_4.number_input("சில்லறை ₹ (IN)", min_value=0, step=1, disabled=otp_already_sent, key="in_coins")
+                            in_20 = r2_1.number_input(
+                                "₹20 (IN)",
+                                min_value=0,
+                                step=1,
+                                disabled=otp_already_sent,
+                                key="in_20",
+                            )
+                            in_10 = r2_2.number_input(
+                                "₹10 (IN)",
+                                min_value=0,
+                                step=1,
+                                disabled=otp_already_sent,
+                                key="in_10",
+                            )
+                            in_5 = r2_3.number_input(
+                                "₹5 (IN)",
+                                min_value=0,
+                                step=1,
+                                disabled=otp_already_sent,
+                                key="in_5",
+                            )
+                            in_coins = r2_4.number_input(
+                                "சில்லறை ₹ (IN)",
+                                min_value=0,
+                                step=1,
+                                disabled=otp_already_sent,
+                                key="in_coins",
+                            )
 
                             total_cash_in = (
-                                (in_500 * 500) + (in_200 * 200) + (in_100 * 100) + (in_50 * 50) +
-                                (in_20 * 20) + (in_10 * 10) + (in_5 * 5) + in_coins
+                                (in_500 * 500)
+                                + (in_200 * 200)
+                                + (in_100 * 100)
+                                + (in_50 * 50)
+                                + (in_20 * 20)
+                                + (in_10 * 10)
+                                + (in_5 * 5)
+                                + in_coins
                             )
-                            st.markdown(f"**வாடிக்கையாளர் தந்த மொத்தத் தொகை:** `₹{total_cash_in:,.2f}`")
+                            st.markdown(
+                                f"**வாடிக்கையாளர் தந்த மொத்தத் தொகை:** `₹{total_cash_in:,.2f}`"
+                            )
 
-                        with st.expander("📤 கிளை கொடுத்த நோட்டுகள் / பேலன்ஸ் சில்லறை (Cash OUT)", expanded=True):
+                        with st.expander(
+                            "📤 கிளை கொடுத்த நோட்டுகள் / பேலன்ஸ் சில்லறை (Cash OUT)",
+                            expanded=True,
+                        ):
                             max_500 = max(0, current_drawer["500"] + in_500)
                             max_200 = max(0, current_drawer["200"] + in_200)
                             max_100 = max(0, current_drawer["100"] + in_100)
@@ -7672,31 +7883,95 @@ if st.session_state.get("logged_in", False):
                             max_coins = max(0, int(current_drawer["coins"]) + in_coins)
 
                             o1_1, o1_2, o1_3, o1_4 = st.columns(4)
-                            out_500 = o1_1.number_input(f"₹500 (இருப்பு:{max_500})", min_value=0, max_value=max_500, step=1, disabled=otp_already_sent, key="out_500")
-                            out_200 = o1_2.number_input(f"₹200 (இருப்பு:{max_200})", min_value=0, max_value=max_200, step=1, disabled=otp_already_sent, key="out_200")
-                            out_100 = o1_3.number_input(f"₹100 (இருப்பு:{max_100})", min_value=0, max_value=max_100, step=1, disabled=otp_already_sent, key="out_100")
-                            out_50 = o1_4.number_input(f"₹50 (இருப்பு:{max_50})", min_value=0, max_value=max_50, step=1, disabled=otp_already_sent, key="out_50")
+                            out_500 = o1_1.number_input(
+                                f"₹500 (இருப்பு:{max_500})",
+                                min_value=0,
+                                max_value=max_500,
+                                step=1,
+                                disabled=otp_already_sent,
+                                key="out_500",
+                            )
+                            out_200 = o1_2.number_input(
+                                f"₹200 (இருப்பு:{max_200})",
+                                min_value=0,
+                                max_value=max_200,
+                                step=1,
+                                disabled=otp_already_sent,
+                                key="out_200",
+                            )
+                            out_100 = o1_3.number_input(
+                                f"₹100 (இருப்பு:{max_100})",
+                                min_value=0,
+                                max_value=max_100,
+                                step=1,
+                                disabled=otp_already_sent,
+                                key="out_100",
+                            )
+                            out_50 = o1_4.number_input(
+                                f"₹50 (இருப்பு:{max_50})",
+                                min_value=0,
+                                max_value=max_50,
+                                step=1,
+                                disabled=otp_already_sent,
+                                key="out_50",
+                            )
 
                             o2_1, o2_2, o2_3, o2_4 = st.columns(4)
-                            out_20 = o2_1.number_input(f"₹20 (இருப்பு:{max_20})", min_value=0, max_value=max_20, step=1, disabled=otp_already_sent, key="out_20")
-                            out_10 = o2_2.number_input(f"₹10 (இருப்பு:{max_10})", min_value=0, max_value=max_10, step=1, disabled=otp_already_sent, key="out_10")
-                            out_5 = o2_3.number_input(f"₹5 (இருப்பு:{max_5})", min_value=0, max_value=max_5, step=1, disabled=otp_already_sent, key="out_5")
-                            out_coins = o2_4.number_input(f"சில்லறை (இருப்பு:{max_coins})", min_value=0, max_value=max_coins, step=1, disabled=otp_already_sent, key="out_coins")
+                            out_20 = o2_1.number_input(
+                                f"₹20 (இருப்பு:{max_20})",
+                                min_value=0,
+                                max_value=max_20,
+                                step=1,
+                                disabled=otp_already_sent,
+                                key="out_20",
+                            )
+                            out_10 = o2_2.number_input(
+                                f"₹10 (இருப்பு:{max_10})",
+                                min_value=0,
+                                max_value=max_10,
+                                step=1,
+                                disabled=otp_already_sent,
+                                key="out_10",
+                            )
+                            out_5 = o2_3.number_input(
+                                f"₹5 (இருப்பு:{max_5})",
+                                min_value=0,
+                                max_value=max_5,
+                                step=1,
+                                disabled=otp_already_sent,
+                                key="out_5",
+                            )
+                            out_coins = o2_4.number_input(
+                                f"சில்லறை (இருப்பு:{max_coins})",
+                                min_value=0,
+                                max_value=max_coins,
+                                step=1,
+                                disabled=otp_already_sent,
+                                key="out_coins",
+                            )
 
                             total_cash_out = (
-                                (out_500 * 500) + (out_200 * 200) + (out_100 * 100) + (out_50 * 50) +
-                                (out_20 * 20) + (out_10 * 10) + (out_5 * 5) + out_coins
+                                (out_500 * 500)
+                                + (out_200 * 200)
+                                + (out_100 * 100)
+                                + (out_50 * 50)
+                                + (out_20 * 20)
+                                + (out_10 * 10)
+                                + (out_5 * 5)
+                                + out_coins
                             )
-                            st.markdown(f"**கிளை வழங்கிய மொத்தத் தொகை:** `₹{total_cash_out:,.2f}`")
+                            st.markdown(
+                                f"**கிளை வழங்கிய மொத்தத் தொகை:** `₹{total_cash_out:,.2f}`"
+                            )
 
                         if net_target < 0:
                             actual_net_handover = total_cash_in - total_cash_out
                         else:
                             actual_net_handover = total_cash_out - total_cash_in
 
-                        is_cash_tally = (actual_net_handover == cash_portion)
-                        is_bank_valid = True if bank_portion == 0 else bool(bank_ref_no.strip())
-                        is_ready = is_cash_tally and is_bank_valid
+                        is_cash_tally = actual_net_handover == cash_portion
+                        # 🌟 UTR சரிபார்ப்புக்குப் பதிலாக வங்கி விவரங்கள் சரியாக உள்ளதா என உறுதிசெய்கிறோம்
+                        is_ready = is_cash_tally and is_bank_details_ready
 
                         st.markdown("---")
                         with st.container(border=True):
@@ -7707,11 +7982,15 @@ if st.session_state.get("logged_in", False):
                             t_c3.metric("வித்தியாசம்", f"₹{abs(diff_amt):,.2f}")
 
                             if not is_cash_tally:
-                                st.error(f"❌ நோட்டுகளின் நிகரக் கணக்கீடு பொருந்தவில்லை! வித்தியாசம்: ₹{abs(diff_amt):,.2f}")
-                            elif bank_portion > 0 and not bank_ref_no.strip():
-                                st.warning("⚠️ வங்கி பரிவர்த்தனைக்கான UTR / Ref எண்ணை உள்ளிடவும்!")
+                                st.error(
+                                    f"❌ நோட்டுகளின் நிகரக் கணக்கீடு பொருந்தவில்லை! வித்தியாசம்: ₹{abs(diff_amt):,.2f}"
+                                )
+                            elif not is_bank_details_ready and bank_portion > 0:
+                                st.warning(
+                                    "⚠️ வங்கிப் பரிமாற்ற விவரங்கள் மற்றும் 2 ஆவணங்களையும் முழுமையாகப் பூர்த்தி செய்யவும்!"
+                                )
                             else:
-                                st.success("✅ நோட்டுகள் மற்றும் பேலன்ஸ் சில்லறை சரியாகப் பொருந்தியது!")
+                                st.success("✅ கட்டண விவரங்கள் அனைத்தும் சரியாகப் பொருந்தியது!")
 
                     with col_den2:
                         st.markdown("#### 📲 OTP சரிபார்ப்பு")
