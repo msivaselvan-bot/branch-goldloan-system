@@ -9648,7 +9648,7 @@ if st.session_state.get("logged_in", False):
                                     )
                                     if count > 0:
                                         f_items.append(f"**₹{k}:** {count}")
-                                Except (ValueError, TypeError):
+                                except (ValueError, TypeError):  # 👈 'Except' என்பது 'except' என மாற்றப்பட்டது
                                     continue
                             denom_text = " | ".join(f_items)
                             st.info(
