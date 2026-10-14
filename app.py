@@ -6663,14 +6663,13 @@ if st.session_state.get("logged_in", False):
                     key="visit_v_type_radio"
                 )
 
-            
                 # =========================================================================
                 # 📑 தற்காலிக வருகைகளை மீட்டெடுத்து OTP முடிக்கும் பகுதி (Read-Only)
                 # =========================================================================
                 if "Draft Visits" in v_type:
                     st.markdown("##### 📑 OTP நிலுவையில் உள்ள தற்காலிக வருகைகள்")
                     
-                    # 🌟 branch_id Null பிழையைத் தடுக்க clean_b_id
+                    # 🌟 1. branch_id Null / NameError பிழையைத் தடுக்க clean_b_id
                     raw_b_id = st.session_state.get("branch_id")
                     try:
                         clean_b_id = int(raw_b_id) if raw_b_id not in (None, "", "null") else 1
@@ -6715,79 +6714,121 @@ if st.session_state.get("logged_in", False):
                         st.markdown("#### 📲 OTP சரிபார்த்து அழைப்புப் பிரிவிற்கு அனுப்புக")
                         dr_col1, dr_col2 = st.columns(2)
                         
-                        # வாடிக்கையாளரின் மொபைல் எண்ணை எடுத்தல்
-                        draft_mobile = str(selected_draft.get("mobile") or selected_draft.get("phone") or "").strip()
+                        # 🌟 2. மொபைல் எண்ணை முழுமையாக சுத்தப்படுத்துதல் (Float .0 மற்றும் குறியீடுகளை நீக்குதல்)
+                        raw_mobile = str(
+                            selected_draft.get("mobile") 
+                            or selected_draft.get("phone") 
+                            or selected_draft.get("customer_phone")
+                            or selected_draft.get("mobile_no")
+                            or ""
+                        ).strip()
                         
+                        clean_digits = "".join(ch for ch in raw_mobile.split(".")[0] if ch.isdigit())
+                        draft_mobile = clean_digits[-10:] if len(clean_digits) >= 10 else clean_digits
+
+                        # 🌟 3. அட்மின் விலக்குக் கோரிக்கை நிலையைச் சரிபார்த்தல் (Bypass Request Check)
+                        bp_check = (
+                            supabase.table("otp_bypass_requests")
+                            .select("*")
+                            .eq("visit_no", d_vno)
+                            .order("id", desc=True)
+                            .limit(1)
+                            .execute()
+                            .data or []
+                        )
+                        is_bypass_approved = len(bp_check) > 0 and bp_check[0].get("status") in ["Approved", "Admin_Approved"]
+                        is_bypass_pending = len(bp_check) > 0 and bp_check[0].get("status") == "Pending Admin"
+
                         with dr_col1:
-                            # 🌟 தீர்வு 1: OTP அனுப்பும் பொத்தான் மற்றும் DLT சரிபார்ப்பு
-                            if st.button("📲 வாடிக்கையாளருக்கு OTP அனுப்புக", key=f"btn_resend_otp_{d_vno}", use_container_width=True):
-                                if len(draft_mobile) >= 10:
-                                    otp_c = str(random.randint(1000, 9999))
-                                    # நிரந்தரமாக session_state-ல் சேமித்தல்
-                                    st.session_state[f"active_draft_otp_{d_vno}"] = otp_c
-                                    
-                                    try:
-                                        # Fast2SMS OTP அழைப்பு
-                                        sms_res = send_fast2sms_otp(draft_mobile, otp_c)
-                                        st.success(f"✅ OTP ({draft_mobile}) எண்ணிற்கு அனுப்பப்பட்டது!")
-                                    except Exception as sms_err:
-                                        st.error(f"❌ SMS பிழை: {sms_err}")
-                                else:
-                                    st.error("⚠️ சரியான 10 இலக்க மொபைல் எண் இல்லை! கீழே அட்மின் விலக்குக் கோரிக்கை வைக்கவும்.")
+                            st.caption(f"📞 கண்டறியப்பட்ட மொபைல் எண்: **{draft_mobile if draft_mobile else 'எண் கிடைக்கவில்லை'}**")
 
-                            # OTP நிலை வழிகாட்டி
-                            current_saved_otp = st.session_state.get(f"active_draft_otp_{d_vno}")
-                            if current_saved_otp:
-                                st.info("ℹ️ வாடிக்கையாளருக்கு SMS அனுப்பப்பட்டுள்ளது. OTP-ஐ உள்ளிடவும்.")
+                            if is_bypass_approved:
+                                st.success("🔓 **அட்மின் OTP விலக்கு அனுமதி அளித்துவிட்டார்!** OTP தேவையின்றி நேரடியாக நிறைவு செய்யலாம்.")
+                            elif is_bypass_pending:
+                                st.warning("⏳ அட்மின் விலக்குக் கோரிக்கை பரிசீலனையில் உள்ளது. காத்திருக்கவும் அல்லது OTP முயற்சிக்கவும்.")
 
-                            # 🌟 தீர்வு 2: வருகையை நிறைவு செய்யும் படிவம் மற்றும் பட்டன்
-                            dr_entered_otp = st.text_input("வாடிக்கையாளர் OTP உள்ளிடவும் *:", max_chars=4, key=f"dr_otp_in_{d_vno}")
+                            # அட்மின் அனுமதி இல்லாத போது மட்டுமே OTP அனுப்பும் பொத்தான் தோன்றும்
+                            if not is_bypass_approved:
+                                if st.button("📲 வாடிக்கையாளருக்கு OTP அனுப்புக", key=f"btn_resend_otp_{d_vno}", use_container_width=True):
+                                    if len(draft_mobile) == 10:
+                                        otp_c = str(random.randint(1000, 9999))
+                                        st.session_state[f"active_draft_otp_{d_vno}"] = otp_c
+                                        
+                                        try:
+                                            send_fast2sms_otp(draft_mobile, otp_c)
+                                            st.success(f"✅ OTP வெற்றிகரமாக {draft_mobile} எண்ணிற்கு அனுப்பப்பட்டது!")
+                                        except Exception as sms_err:
+                                            st.error(f"❌ SMS போர்ட்டல் பிழை: {sms_err}")
+                                    else:
+                                        st.error(f"⚠️ பதிவு செய்யப்பட்ட எண்: '{raw_mobile}'. சரியான 10 இலக்கங்கள் இல்லை! வலதுபுறம் அட்மின் விலக்குக் கோரிக்கை வைக்கவும்.")
+
+                                current_saved_otp = st.session_state.get(f"active_draft_otp_{d_vno}")
+                                if current_saved_otp:
+                                    st.info(f"ℹ️ {draft_mobile} எண்ணிற்கு OTP அனுப்பப்பட்டுள்ளது. உள்ளிட்டு முடிக்கவும்.")
+
+                                dr_entered_otp = st.text_input("வாடிக்கையாளர் OTP உள்ளிடவும் *:", max_chars=4, key=f"dr_otp_in_{d_vno}")
+                            else:
+                                dr_entered_otp = None
+
+                            # 🌟 4. வருகையை நிறைவு செய்யும் பட்டன் (OTP அல்லது அட்மின் அப்ரூவல் இரண்டும் வேலை செய்யும்)
+                            btn_label = "✅ அட்மின் ஒப்புதலுடன் வருகையை நிறைவு செய்" if is_bypass_approved else "✅ வருகையினை நிறைவு செய் (Complete Visit)"
                             
-                            if st.button("✅ வருகையினை நிறைவு செய் (Complete Visit)", type="primary", key=f"btn_dr_otp_fin_{d_vno}", use_container_width=True):
-                                # சேமிக்கப்பட்ட OTP அல்லது டெமோ 1234 அனுமதித்தல்
-                                if dr_entered_otp and (dr_entered_otp == current_saved_otp or dr_entered_otp == "1234"):
-                                    # A. வாடிக்கையாளர் வருகை நிலையை மாற்றுதல்
+                            if st.button(btn_label, type="primary", key=f"btn_dr_otp_fin_{d_vno}", use_container_width=True):
+                                current_saved_otp = st.session_state.get(f"active_draft_otp_{d_vno}")
+                                
+                                can_proceed = False
+                                if is_bypass_approved:
+                                    can_proceed = True
+                                elif dr_entered_otp and (dr_entered_otp == current_saved_otp or dr_entered_otp == "1234"):
+                                    can_proceed = True
+
+                                if can_proceed:
                                     supabase.table("customer_visits").update({
                                         "status": "Pending_Calling_Verification"
                                     }).eq("id", selected_draft["id"]).execute()
                                     
-                                    # B. பரிவர்த்தனைகளைச் செயல்படுத்துதல்
                                     supabase.table("transactions").update({
                                         "status": "Pending"
                                     }).eq("visit_id", selected_draft["id"]).execute()
                                     
-                                    # C. நகைக் கடன் டிராஃப்ட்டில் இருந்தால் அதை உறுதிசெய்தல்
                                     supabase.table("gold_loans").update({
                                         "status": "Approved"
                                     }).eq("visit_no", d_vno).execute()
 
-                                    # D. தற்காலிக Session State-ஐ முழுமையாக அழித்தல்
+                                    # அமர்வுத் தரவுகளை நீக்குதல்
                                     st.session_state.pop(f"active_draft_otp_{d_vno}", None)
                                     st.session_state.pop("current_active_draft", None)
                                     
-                                    st.success("✅ OTP சரிபார்க்கப்பட்டது! வருகை நிறைவுற்று அழைப்புச் சரிபார்ப்பிற்கு மாற்றப்பட்டது.")
+                                    st.success("🎉 வருகை வெற்றிகரமாக நிறைவு செய்யப்பட்டு அழைப்புச் சரிபார்ப்பிற்கு மாற்றப்பட்டது!")
                                     st.rerun()
                                 else:
-                                    st.error("❌ தவறான OTP! சரியான 4 இலக்க OTP-ஐ உள்ளிடவும்.")
+                                    if not dr_entered_otp:
+                                        st.error("⚠️ தயவுசெய்து வாடிக்கையாளர் பெற்ற OTP-ஐ உள்ளிடவும்.")
+                                    else:
+                                        st.error("❌ தவறான OTP! சரியான 4 இலக்க எண்ணை உள்ளிடவும்.")
 
                         with dr_col2:
                             st.markdown("##### 🚨 OTP பெற முடியவில்லையா? (அட்மின் விலக்குக் கோரிக்கை)")
-                            dr_bp_reason = st.text_area("விலக்குக் கோருவதற்கான காரணம் *:", placeholder="சிக்னல் இல்லை / சிம் கோளாறு...", key=f"dr_bp_rea_{d_vno}")
-                            if st.button("அட்மினுக்கு விலக்குக் கோரிக்கை அனுப்பு", key=f"btn_dr_bp_{d_vno}", use_container_width=True):
-                                if not dr_bp_reason.strip():
-                                    st.warning("⚠️ தயவுசெய்து காரணத்தைக் குறிப்பிடவும்!")
-                                else:
-                                    supabase.table("otp_bypass_requests").insert({
-                                        "branch_id": clean_b_id,
-                                        "customer_id": selected_draft.get("customer_id"),
-                                        "visit_no": d_vno,
-                                        "customer_name": selected_draft.get("customer_name"),
-                                        "mobile": draft_mobile,
-                                        "reason": dr_bp_reason.strip(),
-                                        "status": "Pending Admin",
-                                        "requested_by": st.session_state.username
-                                    }).execute()
-                                    st.success("✅ கோரிக்கை அனுப்பப்பட்டது! அட்மின் ஒப்புதலுக்காகக் காத்திருக்கவும்.")
+                            if is_bypass_approved:
+                                st.info("✅ இந்தக் கோரிக்கைக்கு அட்மின் ஏற்கனவே விலக்கு அனுமதி வழங்கிவிட்டார்.")
+                            else:
+                                dr_bp_reason = st.text_area("விலக்குக் கோருவதற்கான காரணம் *:", placeholder="சிக்னல் இல்லை / சிம் கோளாறு...", key=f"dr_bp_rea_{d_vno}")
+                                if st.button("அட்மினுக்கு விலக்குக் கோரிக்கை அனுப்பு", key=f"btn_dr_bp_{d_vno}", use_container_width=True):
+                                    if not dr_bp_reason.strip():
+                                        st.warning("⚠️ தயவுசெய்து காரணத்தைக் குறிப்பிடவும்!")
+                                    else:
+                                        supabase.table("otp_bypass_requests").insert({
+                                            "branch_id": clean_b_id,
+                                            "customer_id": selected_draft.get("customer_id"),
+                                            "visit_no": d_vno,
+                                            "customer_name": selected_draft.get("customer_name"),
+                                            "mobile": draft_mobile if draft_mobile else raw_mobile,
+                                            "reason": dr_bp_reason.strip(),
+                                            "status": "Pending Admin",
+                                            "requested_by": st.session_state.get("username", "Staff")
+                                        }).execute()
+                                        st.success("✅ கோரிக்கை அனுப்பப்பட்டது! அட்மின் ஒப்புதலுக்காகக் காத்திருக்கவும்.")
+                                        st.rerun()
 
                 # =========================================================================
                 # 👤 நடப்பு வாடிக்கையாளர் வருகைப் பதிவு (Existing Customer Flow)
@@ -6800,7 +6841,7 @@ if st.session_state.get("logged_in", False):
                             supabase.table("customers").select("*").eq("is_active", True)
                             .neq("kyc_status", "Rejected").neq("kyc_status", "Pending_KYC_Approval")
                         )
-                        if st.session_state.user_role not in ["Admin", "Auditor", "Operations"]:
+                        if st.session_state.get("user_role") not in ["Admin", "Auditor", "Operations"]:
                             raw_b_id = st.session_state.get("branch_id")
                             clean_b_id = int(raw_b_id) if raw_b_id not in (None, "", "null") else 1
                             cust_filter_query = cust_filter_query.eq("branch_id", clean_b_id)
@@ -6831,19 +6872,19 @@ if st.session_state.get("logged_in", False):
                                     if has_pending_update_req:
                                         st.warning("⏳ **விவரத் திருத்தக் கோரிக்கை ஆப்பரேஷன்ஸ் ஒப்புதலுக்கு நிலுவையில் உள்ளது!**")
                                 with c_col3:
-                                    # 🌟 தீர்வு 3: புதிய வருகையைத் தொடங்கும் போது பழைய டிராஃப்ட் எண்கள் & தரவுகளை முழுமையாக அழித்தல்
+                                    # 🌟 5. புதிய வருகையைத் தொடங்கும் போது பழைய டிராஃப்ட் கடன் எண்களை முழுமையாக அழித்தல்
                                     if st.button("வருகையைத் தொடங்கு ➔", key=f"start_v_{selected_cust['id']}", type="primary", use_container_width=True):
                                         raw_b_id = st.session_state.get("branch_id")
                                         clean_b_id = int(raw_b_id) if raw_b_id not in (None, "", "null") else 1
                                         b_code = st.session_state.get("branch_code", st.session_state.get("branch", "BR")[:3]).upper()
                                         
-                                        # புதிய வருகை டோக்கன் உருவாக்கம்
+                                        # புதிய வருகை எண் உருவாக்கம்
                                         v_token = generate_branch_visit_no(clean_b_id, b_code)
 
-                                        # பழைய டிராஃப்ட்/கடன் மாறிகளை செஷனிலிருந்து நீக்குதல்
+                                        # பழைய டிராஃப்ட் கடன் மாறிகளை செஷனிலிருந்து நீக்குதல்
                                         keys_to_purge = [
                                             "draft_loan_no", "current_active_draft", "active_draft_loan_no",
-                                            "last_saved_loan_no", "pledge_loan_no", "gl_calc_data"
+                                            "last_saved_loan_no", "pledge_loan_no", "gl_calc_data", "active_draft_otp"
                                         ]
                                         for k in keys_to_purge:
                                             st.session_state.pop(k, None)
