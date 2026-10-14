@@ -8040,7 +8040,9 @@ if st.session_state.get("logged_in", False):
 
                         act_col1, act_col2 = st.columns(2)
 
+                        # =========================================================================
                         # விருப்பம் 1: OTP முடிந்து முழுமையாக முடிப்பது
+                        # =========================================================================
                         with act_col1:
                             if st.button("✅ வருகையை நிறைவு செய்க", type="primary", use_container_width=True, key="btn_complete_visit_final"):
                                 if not is_ready:
@@ -8063,6 +8065,31 @@ if st.session_state.get("logged_in", False):
                                             # 🌟 வங்கி வரவு இருந்தால் ஆப்பரேஷன்ஸ் சரிபார்ப்பு நிலை:
                                             visit_main_status = "Pending_Bank_Verification" if (net_target <= 0 and bank_portion > 0) else "Pending_Calling_Verification"
 
+                                            # 🌟 நாம் வாடிக்கையாளருக்கு வங்கி மூலம் பணம் அனுப்ப வேண்டியிருந்தால் Payout நிலை:
+                                            payout_status = "Pending_Transfer" if (net_target > 0 and bank_portion > 0) else None
+
+                                            # பாஸ்புக் மற்றும் ஒப்புதல் ஆவண URL-களைப் பதிவேற்றம் செய்து எடுத்தல்
+                                            passbook_url = None
+                                            consent_url = None
+                                            if net_target > 0 and bank_portion > 0:
+                                                if 'passbook_file' in locals() and passbook_file:
+                                                    try:
+                                                        pb_ext = passbook_file.name.split(".")[-1]
+                                                        pb_path = f"bank_docs/pb_{current_v_no}_{int(datetime.now().timestamp())}.{pb_ext}"
+                                                        supabase.storage.from_("branch_documents").upload(pb_path, passbook_file.getvalue())
+                                                        passbook_url = supabase.storage.from_("branch_documents").get_public_url(pb_path)
+                                                    except Exception:
+                                                        pass
+                                                if 'consent_file' in locals() and consent_file:
+                                                    try:
+                                                        cs_ext = consent_file.name.split(".")[-1]
+                                                        cs_path = f"bank_docs/cs_{current_v_no}_{int(datetime.now().timestamp())}.{cs_ext}"
+                                                        supabase.storage.from_("branch_documents").upload(cs_path, consent_file.getvalue())
+                                                        consent_url = supabase.storage.from_("branch_documents").get_public_url(cs_path)
+                                                    except Exception:
+                                                        pass
+
+                                            # 🌟 வாடிக்கையாளர் வங்கி விவரங்கள் மற்றும் Payout நிலையுடன் இணைக்கப்பட்ட visit_data
                                             visit_data = {
                                                 "visit_no": current_v_no,
                                                 "customer_id": c_id,
@@ -8073,7 +8100,17 @@ if st.session_state.get("logged_in", False):
                                                 "cash_amount": float(cash_portion),
                                                 "bank_amount": float(bank_portion),
                                                 "payment_mode": pm_label,
+                                                "bank_transfer_status": payout_status,  # 👈 ஆப்பரேஷன்ஸ் Payout மேசைக்குச் செல்ல
+                                                "bank_transfer_type": bank_transfer_type if 'bank_transfer_type' in locals() else "Customer",
                                                 "bank_reference_no": bank_ref_no.strip() if bank_ref_no else None,
+                                                # வாடிக்கையாளர் வங்கி விபரங்கள் (Payout செய்ய)
+                                                "bank_acc_holder_name": b_holder if 'b_holder' in locals() else None,
+                                                "bank_acc_number": b_acc if 'b_acc' in locals() else None,
+                                                "bank_name": bank_name if 'bank_name' in locals() else None,
+                                                "bank_branch": b_branch if 'b_branch' in locals() else None,
+                                                "bank_ifsc_code": b_ifsc if 'b_ifsc' in locals() else None,
+                                                "bank_passbook_doc_url": passbook_url,
+                                                "bank_consent_doc_url": consent_url,
                                                 "denomination_details": {
                                                     "in": {"500": in_500, "200": in_200, "100": in_100, "50": in_50, "20": in_20, "10": in_10, "5": in_5, "coins": in_coins, "total": total_cash_in},
                                                     "out": {"500": out_500, "200": out_200, "100": out_100, "50": out_50, "20": out_20, "10": out_10, "5": out_5, "coins": out_coins, "total": total_cash_out},
@@ -8082,6 +8119,7 @@ if st.session_state.get("logged_in", False):
                                                 "otp_verified": True,
                                                 "status": visit_main_status
                                             }
+                                            
                                             v_insert = supabase.table("customer_visits").insert(visit_data).execute()
                                             if not v_insert.data:
                                                 raise Exception("customer_visits அட்டவணையில் பதிவைச் சேர்க்க முடியவில்லை!")
@@ -8097,7 +8135,6 @@ if st.session_state.get("logged_in", False):
                                                 p_amt = float(item.get("paid_amount", 0.0) or 0.0)
                                                 r_amt = float(item.get("received_amount", 0.0) or item.get("amount", 0.0) or 0.0)
 
-                                                # வாடிக்கையாளர் தரும் நிகரத் தொகை (RD தவணை போன்றவை)
                                                 final_amt = r_amt if r_amt > 0 else (p_amt if p_amt > 0 else float(item.get("amount", 0.0) or 0.0))
 
                                                 # A. நகைக்கடன் அட்டவணை
@@ -8151,9 +8188,8 @@ if st.session_state.get("logged_in", False):
                                                     except Exception as gp_err:
                                                         st.error(f"⚠️ gold_purchases அட்டவணையில் சேமிப்பதில் பிழை: {gp_err}")
 
-                                                # D. 🌟 பொது பரிவர்த்தனைகள் அட்டவணை (Transactions Table - Schema Mismatch தவிர்க்கப்பட்ட பகுதி)
+                                                # D. 🌟 பொது பரிவர்த்தனைகள் அட்டவணை (Transactions Table - Schema Mismatch தவிர்க்கப்பட்டது)
                                                 try:
-                                                    # UTR மற்றும் வங்கி விபரங்களை remarks-ல் ஒருங்கிணைத்தல் (ஏனெனில் transactions-ல் அந்த காலம்கள் இல்லை)
                                                     combined_remarks = item.get("remarks") or ""
                                                     if bank_portion > 0:
                                                         ref_str = f"Bank: {bank_name} | Ref: {bank_ref_no}" if bank_ref_no else f"Bank: {bank_name}"
@@ -8175,7 +8211,7 @@ if st.session_state.get("logged_in", False):
                                                         "item_details": item.get("ornament_details") or item.get("item_details", ""),
                                                         "remarks": combined_remarks,
                                                         "payment_mode": pm_label,
-                                                        "status": "Approved"  # அழைப்பு முடிந்ததும் கல்லா பரிவர்த்தனையில் தெரிய
+                                                        "status": "Approved"
                                                     }
                                                     supabase.table("transactions").insert(general_txn).execute()
                                                 except Exception as txn_err:
@@ -8213,7 +8249,9 @@ if st.session_state.get("logged_in", False):
                                     except Exception as save_err:
                                         st.error(f"❌ வருகையைச் சேமிப்பதில் பிழை ஏற்பட்டது: {save_err}")
 
-                        # விருப்பம் 2: தற்காலிகச் சேமிப்பு (Save as Draft)
+                        # =========================================================================
+                        # விருப்பம் 2: தற்காலிகச் சேமிப்பு (Save as Draft - OTP Pending)
+                        # =========================================================================
                         with act_col2:
                             if st.button("💾 தற்காலிகமாகச் சேமி (Save as Draft - OTP Pending)", type="secondary", use_container_width=True):
                                 if not is_ready:
@@ -8230,6 +8268,7 @@ if st.session_state.get("logged_in", False):
                                                 current_v_no = generate_branch_visit_no(clean_b_id, b_code)
 
                                             pm_label = "Cash" if bank_portion == 0 else ("Bank/UPI" if cash_portion == 0 else "Split")
+                                            payout_status = "Pending_Transfer" if (net_target > 0 and bank_portion > 0) else None
 
                                             draft_visit_data = {
                                                 "visit_no": current_v_no,
@@ -8241,7 +8280,14 @@ if st.session_state.get("logged_in", False):
                                                 "cash_amount": float(cash_portion),
                                                 "bank_amount": float(bank_portion),
                                                 "payment_mode": pm_label,
+                                                "bank_transfer_status": payout_status,
+                                                "bank_transfer_type": bank_transfer_type if 'bank_transfer_type' in locals() else "Customer",
                                                 "bank_reference_no": bank_ref_no.strip() if bank_ref_no else None,
+                                                "bank_acc_holder_name": b_holder if 'b_holder' in locals() else None,
+                                                "bank_acc_number": b_acc if 'b_acc' in locals() else None,
+                                                "bank_name": bank_name if 'bank_name' in locals() else None,
+                                                "bank_branch": b_branch if 'b_branch' in locals() else None,
+                                                "bank_ifsc_code": b_ifsc if 'b_ifsc' in locals() else None,
                                                 "denomination_details": {
                                                     "in": {"500": in_500, "200": in_200, "100": in_100, "50": in_50, "20": in_20, "10": in_10, "5": in_5, "coins": in_coins, "total": total_cash_in},
                                                     "out": {"500": out_500, "200": out_200, "100": out_100, "50": out_50, "20": out_20, "10": out_10, "5": out_5, "coins": out_coins, "total": total_cash_out},
@@ -8266,9 +8312,6 @@ if st.session_state.get("logged_in", False):
                                                     "net_weight": float(item.get("net_weight", 0.0) or 0.0),
                                                     "item_details": item.get("ornament_details", ""), "remarks": item.get("remarks", ""),
                                                     "payment_mode": pm_label,
-                                                    "bank_name": bank_name if bank_portion > 0 else None,
-                                                    "bank_reference_no": bank_ref_no if bank_portion > 0 else None,
-                                                    "bank_proof_url": bank_proof_url if bank_portion > 0 else None,
                                                     "status": "Draft_Locked"
                                                 }
                                                 supabase.table("transactions").insert(gen_txn).execute()
