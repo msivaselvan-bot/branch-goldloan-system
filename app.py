@@ -9899,7 +9899,7 @@ if st.session_state.get("logged_in", False):
                                     )
                                     if count > 0:
                                         f_items.append(f"**₹{k}:** {count}")
-                                except (ValueError, TypeError):  # 👈 'Except' என்பது 'except' என மாற்றப்பட்டது
+                                except (ValueError, TypeError):
                                     continue
                             denom_text = " | ".join(f_items)
                             st.info(
@@ -10089,10 +10089,10 @@ if st.session_state.get("logged_in", False):
             st.markdown("---")
 
             # -------------------------------------------------------------
-            # 🌟 3. வாடிக்கையாளர் வங்கிப் பரிமாற்ற ஒப்புதல் மேசை (Customer Bank Transfers)
+            # 3. வாடிக்கையாளர் வங்கிப் பரிமாற்ற மேசை (Customer Bank Transfers - Payout)
             # -------------------------------------------------------------
             st.subheader("💳 வாடிக்கையாளர் வங்கிப் பரிமாற்ற மேசை (Customer Bank Payout Queue)")
-            st.caption("கிளைகளில் பதிவு செய்யப்பட்ட ஆன்லைன்/ஸ்ப்ளிட் பரிவர்த்தனைகளுக்கான வங்கிப் பரிமாற்றம் மற்றும் UTR பதிவு.")
+            st.caption("கிளைகளில் பதிவு செய்யப்பட்ட ஆன்லைன்/ஸ்ப்ளிட் கடன்களுக்கான தலைமை அலுவலக வங்கிப் பரிமாற்றம் மற்றும் UTR பதிவு.")
 
             try:
                 pending_payouts = (
@@ -10109,7 +10109,7 @@ if st.session_state.get("logged_in", False):
                 pending_payouts = []
 
             if not pending_payouts:
-                st.info("✅ தற்போது நிலுவையில் உள்ள வாடிக்கையாளர் வங்கிப் பரிமாற்றங்கள் எதுவும் இல்லை.")
+                st.info("✅ தற்போது நிலுவையில் உள்ள வாடிக்கையாளர் வங்கிப் பரிமாற்றங்கள் (Payouts) எதுவும் இல்லை.")
             else:
                 for p in pending_payouts:
                     b_p_name = p.get("branches", {}).get("branch_name", "கிளை")
@@ -10147,7 +10147,6 @@ if st.session_state.get("logged_in", False):
                                 st.caption("ஒப்புதல் படிவம் இல்லை")
 
                         st.markdown("---")
-                        # UTR உள்ளீடு மற்றும் உறுதிப்படுத்தல்
                         utr_c1, utr_c2 = st.columns([3, 1])
                         with utr_c1:
                             utr_no = st.text_input(
@@ -10166,7 +10165,7 @@ if st.session_state.get("logged_in", False):
                                         curr_user = st.session_state.get("username", "Admin")
                                         now_time = str(datetime.now())
 
-                                        # 1. customer_visits அட்டவணையில் UTR பதிவு செய்து நிலையை மாற்றுதல்
+                                        # 1. customer_visits அட்டவணையில் UTR பதிவு செய்தல்
                                         supabase.table("customer_visits").update({
                                             "bank_reference_no": utr_no.strip(),
                                             "bank_transfer_status": "Transferred",
@@ -10174,16 +10173,107 @@ if st.session_state.get("logged_in", False):
                                             "bank_transferred_at": now_time
                                         }).eq("id", p["id"]).execute()
 
-                                        # 2. transactions அட்டவணையிலும் இந்த வருகைக்கான வங்கிப் பதிவுகளைப் புதுப்பித்தல்
+                                        # 2. transactions அட்டவணையில் நிலையை மாற்றுதல்
                                         supabase.table("transactions").update({
-                                            "verification_status": "Approved",
                                             "status": "Completed"
                                         }).eq("visit_id", p["id"]).execute()
 
-                                        st.success(f"✅ வருகை `{p.get('visit_no')}`-க்கான UTR எண் ({utr_no.strip()}) பதியப்பட்டு கணக்கில் இணைக்கப்பட்டது!")
+                                        st.success(f"✅ வருகை `{p.get('visit_no')}`-க்கான UTR எண் ({utr_no.strip()}) பதியப்பட்டது!")
                                         st.rerun()
                                     except Exception as utr_err:
                                         st.error(f"UTR பதிவு செய்வதில் பிழை: {utr_err}")
+
+            # -------------------------------------------------------------
+            # 🌟 4. ஆப்பரேஷன்ஸ் திரை: வாடிக்கையாளர் வங்கி வரவு சரிபார்ப்பு (Bank Payment Approvals)
+            # -------------------------------------------------------------
+            current_role = str(st.session_state.get("user_role") or st.session_state.get("role") or "").strip()
+            is_authorized_ops = (
+                current_role in ["Admin", "Operations", "Auditor"]
+                or st.session_state.get("is_admin", False)
+                or str(st.session_state.get("username", "")).lower() == "admin"
+            )
+
+            if is_authorized_ops:
+                st.markdown("---")
+                st.subheader("🏛️ வாடிக்கையாளர் வங்கி & UPI வரவு சரிபார்ப்புப் பிரிவு (Customer Inflow Approvals)")
+                st.caption("வாடிக்கையாளர்கள் மீட்டெடுப்பு அல்லது பிற சேவைகளுக்காக வங்கி/UPI மூலம் செலுத்திய பணத்தை UTR மற்றும் ரசீது பார்த்து சரிபார்க்கும் மேசை.")
+
+                try:
+                    pending_bank_txns = (
+                        supabase.table("transactions")
+                        .select("*, customers(name, mobile), branches(branch_name)")
+                        .eq("status", "Pending_Bank_Verification")
+                        .order("id", desc=True)
+                        .execute()
+                        .data
+                        or []
+                    )
+                except Exception as b_err:
+                    st.error(f"வங்கி வரவுத் தரவுகளைப் பெறுவதில் பிழை: {b_err}")
+                    pending_bank_txns = []
+
+                if not pending_bank_txns:
+                    st.info("💡 தற்போது சரிபார்க்க வேண்டிய வாடிக்கையாளர் வங்கி வரவுகள் எதுவும் நிலுவையில் இல்லை.")
+                else:
+                    for p_txn in pending_bank_txns:
+                        with st.container(border=True):
+                            col_op1, col_op2, col_op3 = st.columns([2.5, 2, 1.5])
+
+                            with col_op1:
+                                cust_info = p_txn.get("customers") or {}
+                                br_info = p_txn.get("branches") or {}
+                                st.markdown(f"**கிளை:** {br_info.get('branch_name', '-')} | **தேதி:** {p_txn.get('created_at', '-')[:10]}")
+                                st.markdown(f"👤 வாடிக்கையாளர்: **{cust_info.get('name', p_txn.get('customer_name', 'Customer'))}** (📞 {cust_info.get('mobile', p_txn.get('mobile', '-'))})")
+                                st.write(f"🏷️ நடவடிக்கை வகை: **{p_txn.get('transaction_type')}**")
+                                st.write(f"💵 ரொக்கம்: ₹{float(p_txn.get('cash_amount', 0.0) or 0.0):,.2f} | 🏛️ **வங்கி வரவு: ₹{float(p_txn.get('bank_amount', 0.0) or 0.0):,.2f}**")
+
+                            with col_op2:
+                                st.markdown("##### 🔍 வங்கி விவரங்கள்")
+                                st.write(f"🏦 வங்கி: **{p_txn.get('bank_name', '-')}**")
+                                st.write(f"🔢 UTR / Ref எண்: **`{p_txn.get('bank_reference_no', '-')}`**")
+
+                                proof = p_txn.get("bank_proof_url")
+                                if proof:
+                                    st.link_button("🖼️ ரசீது / Screenshot பார்க்க", proof, use_container_width=True)
+                                else:
+                                    st.caption("⚠️ அட்டாச்மென்ட் இல்லை")
+
+                            with col_op3:
+                                st.write("")
+                                ops_user = st.session_state.get("username", "Operations")
+
+                                # ஒப்புதல் அளிக்கும் பட்டன்
+                                if st.button("✅ சரிபார்த்து அனுமதி", key=f"app_btn_{p_txn['id']}", type="primary", use_container_width=True):
+                                    try:
+                                        supabase.table("transactions").update({
+                                            "status": "Approved",
+                                            "approved_by": ops_user,
+                                            "verified_at": str(datetime.now())
+                                        }).eq("id", p_txn["id"]).execute()
+
+                                        # வருகை அட்டவணையிலும் நிலையைப் புதுப்பித்தல்
+                                        if p_txn.get("visit_id"):
+                                            supabase.table("customer_visits").update({
+                                                "status": "Pending_Calling_Verification"
+                                            }).eq("id", p_txn["visit_id"]).execute()
+
+                                        st.success(f"✅ பரிவர்த்தனை #{p_txn['id']} வெற்றிகரமாக அங்கீகரிக்கப்பட்டது!")
+                                        st.rerun()
+                                    except Exception as app_err:
+                                        st.error(f"அங்கீகரிப்பதில் பிழை: {app_err}")
+
+                                # மறுக்கும் பட்டன்
+                                if st.button("❌ நிராகரி (Reject)", key=f"rej_btn_{p_txn['id']}", type="secondary", use_container_width=True):
+                                    try:
+                                        supabase.table("transactions").update({
+                                            "status": "Rejected",
+                                            "approved_by": ops_user
+                                        }).eq("id", p_txn["id"]).execute()
+
+                                        st.warning(f"⚠️ பரிவர்த்தனை #{p_txn['id']} நிராகரிக்கப்பட்டது!")
+                                        st.rerun()
+                                    except Exception as rej_err:
+                                        st.error(f"நிராகரிப்பதில் பிழை: {rej_err}")
 
         elif selected_section == "👤 புதிய வாடிக்கையாளர் KYC":
             st.subheader("👤 புதிய வாடிக்கையாளர் KYC ஒப்புதல்")
