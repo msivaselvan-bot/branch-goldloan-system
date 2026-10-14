@@ -10271,18 +10271,14 @@ if st.session_state.get("logged_in", False):
                                 # ✅ ஒப்புதல் அளிக்கும் பட்டன்
                                 if st.button("✅ சரிபார்த்து அனுமதி", key=f"app_vis_{v_id}", type="primary", use_container_width=True):
                                     try:
-                                        now_str = str(datetime.now())
-
-                                        # 1. customer_visits நிலையை அழைப்பு சரிபார்ப்பிற்கு மாற்றுதல்
+                                        # 1. customer_visits அட்டவணையில் இல்லாத bank_verified_at காலத்தை நீக்கிவிட்டு நிலையை மட்டும் மாற்றுதல்
                                         supabase.table("customer_visits").update({
-                                            "status": "Pending_Calling_Verification",
-                                            "bank_verified_by": ops_user,
-                                            "bank_verified_at": now_str
+                                            "status": "Pending_Calling_Verification"
                                         }).eq("id", v_id).execute()
 
-                                        # 2. இந்த வருகையின் அனைத்து பரிவர்த்தனைகளையும் அனுமதித்தல்
+                                        # 2. இந்த வருகையின் பரிவர்த்தனைகளையும் அனுமதித்தல்
                                         supabase.table("transactions").update({
-                                            "status": "Pending",  # அழைப்பு முடிந்ததும் இறுதி அப்ரூவல் ஆகும்
+                                            "status": "Pending",  # அழைப்புச் சரிபார்ப்பிற்கு செல்லும் நிலை
                                             "bank_reference_no": utr
                                         }).eq("visit_id", v_id).execute()
 
@@ -10295,8 +10291,7 @@ if st.session_state.get("logged_in", False):
                                 if st.button("❌ நிராகரி (Reject)", key=f"rej_vis_{v_id}", type="secondary", use_container_width=True):
                                     try:
                                         supabase.table("customer_visits").update({
-                                            "status": "Rejected",
-                                            "bank_verified_by": ops_user
+                                            "status": "Rejected"
                                         }).eq("id", v_id).execute()
 
                                         supabase.table("transactions").update({
