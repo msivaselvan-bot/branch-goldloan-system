@@ -10268,18 +10268,16 @@ if st.session_state.get("logged_in", False):
                                 st.write("")
                                 ops_user = st.session_state.get("username", "Operations")
 
-                                # ✅ ஒப்புதல் அளிக்கும் பட்டன்
                                 if st.button("✅ சரிபார்த்து அனுமதி", key=f"app_vis_{v_id}", type="primary", use_container_width=True):
                                     try:
-                                        # 1. customer_visits அட்டவணையில் இல்லாத bank_verified_at காலத்தை நீக்கிவிட்டு நிலையை மட்டும் மாற்றுதல்
+                                        # 1. customer_visits அட்டவணையின் நிலையை அழைப்பு சரிபார்ப்பிற்கு மாற்றுதல்
                                         supabase.table("customer_visits").update({
                                             "status": "Pending_Calling_Verification"
                                         }).eq("id", v_id).execute()
 
-                                        # 2. இந்த வருகையின் பரிவர்த்தனைகளையும் அனுமதித்தல்
+                                        # 2. transactions அட்டவணையில் நிலையை மட்டும் மாற்றுதல் (bank_reference_no நீக்கப்பட்டது)
                                         supabase.table("transactions").update({
-                                            "status": "Pending",  # அழைப்புச் சரிபார்ப்பிற்கு செல்லும் நிலை
-                                            "bank_reference_no": utr
+                                            "status": "Pending"
                                         }).eq("visit_id", v_id).execute()
 
                                         st.success(f"✅ வருகை `{v_no}` வங்கி வரவு அங்கீகரிக்கப்பட்டு அழைப்புச் சரிபார்ப்பிற்கு மாற்றப்பட்டது!")
