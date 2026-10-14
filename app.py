@@ -10166,15 +10166,23 @@ if st.session_state.get("logged_in", False):
             st.caption("கிளைகளில் பதிவு செய்யப்பட்ட ஆன்லைன்/ஸ்ப்ளிட் கடன்களுக்கான தலைமை அலுவலக வங்கிப் பரிமாற்றம் மற்றும் UTR பதிவு.")
 
             try:
+                # 🌟 நாம் வாடிக்கையாளருக்கு வங்கி மூலம் பணம் அனுப்ப வேண்டிய (Payout) பதிவுகள்:
                 pending_payouts = (
                     supabase.table("customer_visits")
-                    .select("*, branches(branch_name)")
-                    .eq("bank_transfer_status", "Pending_Transfer")
+                    .select("*")
+                    .gt("bank_amount", 0)  # வங்கித் தொகை 0-க்கு மேல்
+                    .neq("bank_transfer_status", "Transferred")  # இன்னும் அனுப்பப்படாதவை
                     .order("id", desc=True)
                     .execute()
-                    .data
-                    or []
+                    .data or []
                 )
+                
+                # நாம் வாடிக்கையாளருக்கு பணம் தர வேண்டிய பதிவுகளை மட்டும் வடிகட்டுதல் (Pay-OUT: total_paid > total_received)
+                pending_payouts = [p for p in pending_payouts if float(p.get("total_paid", 0.0) or 0.0) >= float(p.get("total_received", 0.0) or 0.0)]
+
+                branches_list = supabase.table("branches").select("id, branch_name").execute().data or []
+                b_map = {b["id"]: b["branch_name"] for b in branches_list}
+
             except Exception as e:
                 st.error(f"வங்கிப் பரிமாற்றத் தரவுகளைப் பெறுவதில் பிழை: {e}")
                 pending_payouts = []
@@ -10183,17 +10191,16 @@ if st.session_state.get("logged_in", False):
                 st.info("✅ தற்போது நிலுவையில் உள்ள வாடிக்கையாளர் வங்கிப் பரிமாற்றங்கள் (Payouts) எதுவும் இல்லை.")
             else:
                 for p in pending_payouts:
-                    b_p_name = p.get("branches", {}).get("branch_name", "கிளை")
+                    b_p_name = b_map.get(p.get("branch_id"), f"கிளை #{p.get('branch_id')}")
                     p_amt = float(p.get("bank_amount", 0.0) or 0.0)
                     t_mode = p.get("bank_transfer_type", "வாடிக்கையாளர்")
 
-                    with st.expander(f"🏦 {p.get('visit_no')} | {p.get('customer_name')} | கிளை: {b_p_name} | ₹{p_amt:,.2f}"):
+                    with st.expander(f"🏦 {p.get('visit_no')} | கிளை: {b_p_name} | அனுப்ப வேண்டிய தொகை: ₹{p_amt:,.2f}"):
                         col_v1, col_v2, col_v3 = st.columns([1.8, 2, 1.4])
                         with col_v1:
                             st.markdown(f"**வருகை எண்:** `{p.get('visit_no')}`")
-                            st.write(f"• **வாடிக்கையாளர்:** {p.get('customer_name')}")
-                            st.write(f"• **டிரான்ஸ்பர் வகை:** `{t_mode}`")
                             st.write(f"• **கிளை:** {b_p_name}")
+                            st.write(f"• **டிரான்ஸ்பர் வகை:** `{t_mode}`")
                             st.markdown(f"### அனுப்ப வேண்டிய தொகை: `₹{p_amt:,.2f}`")
 
                         with col_v2:
@@ -10202,8 +10209,6 @@ if st.session_state.get("logged_in", False):
                             st.write(f"• **A/C எண்:** `{p.get('bank_acc_number', '-')}` ({p.get('bank_acc_type', 'Savings')})")
                             st.write(f"• **வங்கி & கிளை:** {p.get('bank_name', '-')} - {p.get('bank_branch', '-')}")
                             st.write(f"• **IFSC:** `{p.get('bank_ifsc_code', '-')}`")
-                            if p.get("bank_upi_id"):
-                                st.caption(f"UPI ID: {p.get('bank_upi_id')} | மொபைல்: {p.get('bank_upi_phone', '-')}")
 
                         with col_v3:
                             st.markdown("##### 📎 சரிபார்ப்பு ஆவணங்கள்:")
@@ -10236,17 +10241,15 @@ if st.session_state.get("logged_in", False):
                                         curr_user = st.session_state.get("username", "Admin")
                                         now_time = str(datetime.now())
 
-                                        # 1. customer_visits அட்டவணையில் UTR பதிவு செய்தல்
+                                        # 1. customer_visits-ல் UTR பதிவு செய்து Transferred என முடித்தல்
                                         supabase.table("customer_visits").update({
                                             "bank_reference_no": utr_no.strip(),
-                                            "bank_transfer_status": "Transferred",
-                                            "bank_transferred_by": curr_user,
-                                            "bank_transferred_at": now_time
+                                            "bank_transfer_status": "Transferred"
                                         }).eq("id", p["id"]).execute()
 
-                                        # 2. transactions அட்டவணையில் நிலையை மாற்றுதல்
+                                        # 2. transactions அட்டவணையிலும் இந்த வருகைக்குரிய நிலையை முடித்தல்
                                         supabase.table("transactions").update({
-                                            "status": "Completed"
+                                            "status": "Approved"
                                         }).eq("visit_id", p["id"]).execute()
 
                                         st.success(f"✅ வருகை `{p.get('visit_no')}`-க்கான UTR எண் ({utr_no.strip()}) பதியப்பட்டது!")
