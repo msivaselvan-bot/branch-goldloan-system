@@ -2124,14 +2124,29 @@ def get_active_loan_schemes():
 # -------------------------------------------------------------
 
 def get_current_display_gl_number(branch_id=None):
-    """RD மற்றும் FD முறையைப் போல டேட்டாபேஸில் இருந்து அடுத்த நகைக் கடன் எண்ணை நேரடியாக வழங்கும்"""
+    """
+    எல்லா கிளைகளுக்கும் (KMK, MYL, EDK, KPT, AVL...) அந்தந்த கிளையின் 
+    முன்னொட்டு மற்றும் கடைசி கடன் எண்ணை gold_loans & branch_loan_sequences 
+    அட்டவணைகளில் இருந்து எடுத்து அடுத்த கடன் எண்ணை வழங்கும் பொதுவான சார்பு.
+    """
+    clean_b_id = 1
+    fallback_prefix = "GL"
+    
     try:
+        # 1. branch_id-ஐ பாதுகாப்பாகப் பெறுதல்
         if not branch_id or int(branch_id) == 0:
-            branch_id = st.session_state.get("branch_id") or st.session_state.get("branch") or 11
-        
-        clean_b_id = int(branch_id)
+            raw_b_id = st.session_state.get("branch_id") or st.session_state.get("branch") or 1
+            clean_b_id = int(raw_b_id)
+        else:
+            clean_b_id = int(branch_id)
 
-        # 1. branch_loan_sequences அட்டவணையில் இருந்து கடைசி எண்ணைப் பெறுதல்
+        # 🌟 கிளையின் முன்னொட்டை session அல்லது branches அட்டவணையில் இருந்து எடுத்தல்
+        fallback_prefix = str(
+            st.session_state.get("branch_code") 
+            or st.session_state.get("branch", "GL")[:3]
+        ).strip().upper()
+
+        # 2. branch_loan_sequences அட்டவணையில் இருந்து தகவல்களைப் பெறுதல்
         res = (
             supabase.table("branch_loan_sequences")
             .select("prefix, last_number")
@@ -2139,17 +2154,53 @@ def get_current_display_gl_number(branch_id=None):
             .execute()
         )
 
-        prefix = "KMK"
-        last_no = 1237  # ஆரம்ப எண்
+        prefix = fallback_prefix
+        seq_last_no = 0
 
         if res.data:
             rec = res.data[0]
             if rec.get("prefix"):
                 prefix = str(rec.get("prefix")).strip().rstrip("/-")
             if rec.get("last_number") is not None:
-                last_no = int(rec.get("last_number"))
+                seq_last_no = int(rec.get("last_number"))
 
-        # 2. கார்ட்டில் (transactions_cart) தற்போது தற்காலிகமாக உள்ள Pledge எண்ணிக்கையைக் கூட்டுதல்
+        # 3. 🌟 அந்த குறிப்பிட்ட கிளைக்கு gold_loans-ல் பதிவான கடைசி எண்ணைச் சரிபார்த்தல்
+        gl_last_no = 0
+        try:
+            recent_loans = (
+                supabase.table("gold_loans")
+                .select("loan_no")
+                .eq("branch_id", clean_b_id)
+                .order("id", desc=True)
+                .limit(30)
+                .execute()
+                .data or []
+            )
+            for r in recent_loans:
+                l_str = str(r.get("loan_no", "")).strip()
+                if "/" in l_str:
+                    # எ.கா: MYL/0969 அல்லது KMK/1289-ல் இருந்து முன்னொட்டு மற்றும் எண் பிரித்தல்
+                    parts = l_str.split("/")
+                    detected_prefix = parts[0].strip()
+                    num_part = parts[-1].strip()
+                    
+                    if not prefix or prefix == "GL":
+                        prefix = detected_prefix
+
+                    digits = "".join(ch for ch in num_part if ch.isdigit())
+                    if digits:
+                        val = int(digits)
+                        if val > gl_last_no:
+                            gl_last_no = val
+        except Exception:
+            pass
+
+        # 4. இரண்டில் எது அதிகபட்ச எண்ணோ அதை எடுத்தல்
+        base_last_no = max(seq_last_no, gl_last_no)
+        if base_last_no == 0:
+            base_last_no = 1000  # ஏதும் இல்லை எனில் தொடக்க எண்
+
+        # 5. கார்ட்டில் (transactions_cart) தற்போது உள்ள தற்காலிக Pledge எண்ணிக்கை
         cart_items_count = 0
         if "transactions_cart" in st.session_state and isinstance(st.session_state["transactions_cart"], list):
             for item in st.session_state["transactions_cart"]:
@@ -2158,29 +2209,38 @@ def get_current_display_gl_number(branch_id=None):
                     if "Pledge" in t_type or "நகைக்கடன்" in t_type:
                         cart_items_count += 1
 
-        # 3. அடுத்த எண் = டேட்டாபேஸ் கடைசி எண் + கார்ட் எண்ணிக்கை + 1
-        next_num = last_no + cart_items_count + 1
-        display_num = next_num
+        # 6. அடுத்த எண் = அதிகபட்ச எண் + கார்ட் எண்ணிக்கை + 1
+        next_num = base_last_no + cart_items_count + 1
 
-        # 4. வடிவமைப்பு (எ.கா: KMK/1238, KMK/1239...)
+        # 7. வடிவமைப்பு (எ.கா: MYL/0970 அல்லது KMK/1290)
         suggested_gl_no = (
-            f"{prefix}/{display_num:04d}"
-            if display_num < 1000
-            else f"{prefix}/{display_num}"
+            f"{prefix}/{next_num:04d}"
+            if next_num < 1000
+            else f"{prefix}/{next_num}"
         )
 
         return suggested_gl_no, next_num
 
     except Exception as e:
-        return "KMK/1238", 1238
+        # 🌟 பிழை ஏற்பட்டாலும் எந்த கிளை லாகினில் உள்ளதோ அதன் குறியீடே டைனமிக்காக வரும்
+        dyn_prefix = str(st.session_state.get("branch_code", fallback_prefix))[:3].upper()
+        return f"{dyn_prefix}/1001", 1001
 
 
 # 🌟 அடுத்த எண்ணை டேட்டாபேஸில் பதிவு செய்யும் பங்க்ஷன் (இதை மாற்ற வேண்டாம்)
-def commit_next_gl_number(branch_id, used_number):
+def commit_next_gl_number(branch_id, used_number, prefix=None):
     """கடன் வழங்கப்பட்ட பிறகு அடுத்த வரிசை எண்ணை டேட்டாபேஸில் பதிவு செய்தல்"""
     try:
+        clean_b_id = int(branch_id)
+        payload = {
+            "branch_id": clean_b_id,
+            "last_number": int(used_number)
+        }
+        if prefix:
+            payload["prefix"] = str(prefix).strip().rstrip("/-")
+
         supabase.table("branch_loan_sequences").upsert(
-            {"branch_id": int(branch_id), "last_number": int(used_number)}
+            payload, on_conflict="branch_id"
         ).execute()
     except Exception:
         pass
