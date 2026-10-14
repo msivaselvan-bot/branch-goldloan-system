@@ -6783,19 +6783,22 @@ if st.session_state.get("logged_in", False):
                                     can_proceed = True
 
                                 if can_proceed:
+                                    # 1. வாடிக்கையாளர் வருகை நிலையைப் புதுப்பித்தல்
                                     supabase.table("customer_visits").update({
                                         "status": "Pending_Calling_Verification"
                                     }).eq("id", selected_draft["id"]).execute()
                                     
+                                    # 2. பரிவர்த்தனைகளைச் செயல்படுத்துதல்
                                     supabase.table("transactions").update({
                                         "status": "Pending"
                                     }).eq("visit_id", selected_draft["id"]).execute()
                                     
+                                    # 3. நகைக் கடனை Approved என மாற்றுதல் (visit_id கொண்டு)
                                     supabase.table("gold_loans").update({
                                         "status": "Approved"
-                                    }).eq("visit_no", d_vno).execute()
+                                    }).eq("visit_id", selected_draft["id"]).execute()
 
-                                    # அமர்வுத் தரவுகளை நீக்குதல்
+                                    # 4. தற்காலிக அமர்வு மாறிகளை நீக்குதல்
                                     st.session_state.pop(f"active_draft_otp_{d_vno}", None)
                                     st.session_state.pop("current_active_draft", None)
                                     
