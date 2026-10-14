@@ -10199,15 +10199,20 @@ if st.session_state.get("logged_in", False):
                 st.caption("வாடிக்கையாளர்கள் மீட்டெடுப்பு அல்லது பிற சேவைகளுக்காக வங்கி/UPI மூலம் செலுத்திய பணத்தை UTR மற்றும் ரசீது பார்த்து சரிபார்க்கும் மேசை.")
 
                 try:
+                    # 🌟 நேரிடையாக transactions அட்டவணையில் இருந்து மட்டுமே எடுத்தல் (PostgREST200 பிழை வராது)
                     pending_bank_txns = (
                         supabase.table("transactions")
-                        .select("*, customers(name, mobile), branches(branch_name)")
+                        .select("*")
                         .eq("status", "Pending_Bank_Verification")
                         .order("id", desc=True)
                         .execute()
                         .data
                         or []
                     )
+                    # கிளைப் பெயர்களை எளிதாக மேப் செய்ய branches டேபிளை எடுத்தல்
+                    branches_list = supabase.table("branches").select("id, branch_name").execute().data or []
+                    b_map = {b["id"]: b["branch_name"] for b in branches_list}
+                    
                 except Exception as b_err:
                     st.error(f"வங்கி வரவுத் தரவுகளைப் பெறுவதில் பிழை: {b_err}")
                     pending_bank_txns = []
@@ -10220,11 +10225,14 @@ if st.session_state.get("logged_in", False):
                             col_op1, col_op2, col_op3 = st.columns([2.5, 2, 1.5])
 
                             with col_op1:
-                                cust_info = p_txn.get("customers") or {}
-                                br_info = p_txn.get("branches") or {}
-                                st.markdown(f"**கிளை:** {br_info.get('branch_name', '-')} | **தேதி:** {p_txn.get('created_at', '-')[:10]}")
-                                st.markdown(f"👤 வாடிக்கையாளர்: **{cust_info.get('name', p_txn.get('customer_name', 'Customer'))}** (📞 {cust_info.get('mobile', p_txn.get('mobile', '-'))})")
-                                st.write(f"🏷️ நடவடிக்கை வகை: **{p_txn.get('transaction_type')}**")
+                                # கிளை மற்றும் வாடிக்கையாளர் விவரங்கள்
+                                b_display_name = b_map.get(p_txn.get("branch_id"), f"கிளை #{p_txn.get('branch_id', '-')}")
+                                c_display_name = p_txn.get("customer_name") or "Customer"
+                                c_display_mob = p_txn.get("mobile") or "-"
+                                
+                                st.markdown(f"**கிளை:** {b_display_name} | **தேதி:** {p_txn.get('created_at', '-')[:10]}")
+                                st.markdown(f"👤 வாடிக்கையாளர்: **{c_display_name}** (📞 {c_display_mob})")
+                                st.write(f"🏷️ நடவடிக்கை வகை: **{p_txn.get('transaction_type', '-')}**")
                                 st.write(f"💵 ரொக்கம்: ₹{float(p_txn.get('cash_amount', 0.0) or 0.0):,.2f} | 🏛️ **வங்கி வரவு: ₹{float(p_txn.get('bank_amount', 0.0) or 0.0):,.2f}**")
 
                             with col_op2:
