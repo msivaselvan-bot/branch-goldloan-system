@@ -6719,14 +6719,34 @@ if st.session_state.get("logged_in", False):
                             selected_draft.get("mobile") 
                             or selected_draft.get("phone") 
                             or selected_draft.get("customer_phone")
-                            or selected_draft.get("mobile_no")
                             or ""
                         ).strip()
-                        
+
+                        # ஒருவேளை customer_visits-ல் எண் காலியாக இருந்தால், customers டேபிளிலிருந்து எடுத்தல்
+                        cust_db_id = selected_draft.get("customer_id")
+                        if (not raw_mobile or raw_mobile in ["-", "None", "null", ""]) and cust_db_id:
+                            try:
+                                c_info = (
+                                    supabase.table("customers")
+                                    .select("name, mobile, phone")
+                                    .eq("id", cust_db_id)
+                                    .limit(1)
+                                    .execute()
+                                    .data or []
+                                )
+                                if c_info:
+                                    raw_mobile = str(c_info[0].get("mobile") or c_info[0].get("phone") or "").strip()
+                                    # வாடிக்கையாளர் பெயரையும் அப்டேட் செய்தல்
+                                    if c_info[0].get("name"):
+                                        selected_draft["customer_name"] = c_info[0].get("name")
+                            except Exception:
+                                pass
+
+                        # எண்களை மட்டும் சுத்தப்படுத்துதல்
                         clean_digits = "".join(ch for ch in raw_mobile.split(".")[0] if ch.isdigit())
                         draft_mobile = clean_digits[-10:] if len(clean_digits) >= 10 else clean_digits
 
-                        # 🌟 3. அட்மின் விலக்குக் கோரிக்கை நிலையைச் சரிபார்த்தல் (Bypass Request Check)
+                        # 🌟 2. அட்மின் விலக்குக் கோரிக்கை சரிபார்ப்பு
                         bp_check = (
                             supabase.table("otp_bypass_requests")
                             .select("*")
@@ -6740,14 +6760,23 @@ if st.session_state.get("logged_in", False):
                         is_bypass_pending = len(bp_check) > 0 and bp_check[0].get("status") == "Pending Admin"
 
                         with dr_col1:
-                            st.caption(f"📞 கண்டறியப்பட்ட மொபைல் எண்: **{draft_mobile if draft_mobile else 'எண் கிடைக்கவில்லை'}**")
-
                             if is_bypass_approved:
-                                st.success("🔓 **அட்மின் OTP விலக்கு அனுமதி அளித்துவிட்டார்!** OTP தேவையின்றி நேரடியாக நிறைவு செய்யலாம்.")
+                                st.success("🔓 **அட்மின் OTP விலக்கு அனுமதி அளித்துவிட்டார்!** நேரடியாக வருகையினை நிறைவு செய்யலாம்.")
                             elif is_bypass_pending:
-                                st.warning("⏳ அட்மின் விலக்குக் கோரிக்கை பரிசீலனையில் உள்ளது. காத்திருக்கவும் அல்லது OTP முயற்சிக்கவும்.")
+                                st.warning("⏳ அட்மின் விலக்குக் கோரிக்கை பரிசீலனையில் உள்ளது. அட்மின் அப்ரூவ் செய்ததும் பட்டன் செயல்படும்.")
 
-                            # அட்மின் அனுமதி இல்லாத போது மட்டுமே OTP அனுப்பும் பொத்தான் தோன்றும்
+                            # மொபைல் எண் இல்லாவிட்டால் பணியாளரே டைப் செய்யும் வசதி
+                            if len(draft_mobile) != 10 and not is_bypass_approved:
+                                st.warning("⚠️ இந்த டிராப்டில் மொபைல் எண் பதியப்படவில்லை. வாடிக்கையாளரின் 10 இலக்க மொபைல் எண்ணை கீழே உள்ளிடவும்:")
+                                manual_mobile = st.text_input("வாடிக்கையாளர் மொபைல் எண் *:", max_chars=10, key=f"man_mob_{d_vno}")
+                                if len(manual_mobile.strip()) == 10 and manual_mobile.strip().isdigit():
+                                    draft_mobile = manual_mobile.strip()
+                                    # டேட்டாபேஸிலும் அந்த எண்ணை உடனே சேமித்தல்
+                                    supabase.table("customer_visits").update({"mobile": draft_mobile}).eq("id", selected_draft["id"]).execute()
+                            else:
+                                st.caption(f"📞 கண்டறியப்பட்ட மொபைல் எண்: **{draft_mobile}**")
+
+                            # OTP அனுப்பும் பொத்தான்
                             if not is_bypass_approved:
                                 if st.button("📲 வாடிக்கையாளருக்கு OTP அனுப்புக", key=f"btn_resend_otp_{d_vno}", use_container_width=True):
                                     if len(draft_mobile) == 10:
@@ -6760,17 +6789,19 @@ if st.session_state.get("logged_in", False):
                                         except Exception as sms_err:
                                             st.error(f"❌ SMS போர்ட்டல் பிழை: {sms_err}")
                                     else:
-                                        st.error(f"⚠️ பதிவு செய்யப்பட்ட எண்: '{raw_mobile}'. சரியான 10 இலக்கங்கள் இல்லை! வலதுபுறம் அட்மின் விலக்குக் கோரிக்கை வைக்கவும்.")
+                                        st.error("⚠️ தயவுசெய்து சரியான 10 இலக்க மொபைல் எண்ணை உள்ளிடவும்.")
 
                                 current_saved_otp = st.session_state.get(f"active_draft_otp_{d_vno}")
                                 if current_saved_otp:
-                                    st.info(f"ℹ️ {draft_mobile} எண்ணிற்கு OTP அனுப்பப்பட்டுள்ளது. உள்ளிட்டு முடிக்கவும்.")
+                                    st.info(f"ℹ️ {draft_mobile} எண்ணிற்கு SMS அனுப்பப்பட்டுள்ளது.")
 
                                 dr_entered_otp = st.text_input("வாடிக்கையாளர் OTP உள்ளிடவும் *:", max_chars=4, key=f"dr_otp_in_{d_vno}")
                             else:
                                 dr_entered_otp = None
 
-                            # 🌟 4. வருகையை நிறைவு செய்யும் பட்டன் (OTP அல்லது அட்மின் அப்ரூவல் இரண்டும் வேலை செய்யும்)
+                            # =================================================================
+                            # 🌟 3. வருகையை நிறைவு செய்யும் பட்டன்
+                            # =================================================================
                             btn_label = "✅ அட்மின் ஒப்புதலுடன் வருகையை நிறைவு செய்" if is_bypass_approved else "✅ வருகையினை நிறைவு செய் (Complete Visit)"
                             
                             if st.button(btn_label, type="primary", key=f"btn_dr_otp_fin_{d_vno}", use_container_width=True):
@@ -6783,30 +6814,27 @@ if st.session_state.get("logged_in", False):
                                     can_proceed = True
 
                                 if can_proceed:
-                                    # 1. வாடிக்கையாளர் வருகை நிலையைப் புதுப்பித்தல்
                                     supabase.table("customer_visits").update({
                                         "status": "Pending_Calling_Verification"
                                     }).eq("id", selected_draft["id"]).execute()
                                     
-                                    # 2. பரிவர்த்தனைகளைச் செயல்படுத்துதல்
                                     supabase.table("transactions").update({
                                         "status": "Pending"
                                     }).eq("visit_id", selected_draft["id"]).execute()
                                     
-                                    # 3. நகைக் கடனை Approved என மாற்றுதல் (visit_id கொண்டு)
+                                    # visit_id கொண்டு நகைக் கடனை உறுதிசெய்தல்
                                     supabase.table("gold_loans").update({
                                         "status": "Approved"
                                     }).eq("visit_id", selected_draft["id"]).execute()
 
-                                    # 4. தற்காலிக அமர்வு மாறிகளை நீக்குதல்
                                     st.session_state.pop(f"active_draft_otp_{d_vno}", None)
                                     st.session_state.pop("current_active_draft", None)
                                     
                                     st.success("🎉 வருகை வெற்றிகரமாக நிறைவு செய்யப்பட்டு அழைப்புச் சரிபார்ப்பிற்கு மாற்றப்பட்டது!")
                                     st.rerun()
                                 else:
-                                    if not dr_entered_otp:
-                                        st.error("⚠️ தயவுசெய்து வாடிக்கையாளர் பெற்ற OTP-ஐ உள்ளிடவும்.")
+                                    if not is_bypass_approved and not dr_entered_otp:
+                                        st.error("⚠️ தயவுசெய்து OTP-ஐ உள்ளிடவும்.")
                                     else:
                                         st.error("❌ தவறான OTP! சரியான 4 இலக்க எண்ணை உள்ளிடவும்.")
 
