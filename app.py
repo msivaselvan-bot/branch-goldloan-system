@@ -6693,7 +6693,33 @@ if st.session_state.get("logged_in", False):
                         selected_draft = draft_map[sel_draft_key]
                         d_vno = selected_draft["visit_no"]
 
-                        st.markdown(f"###### 🔒 வாடிக்கையாளர் நடவடிக்கைகள் - `{d_vno}`")
+                        # =====================================================================
+                        # 🌟 customers அட்டவணையில் இருந்து நேரடி பெயர் & மொபைல் எண் எடுத்தல்
+                        # =====================================================================
+                        cust_id = selected_draft.get("customer_id")
+                        cust_name = selected_draft.get("customer_name") or "Customer"
+                        draft_mobile = ""
+
+                        if cust_id:
+                            try:
+                                c_data = (
+                                    supabase.table("customers")
+                                    .select("name, mobile")
+                                    .eq("id", cust_id)
+                                    .limit(1)
+                                    .execute()
+                                    .data or []
+                                )
+                                if c_data:
+                                    cust_name = c_data[0].get("name") or cust_name
+                                    raw_mob = str(c_data[0].get("mobile") or "").strip()
+                                    # எண்களை மட்டும் பிரித்து 10 இலக்க எண்ணாக மாற்றுதல்
+                                    digits = "".join(ch for ch in raw_mob.split(".")[0] if ch.isdigit())
+                                    draft_mobile = digits[-10:] if len(digits) >= 10 else digits
+                            except Exception:
+                                pass
+
+                        st.markdown(f"###### 🔒 வாடிக்கையாளர் நடவடிக்கைகள் - `{d_vno}` | 👤 **{cust_name}**")
                         st.caption("⚠️ பாதுகாப்பு விதி: தற்காலிகமாக சேமிக்கப்பட்ட நடவடிக்கைகளை எக்காரணம் கொண்டும் மாற்றவோ எடிட் செய்யவோ இயலாது!")
 
                         saved_txns = supabase.table("transactions").select("*").eq("visit_id", selected_draft["id"]).execute().data or []
@@ -6713,40 +6739,8 @@ if st.session_state.get("logged_in", False):
                         st.markdown("---")
                         st.markdown("#### 📲 OTP சரிபார்த்து அழைப்புப் பிரிவிற்கு அனுப்புக")
                         dr_col1, dr_col2 = st.columns(2)
-                        
-                        # 🌟 2. மொபைல் எண்ணை முழுமையாக சுத்தப்படுத்துதல் (Float .0 மற்றும் குறியீடுகளை நீக்குதல்)
-                        raw_mobile = str(
-                            selected_draft.get("mobile") 
-                            or selected_draft.get("phone") 
-                            or selected_draft.get("customer_phone")
-                            or ""
-                        ).strip()
 
-                        # ஒருவேளை customer_visits-ல் எண் காலியாக இருந்தால், customers டேபிளிலிருந்து எடுத்தல்
-                        cust_db_id = selected_draft.get("customer_id")
-                        if (not raw_mobile or raw_mobile in ["-", "None", "null", ""]) and cust_db_id:
-                            try:
-                                c_info = (
-                                    supabase.table("customers")
-                                    .select("name, mobile, phone")
-                                    .eq("id", cust_db_id)
-                                    .limit(1)
-                                    .execute()
-                                    .data or []
-                                )
-                                if c_info:
-                                    raw_mobile = str(c_info[0].get("mobile") or c_info[0].get("phone") or "").strip()
-                                    # வாடிக்கையாளர் பெயரையும் அப்டேட் செய்தல்
-                                    if c_info[0].get("name"):
-                                        selected_draft["customer_name"] = c_info[0].get("name")
-                            except Exception:
-                                pass
-
-                        # எண்களை மட்டும் சுத்தப்படுத்துதல்
-                        clean_digits = "".join(ch for ch in raw_mobile.split(".")[0] if ch.isdigit())
-                        draft_mobile = clean_digits[-10:] if len(clean_digits) >= 10 else clean_digits
-
-                        # 🌟 2. அட்மின் விலக்குக் கோரிக்கை சரிபார்ப்பு
+                        # அட்மின் விலக்குக் கோரிக்கை நிலை
                         bp_check = (
                             supabase.table("otp_bypass_requests")
                             .select("*")
@@ -6760,36 +6754,26 @@ if st.session_state.get("logged_in", False):
                         is_bypass_pending = len(bp_check) > 0 and bp_check[0].get("status") == "Pending Admin"
 
                         with dr_col1:
+                            st.caption(f"📞 வாடிக்கையாளர் மொபைல் எண்: **{draft_mobile if draft_mobile else 'எண் கிடைக்கவில்லை'}**")
+
                             if is_bypass_approved:
                                 st.success("🔓 **அட்மின் OTP விலக்கு அனுமதி அளித்துவிட்டார்!** நேரடியாக வருகையினை நிறைவு செய்யலாம்.")
                             elif is_bypass_pending:
-                                st.warning("⏳ அட்மின் விலக்குக் கோரிக்கை பரிசீலனையில் உள்ளது. அட்மின் அப்ரூவ் செய்ததும் பட்டன் செயல்படும்.")
+                                st.warning("⏳ அட்மின் விலக்குக் கோரிக்கை பரிசீலனையில் உள்ளது.")
 
-                            # மொபைல் எண் இல்லாவிட்டால் பணியாளரே டைப் செய்யும் வசதி
-                            if len(draft_mobile) != 10 and not is_bypass_approved:
-                                st.warning("⚠️ இந்த டிராப்டில் மொபைல் எண் பதியப்படவில்லை. வாடிக்கையாளரின் 10 இலக்க மொபைல் எண்ணை கீழே உள்ளிடவும்:")
-                                manual_mobile = st.text_input("வாடிக்கையாளர் மொபைல் எண் *:", max_chars=10, key=f"man_mob_{d_vno}")
-                                if len(manual_mobile.strip()) == 10 and manual_mobile.strip().isdigit():
-                                    draft_mobile = manual_mobile.strip()
-                                    # டேட்டாபேஸிலும் அந்த எண்ணை உடனே சேமித்தல்
-                                    supabase.table("customer_visits").update({"mobile": draft_mobile}).eq("id", selected_draft["id"]).execute()
-                            else:
-                                st.caption(f"📞 கண்டறியப்பட்ட மொபைல் எண்: **{draft_mobile}**")
-
-                            # OTP அனுப்பும் பொத்தான்
+                            # அட்மின் அனுமதி இல்லாத போது மட்டுமே OTP அனுப்பும் வசதி
                             if not is_bypass_approved:
                                 if st.button("📲 வாடிக்கையாளருக்கு OTP அனுப்புக", key=f"btn_resend_otp_{d_vno}", use_container_width=True):
                                     if len(draft_mobile) == 10:
                                         otp_c = str(random.randint(1000, 9999))
                                         st.session_state[f"active_draft_otp_{d_vno}"] = otp_c
-                                        
                                         try:
                                             send_fast2sms_otp(draft_mobile, otp_c)
                                             st.success(f"✅ OTP வெற்றிகரமாக {draft_mobile} எண்ணிற்கு அனுப்பப்பட்டது!")
                                         except Exception as sms_err:
-                                            st.error(f"❌ SMS போர்ட்டல் பிழை: {sms_err}")
+                                            st.error(f"❌ SMS பிழை: {sms_err}")
                                     else:
-                                        st.error("⚠️ தயவுசெய்து சரியான 10 இலக்க மொபைல் எண்ணை உள்ளிடவும்.")
+                                        st.error("⚠️ வாடிக்கையாளரின் 10 இலக்க மொபைல் எண் கிடைக்கவில்லை.")
 
                                 current_saved_otp = st.session_state.get(f"active_draft_otp_{d_vno}")
                                 if current_saved_otp:
@@ -6799,15 +6783,13 @@ if st.session_state.get("logged_in", False):
                             else:
                                 dr_entered_otp = None
 
-                            # =================================================================
-                            # 🌟 3. வருகையை நிறைவு செய்யும் பட்டன்
-                            # =================================================================
+                            # வருகை நிறைவு செய்யும் பொத்தான்
                             btn_label = "✅ அட்மின் ஒப்புதலுடன் வருகையை நிறைவு செய்" if is_bypass_approved else "✅ வருகையினை நிறைவு செய் (Complete Visit)"
                             
                             if st.button(btn_label, type="primary", key=f"btn_dr_otp_fin_{d_vno}", use_container_width=True):
                                 current_saved_otp = st.session_state.get(f"active_draft_otp_{d_vno}")
-                                
                                 can_proceed = False
+
                                 if is_bypass_approved:
                                     can_proceed = True
                                 elif dr_entered_otp and (dr_entered_otp == current_saved_otp or dr_entered_otp == "1234"):
@@ -6822,7 +6804,6 @@ if st.session_state.get("logged_in", False):
                                         "status": "Pending"
                                     }).eq("visit_id", selected_draft["id"]).execute()
                                     
-                                    # visit_id கொண்டு நகைக் கடனை உறுதிசெய்தல்
                                     supabase.table("gold_loans").update({
                                         "status": "Approved"
                                     }).eq("visit_id", selected_draft["id"]).execute()
@@ -6850,10 +6831,10 @@ if st.session_state.get("logged_in", False):
                                     else:
                                         supabase.table("otp_bypass_requests").insert({
                                             "branch_id": clean_b_id,
-                                            "customer_id": selected_draft.get("customer_id"),
+                                            "customer_id": cust_id,
                                             "visit_no": d_vno,
-                                            "customer_name": selected_draft.get("customer_name"),
-                                            "mobile": draft_mobile if draft_mobile else raw_mobile,
+                                            "customer_name": cust_name,
+                                            "mobile": draft_mobile,
                                             "reason": dr_bp_reason.strip(),
                                             "status": "Pending Admin",
                                             "requested_by": st.session_state.get("username", "Staff")
