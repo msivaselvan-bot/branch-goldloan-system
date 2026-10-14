@@ -8088,12 +8088,17 @@ if st.session_state.get("logged_in", False):
                                             
                                             new_visit_id = v_insert.data[0]["id"]
 
-                                            # நடவடிக்கைகளை அந்தந்த தனி அட்டவணைகளில் சேமித்தல்
+                                            # =========================================================================
+                                            # 🌟 நடவடிக்கைகளை அந்தந்த தனி அட்டவணைகளில் சேமித்தல்
+                                            # =========================================================================
                                             for item in st.session_state.transactions_cart:
-                                                t_type = str(item.get("transaction_type", ""))
-                                                s_name = item.get("staff_name", "")
+                                                t_type = str(item.get("transaction_type", "RD Due (RD தவணை)"))
+                                                s_name = item.get("staff_name") or st.session_state.get("username", "Staff")
                                                 p_amt = float(item.get("paid_amount", 0.0) or 0.0)
-                                                r_amt = float(item.get("received_amount", 0.0) or 0.0)
+                                                r_amt = float(item.get("received_amount", 0.0) or item.get("amount", 0.0) or 0.0)
+
+                                                # வாடிக்கையாளர் தரும் நிகரத் தொகை (RD தவணை போன்றவை)
+                                                final_amt = r_amt if r_amt > 0 else (p_amt if p_amt > 0 else float(item.get("amount", 0.0) or 0.0))
 
                                                 # A. நகைக்கடன் அட்டவணை
                                                 if any(k in t_type for k in ["Pledge", "Loan", "நகைக்கடன்"]):
@@ -8146,29 +8151,52 @@ if st.session_state.get("logged_in", False):
                                                     except Exception as gp_err:
                                                         st.error(f"⚠️ gold_purchases அட்டவணையில் சேமிப்பதில் பிழை: {gp_err}")
 
-                                                # D. பொது பரிவர்த்தனைகள் அட்டவணை (Transactions Table)
+                                                # D. 🌟 பொது பரிவர்த்தனைகள் அட்டவணை (Transactions Table - Schema Mismatch தவிர்க்கப்பட்ட பகுதி)
                                                 try:
-                                                    # வங்கி வரவு இருந்தால் 'Pending_Bank_Verification', இல்லையெனில் வழக்கமான 'Pending'
-                                                    t_row_status = "Pending_Bank_Verification" if (bank_portion > 0 and r_amt > 0) else "Pending"
-                                                    
+                                                    # UTR மற்றும் வங்கி விபரங்களை remarks-ல் ஒருங்கிணைத்தல் (ஏனெனில் transactions-ல் அந்த காலம்கள் இல்லை)
+                                                    combined_remarks = item.get("remarks") or ""
+                                                    if bank_portion > 0:
+                                                        ref_str = f"Bank: {bank_name} | Ref: {bank_ref_no}" if bank_ref_no else f"Bank: {bank_name}"
+                                                        combined_remarks = f"{combined_remarks} | {ref_str}".strip(" |")
+
                                                     general_txn = {
-                                                        "visit_id": new_visit_id, "branch_id": clean_b_id, "customer_id": c_id,
-                                                        "customer_name": c_name, "mobile": c_mob_final,
-                                                        "transaction_type": t_type, "staff_name": s_name,
-                                                        "amount": float(item.get("amount", 0.0) or (p_amt if p_amt > 0 else r_amt)),
-                                                        "paid_amount": p_amt, "received_amount": r_amt,
+                                                        "visit_id": new_visit_id,
+                                                        "branch_id": clean_b_id,
+                                                        "customer_id": c_id,
+                                                        "customer_name": c_name,
+                                                        "mobile": c_mob_final,
+                                                        "transaction_type": t_type,
+                                                        "staff_name": s_name,
+                                                        "amount": final_amt,
+                                                        "paid_amount": p_amt,
+                                                        "received_amount": r_amt,
                                                         "gross_weight": float(item.get("total_weight", 0.0) or item.get("gross_weight", 0.0) or 0.0),
                                                         "net_weight": float(item.get("net_weight", 0.0) or 0.0),
-                                                        "item_details": item.get("ornament_details", ""), "remarks": item.get("remarks", ""),
+                                                        "item_details": item.get("ornament_details") or item.get("item_details", ""),
+                                                        "remarks": combined_remarks,
                                                         "payment_mode": pm_label,
-                                                        "bank_name": bank_name if bank_portion > 0 else None,
-                                                        "bank_reference_no": bank_ref_no if bank_portion > 0 else None,
-                                                        "bank_proof_url": bank_proof_url if bank_portion > 0 else None,
-                                                        "status": t_row_status
+                                                        "status": "Approved"  # அழைப்பு முடிந்ததும் கல்லா பரிவர்த்தனையில் தெரிய
                                                     }
                                                     supabase.table("transactions").insert(general_txn).execute()
                                                 except Exception as txn_err:
                                                     st.error(f"⚠️ transactions அட்டவணையில் சேமிப்பதில் பிழை: {txn_err}")
+
+                                                # E. 🌟 RD அட்டவணையில் தவணையைப் புதுப்பித்தல்
+                                                if any(k in t_type for k in ["RD", "ஆர்டி", "Installment"]):
+                                                    try:
+                                                        rd_acc_no = item.get("account_no") or item.get("rd_account_no") or ""
+                                                        if not rd_acc_no and "RD No:" in str(item.get("remarks", "")):
+                                                            try:
+                                                                rd_acc_no = str(item.get("remarks")).split("RD No:")[1].split("|")[0].strip()
+                                                            except Exception:
+                                                                rd_acc_no = ""
+                                                        
+                                                        if rd_acc_no:
+                                                            supabase.table("recurring_deposits").update({
+                                                                "total_received_amount": float(r_amt)
+                                                            }).eq("rd_account_no", rd_acc_no).execute()
+                                                    except Exception as rd_err:
+                                                        st.caption(f"RD Update Note: {rd_err}")
 
                                             # செஷன் மாறிகளை அழித்தல்
                                             st.session_state.transactions_cart = []
