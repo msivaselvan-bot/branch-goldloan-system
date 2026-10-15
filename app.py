@@ -1106,12 +1106,17 @@ def generate_fd_account_no(branch_id: int) -> str:
 
 
 def generate_rd_account_no(branch_id: int) -> str:
-    """recurring_deposits அட்டவணை மற்றும் கார்ட்டில் (transactions_cart) உள்ள உச்சபட்ச எண்ணைப் பார்த்து அடுத்த எண்ணை உருவாக்குதல்"""
+    """
+    1. recurring_deposits அட்டவணை
+    2. transactions அட்டவணை (Approved மற்றும் Draft_Locked/Draft_Pending_OTP)
+    3. தற்போதைய transactions_cart
+    ஆகிய அனைத்திலும் உள்ள அதிகபட்ச எண்ணைக் கண்டறிந்து அடுத்த RD எண்ணை உருவாக்குதல்.
+    """
     b_code = get_branch_code_by_id(branch_id)
     max_seq = 0
     pattern = re.compile(rf"{re.escape(b_code)}/RD/(\d+)", re.IGNORECASE)
 
-    # 1. Supabase database-ல் உள்ள அதிகபட்ச எண்ணை எடுத்தல்
+    # 1. recurring_deposits அட்டவணையில் உள்ள அதிகபட்ச எண்ணை எடுத்தல்
     try:
         res = (
             supabase.table("recurring_deposits")
@@ -1125,17 +1130,17 @@ def generate_rd_account_no(branch_id: int) -> str:
             if m:
                 max_seq = max(max_seq, int(m.group(1)))
 
-        # transactions டேபிளிலும் சரிபார்த்தல் (பழைய பல்க் பதிவுகள்)
+        # 2. 🌟 transactions அட்டவணையில் உள்ள பழைய மற்றும் டிராஃப்ட் (Draft) பதிவுகளைச் சரிபார்த்தல்
         txns = (
             supabase.table("transactions")
-            .select("transaction_details, remarks, customer_visits!inner(branch_id)")
-            .eq("customer_visits.branch_id", int(branch_id))
+            .select("transaction_details, remarks")
+            .eq("branch_id", int(branch_id))
             .ilike("transaction_type", "%RD%")
             .execute()
-            .data
-            or []
+            .data or []
         )
         for t in txns:
+            # transaction_details மற்றும் remarks-ல் உள்ள RD எண்ணைத் துல்லியமாக Regex மூலம் எடுத்தல்
             m1 = pattern.search(str(t.get("transaction_details") or ""))
             if m1:
                 max_seq = max(max_seq, int(m1.group(1)))
@@ -1145,12 +1150,11 @@ def generate_rd_account_no(branch_id: int) -> str:
     except Exception:
         pass
 
-    # 2. 🌟 தற்போதைய கார்ட்டில் (transactions_cart) உள்ள "RD Open" பதிவுகளைச் சரிபார்த்தல்
+    # 3. 🌟 தற்போதைய கார்ட்டில் (transactions_cart) உள்ள "RD Open" பதிவுகளைச் சரிபார்த்தல்
     try:
         cart_items = st.session_state.get("transactions_cart", [])
         for item in cart_items:
             t_type = str(item.get("transaction_type", ""))
-            # புதிய RD Open பதிவுகளுக்கு மட்டுமே வரிசை எண்ணைக் கணக்கிட வேண்டும்
             if (
                 "RD Open" in t_type
                 or ("RD" in t_type and "Open" in t_type)
@@ -2125,46 +2129,46 @@ def get_active_loan_schemes():
 
 def get_current_display_gl_number(branch_id=None):
     """
-    எல்லா கிளைகளுக்கும் (KMK, MYL, EDK, KPT, AVL...) அந்தந்த கிளையின் 
-    முன்னொட்டு மற்றும் கடைசி கடன் எண்ணை gold_loans & branch_loan_sequences 
-    அட்டவணைகளில் இருந்து எடுத்து அடுத்த கடன் எண்ணை வழங்கும் பொதுவான சார்பு.
+    1. gold_loans (முடிந்த கடன்கள்)
+    2. branch_loan_sequences (வரிசைப் பதிவேடு)
+    3. transactions / customer_visits (டிராஃப்ட்டில் உள்ள கடன்கள்)
+    ஆகிய அனைத்திலும் உள்ள எண்களில் எது மிகப் பெரியதோ அதைக் கண்டறிந்து,
+    அடுத்த புதிய கடன் எண்ணைத் துல்லியமாக வழங்கும்.
     """
     clean_b_id = 1
     fallback_prefix = "GL"
-    
+
     try:
-        # 1. branch_id-ஐ பாதுகாப்பாகப் பெறுதல்
         if not branch_id or int(branch_id) == 0:
             raw_b_id = st.session_state.get("branch_id") or st.session_state.get("branch") or 1
             clean_b_id = int(raw_b_id)
         else:
             clean_b_id = int(branch_id)
 
-        # 🌟 கிளையின் முன்னொட்டை session அல்லது branches அட்டவணையில் இருந்து எடுத்தல்
         fallback_prefix = str(
             st.session_state.get("branch_code") 
             or st.session_state.get("branch", "GL")[:3]
         ).strip().upper()
 
-        # 2. branch_loan_sequences அட்டவணையில் இருந்து தகவல்களைப் பெறுதல்
-        res = (
-            supabase.table("branch_loan_sequences")
-            .select("prefix, last_number")
-            .eq("branch_id", clean_b_id)
-            .execute()
-        )
-
-        prefix = fallback_prefix
+        # -------------------------------------------------------------
+        # நிலை A: branch_loan_sequences அட்டவணையில் உள்ள கடைசி எண்
+        # -------------------------------------------------------------
         seq_last_no = 0
+        prefix = fallback_prefix
+        try:
+            res = supabase.table("branch_loan_sequences").select("prefix, last_number").eq("branch_id", clean_b_id).execute()
+            if res.data:
+                rec = res.data[0]
+                if rec.get("prefix"):
+                    prefix = str(rec.get("prefix")).strip().rstrip("/-")
+                if rec.get("last_number") is not None:
+                    seq_last_no = int(rec.get("last_number"))
+        except Exception:
+            pass
 
-        if res.data:
-            rec = res.data[0]
-            if rec.get("prefix"):
-                prefix = str(rec.get("prefix")).strip().rstrip("/-")
-            if rec.get("last_number") is not None:
-                seq_last_no = int(rec.get("last_number"))
-
-        # 3. 🌟 அந்த குறிப்பிட்ட கிளைக்கு gold_loans-ல் பதிவான கடைசி எண்ணைச் சரிபார்த்தல்
+        # -------------------------------------------------------------
+        # நிலை B: gold_loans அட்டவணையில் உள்ள கடைசி கடன் எண்
+        # -------------------------------------------------------------
         gl_last_no = 0
         try:
             recent_loans = (
@@ -2172,35 +2176,65 @@ def get_current_display_gl_number(branch_id=None):
                 .select("loan_no")
                 .eq("branch_id", clean_b_id)
                 .order("id", desc=True)
-                .limit(30)
+                .limit(40)
                 .execute()
                 .data or []
             )
             for r in recent_loans:
                 l_str = str(r.get("loan_no", "")).strip()
                 if "/" in l_str:
-                    # எ.கா: MYL/0969 அல்லது KMK/1289-ல் இருந்து முன்னொட்டு மற்றும் எண் பிரித்தல்
-                    parts = l_str.split("/")
-                    detected_prefix = parts[0].strip()
-                    num_part = parts[-1].strip()
-                    
-                    if not prefix or prefix == "GL":
-                        prefix = detected_prefix
-
+                    num_part = l_str.split("/")[-1].strip()
                     digits = "".join(ch for ch in num_part if ch.isdigit())
-                    if digits:
-                        val = int(digits)
-                        if val > gl_last_no:
-                            gl_last_no = val
+                    if digits and int(digits) > gl_last_no:
+                        gl_last_no = int(digits)
         except Exception:
             pass
 
-        # 4. இரண்டில் எது அதிகபட்ச எண்ணோ அதை எடுத்தல்
-        base_last_no = max(seq_last_no, gl_last_no)
-        if base_last_no == 0:
-            base_last_no = 1000  # ஏதும் இல்லை எனில் தொடக்க எண்
+        # -------------------------------------------------------------
+        # 🌟 நிலை C: டிராஃப்ட்டில் (Drafts) ஒதுக்கப்பட்ட அதிகபட்ச கடன் எண்
+        # -------------------------------------------------------------
+        draft_gl_last_no = 0
+        try:
+            # transactions அட்டவணையில் Draft_Locked நிலையில் உள்ள Pledge-களை எடுத்தல்
+            draft_txns = (
+                supabase.table("transactions")
+                .select("item_details, remarks, transaction_details")
+                .eq("branch_id", clean_b_id)
+                .in_("status", ["Draft_Locked", "Draft_Pending_OTP", "Pending", "Pending_Calling_Verification"])
+                .order("id", desc=True)
+                .limit(50)
+                .execute()
+                .data or []
+            )
+            for d in draft_txns:
+                # remarks அல்லது transaction_details-ல் இருந்து GL எண்ணைத் தேடுதல்
+                t_details = d.get("transaction_details") or {}
+                d_loan_no = ""
+                if isinstance(t_details, dict):
+                    d_loan_no = str(t_details.get("loan_no") or t_details.get("gp_number") or "")
+                
+                if not d_loan_no and "GL:" in str(d.get("remarks", "")):
+                    try:
+                        d_loan_no = str(d.get("remarks")).split("GL:")[1].split("|")[0].strip()
+                    except Exception:
+                        d_loan_no = ""
 
-        # 5. கார்ட்டில் (transactions_cart) தற்போது உள்ள தற்காலிக Pledge எண்ணிக்கை
+                if "/" in d_loan_no:
+                    num_p = d_loan_no.split("/")[-1].strip()
+                    d_digits = "".join(c for c in num_p if c.isdigit())
+                    if d_digits and int(d_digits) > draft_gl_last_no:
+                        draft_gl_last_no = int(d_digits)
+        except Exception:
+            pass
+
+        # -------------------------------------------------------------
+        # 🌟 நிலை D: மூன்றிலும் எது அதிகபட்ச எண்ணோ அதைக் கண்டறிதல்
+        # -------------------------------------------------------------
+        absolute_max = max(seq_last_no, gl_last_no, draft_gl_last_no)
+        if absolute_max == 0:
+            absolute_max = 1000
+
+        # கார்ட்டில் தற்போது சேர்க்கப்பட்டு பயன்பாட்டில் உள்ள தற்காலிக எண்ணிக்கை
         cart_items_count = 0
         if "transactions_cart" in st.session_state and isinstance(st.session_state["transactions_cart"], list):
             for item in st.session_state["transactions_cart"]:
@@ -2209,10 +2243,8 @@ def get_current_display_gl_number(branch_id=None):
                     if "Pledge" in t_type or "நகைக்கடன்" in t_type:
                         cart_items_count += 1
 
-        # 6. அடுத்த எண் = அதிகபட்ச எண் + கார்ட் எண்ணிக்கை + 1
-        next_num = base_last_no + cart_items_count + 1
+        next_num = absolute_max + cart_items_count + 1
 
-        # 7. வடிவமைப்பு (எ.கா: MYL/0970 அல்லது KMK/1290)
         suggested_gl_no = (
             f"{prefix}/{next_num:04d}"
             if next_num < 1000
@@ -2221,8 +2253,7 @@ def get_current_display_gl_number(branch_id=None):
 
         return suggested_gl_no, next_num
 
-    except Exception as e:
-        # 🌟 பிழை ஏற்பட்டாலும் எந்த கிளை லாகினில் உள்ளதோ அதன் குறியீடே டைனமிக்காக வரும்
+    except Exception:
         dyn_prefix = str(st.session_state.get("branch_code", fallback_prefix))[:3].upper()
         return f"{dyn_prefix}/1001", 1001
 
@@ -8160,10 +8191,9 @@ if st.session_state.get("logged_in", False):
                                                 "cash_amount": float(cash_portion),
                                                 "bank_amount": float(bank_portion),
                                                 "payment_mode": pm_label,
-                                                "bank_transfer_status": payout_status,  # 👈 ஆப்பரேஷன்ஸ் Payout மேசைக்குச் செல்ல
+                                                "bank_transfer_status": payout_status,
                                                 "bank_transfer_type": bank_transfer_type if 'bank_transfer_type' in locals() else "Customer",
                                                 "bank_reference_no": bank_ref_no.strip() if bank_ref_no else None,
-                                                # வாடிக்கையாளர் வங்கி விபரங்கள் (Payout செய்ய)
                                                 "bank_acc_holder_name": b_holder if 'b_holder' in locals() else None,
                                                 "bank_acc_number": b_acc if 'b_acc' in locals() else None,
                                                 "bank_name": bank_name if 'bank_name' in locals() else None,
@@ -8194,27 +8224,140 @@ if st.session_state.get("logged_in", False):
                                                 s_name = item.get("staff_name") or st.session_state.get("username", "Staff")
                                                 p_amt = float(item.get("paid_amount", 0.0) or 0.0)
                                                 r_amt = float(item.get("received_amount", 0.0) or item.get("amount", 0.0) or 0.0)
-
                                                 final_amt = r_amt if r_amt > 0 else (p_amt if p_amt > 0 else float(item.get("amount", 0.0) or 0.0))
+                                                combined_remarks = item.get("remarks") or ""
 
-                                                # A. நகைக்கடன் அட்டவணை
+                                                # -------------------------------------------------------------
+                                                # A. நகைக்கடன் அட்டவணை (Pledge / Gold Loan)
+                                                # -------------------------------------------------------------
                                                 if any(k in t_type for k in ["Pledge", "Loan", "நகைக்கடன்"]):
                                                     try:
-                                                        actual_gl_no = item.get("loan_no") or item.get("gp_number") or f"GL-{datetime.now().strftime('%y%m%d%H%M%S')}"
+                                                        # 🌟 டிராஃப்ட்டில் ஒதுக்கப்பட்ட கடன் எண்ணை அப்படியே மீட்டெடுத்தல்:
+                                                        actual_gl_no = item.get("loan_no") or item.get("gp_number")
+                                                        if not actual_gl_no and "GL:" in combined_remarks:
+                                                            try:
+                                                                actual_gl_no = combined_remarks.split("GL:")[1].split("|")[0].strip()
+                                                            except Exception:
+                                                                actual_gl_no = None
+
+                                                        # டிராஃப்ட்டில் எண் இல்லாவிட்டால் மட்டுமே புதிய எண்:
+                                                        if not actual_gl_no:
+                                                            actual_gl_no, num_val = get_current_display_gl_number(clean_b_id)
+                                                        else:
+                                                            num_part = actual_gl_no.split("/")[-1] if "/" in actual_gl_no else actual_gl_no
+                                                            num_digits = "".join(c for c in num_part if c.isdigit())
+                                                            num_val = int(num_digits) if num_digits else 0
+
+                                                        item["loan_no"] = actual_gl_no
+
                                                         loan_payload = {
-                                                            "visit_id": new_visit_id, "branch_id": clean_b_id, "customer_id": c_id, "loan_no": actual_gl_no,
-                                                            "ornament_details": item.get("ornament_details", ""), "items_count": int(item.get("items_count") or 1),
+                                                            "visit_id": new_visit_id,
+                                                            "branch_id": clean_b_id,
+                                                            "customer_id": c_id,
+                                                            "loan_no": actual_gl_no,  # 👈 மாற்றமில்லாத அசல் கடன் எண்
+                                                            "ornament_details": item.get("ornament_details", ""),
+                                                            "items_count": int(item.get("items_count") or 1),
                                                             "gross_weight": float(item.get("total_weight", 0.0) or item.get("gross_weight", 0.0) or 0.0),
-                                                            "net_weight": float(item.get("net_weight", 0.0) or 0.0), "purity": item.get("purity", "916 KDM"),
+                                                            "net_weight": float(item.get("net_weight", 0.0) or 0.0),
+                                                            "purity": item.get("purity", "916 KDM"),
                                                             "sanctioned_amount": float(item.get("paid_amount", 0.0) or item.get("amount", 0.0)),
-                                                            "scheme_name": item.get("scheme_name", "Regular"), "interest_rate": float(item.get("interest_rate", 18.0) or 18.0),
-                                                            "market_rate_per_gram": float(item.get("market_rate", 0.0) or 0.0), "staff_name": s_name, "status": "Active"
+                                                            "scheme_name": item.get("scheme_name", "Regular"),
+                                                            "interest_rate": float(item.get("interest_rate", 18.0) or 18.0),
+                                                            "market_rate_per_gram": float(item.get("market_rate", 0.0) or 0.0),
+                                                            "staff_name": s_name,
+                                                            "status": "Active"
                                                         }
                                                         supabase.table("gold_loans").insert(loan_payload).execute()
+
+                                                        # வரிசை அட்டவணையில் இந்த எண் பதியப்பட்டதை உறுதி செய்தல்
+                                                        if num_val > 0:
+                                                            commit_next_gl_number(clean_b_id, num_val)
+
                                                     except Exception as gl_err:
                                                         st.error(f"⚠️ gold_loans அட்டவணையில் சேமிப்பதில் பிழை: {gl_err}")
 
-                                                # B. நகை விற்பனை அட்டவணை
+                                                # -------------------------------------------------------------
+                                                # B. புதிய FD கணக்கு (FD Open)
+                                                # -------------------------------------------------------------
+                                                elif "FD Open" in t_type or ("FD" in t_type and any(x in t_type for x in ["Open", "புதிய"])):
+                                                    try:
+                                                        fd_meta = item.get("extra_meta_data", {}) or item
+                                                        dep_amt = float(fd_meta.get("deposit_amount") or item.get("received_amount") or item.get("amount") or 0.0)
+
+                                                        # 🌟 டிராஃப்ட்டில் ஒதுக்கப்பட்ட FD கணக்கு எண் மீட்டெடுத்தல்:
+                                                        final_fd_no = item.get("account_no") or fd_meta.get("account_no") or fd_meta.get("fd_account_no")
+                                                        if not final_fd_no and "FD No:" in combined_remarks:
+                                                            try:
+                                                                final_fd_no = combined_remarks.split("FD No:")[1].split("|")[0].strip()
+                                                            except Exception:
+                                                                final_fd_no = None
+
+                                                        if not final_fd_no:
+                                                            final_fd_no = generate_fd_account_no(clean_b_id)
+                                                        item["account_no"] = final_fd_no
+
+                                                        fd_insert_data = {
+                                                            "visit_id": new_visit_id,
+                                                            "branch_id": clean_b_id,
+                                                            "customer_id": c_id,
+                                                            "fd_account_no": final_fd_no,  # 👈 மாற்றமில்லாத அசல் FD எண்
+                                                            "deposit_amount": dep_amt,
+                                                            "tenure_months": int(fd_meta.get("tenure_months", 12)),
+                                                            "interest_rate": float(fd_meta.get("interest_rate", 12.0)),
+                                                            "maturity_amount": float(fd_meta.get("maturity_amount", dep_amt * 1.12)),
+                                                            "nominee_name": fd_meta.get("nominee") or "-",
+                                                            "nominee_relation": fd_meta.get("relation") or "-",
+                                                            "status": "Active"
+                                                        }
+                                                        supabase.table("fixed_deposits").insert(fd_insert_data).execute()
+                                                    except Exception as fd_err:
+                                                        st.error(f"⚠️ fixed_deposits சேமிப்பதில் பிழை: {fd_err}")
+
+                                                # -------------------------------------------------------------
+                                                # C. புதிய RD கணக்கு (RD Open)
+                                                # -------------------------------------------------------------
+                                                elif "RD Open" in t_type or ("RD" in t_type and any(x in t_type for x in ["Open", "புதிய"])):
+                                                    try:
+                                                        rd_meta = item.get("extra_meta_data", {}) or item
+                                                        inst_amt = float(rd_meta.get("installment_amount") or item.get("received_amount") or item.get("amount") or 0.0)
+
+                                                        # 🌟 டிராஃப்ட்டில் ஒதுக்கப்பட்ட RD கணக்கு எண் மீட்டெடுத்தல்:
+                                                        final_rd_no = item.get("account_no") or rd_meta.get("account_no") or rd_meta.get("rd_account_no")
+                                                        if not final_rd_no and "RD No:" in combined_remarks:
+                                                            try:
+                                                                final_rd_no = combined_remarks.split("RD No:")[1].split("|")[0].strip()
+                                                            except Exception:
+                                                                final_rd_no = None
+
+                                                        if not final_rd_no:
+                                                            final_rd_no = generate_rd_account_no(clean_b_id)
+                                                        item["account_no"] = final_rd_no
+
+                                                        tenure = int(rd_meta.get("tenure_months", 12))
+                                                        total_target = inst_amt * tenure
+
+                                                        rd_insert_data = {
+                                                            "visit_id": new_visit_id,
+                                                            "branch_id": clean_b_id,
+                                                            "customer_id": c_id,
+                                                            "rd_account_no": final_rd_no,  # 👈 மாற்றமில்லாத அசல் RD எண்
+                                                            "monthly_installment": inst_amt,
+                                                            "tenure_months": tenure,
+                                                            "interest_rate": float(rd_meta.get("interest_rate", 12.0)),
+                                                            "total_target_amount": float(rd_meta.get("total_target_amount", total_target)),
+                                                            "current_installment_no": 1,
+                                                            "total_received_amount": inst_amt,
+                                                            "nominee_name": rd_meta.get("nominee") or "-",
+                                                            "nominee_relation": rd_meta.get("relation") or "-",
+                                                            "status": "Active"
+                                                        }
+                                                        supabase.table("recurring_deposits").insert(rd_insert_data).execute()
+                                                    except Exception as rd_err:
+                                                        st.error(f"⚠️ recurring_deposits சேமிப்பதில் பிழை: {rd_err}")
+
+                                                # -------------------------------------------------------------
+                                                # D. நகை விற்பனை அட்டவணை
+                                                # -------------------------------------------------------------
                                                 elif any(k in t_type for k in ["Sale", "விற்பனை"]):
                                                     try:
                                                         sale_payload = {
@@ -8231,7 +8374,9 @@ if st.session_state.get("logged_in", False):
                                                     except Exception as sl_err:
                                                         st.error(f"⚠️ gold_sales அட்டவணையில் சேமிப்பதில் பிழை: {sl_err}")
 
-                                                # C. பழைய நகை கொள்முதல்
+                                                # -------------------------------------------------------------
+                                                # E. பழைய நகை கொள்முதல்
+                                                # -------------------------------------------------------------
                                                 elif any(k in t_type for k in ["GP", "Purchase", "வாங்க", "கொள்முதல்"]):
                                                     try:
                                                         clean_gp_no = item.get("gp_number") or item.get("loan_number") or f"AVL/GP/{datetime.now().strftime('%y%m%d%H%M')}"
@@ -8248,9 +8393,16 @@ if st.session_state.get("logged_in", False):
                                                     except Exception as gp_err:
                                                         st.error(f"⚠️ gold_purchases அட்டவணையில் சேமிப்பதில் பிழை: {gp_err}")
 
-                                                # D. 🌟 பொது பரிவர்த்தனைகள் அட்டவணை (Transactions Table - Schema Mismatch தவிர்க்கப்பட்டது)
+                                                # -------------------------------------------------------------
+                                                # F. பொது பரிவர்த்தனைகள் அட்டவணை (Transactions Table)
+                                                # -------------------------------------------------------------
                                                 try:
-                                                    combined_remarks = item.get("remarks") or ""
+                                                    # கடன் / RD / FD எண்களை remarks-ல் சேர்த்து லாக் செய்தல்
+                                                    if item.get("loan_no") and "GL:" not in combined_remarks:
+                                                        combined_remarks = f"GL: {item.get('loan_no')} | {combined_remarks}".strip(" |")
+                                                    elif item.get("account_no") and "A/C:" not in combined_remarks:
+                                                        combined_remarks = f"A/C: {item.get('account_no')} | {combined_remarks}".strip(" |")
+
                                                     if bank_portion > 0:
                                                         ref_str = f"Bank: {bank_name} | Ref: {bank_ref_no}" if bank_ref_no else f"Bank: {bank_name}"
                                                         combined_remarks = f"{combined_remarks} | {ref_str}".strip(" |")
@@ -8277,23 +8429,6 @@ if st.session_state.get("logged_in", False):
                                                 except Exception as txn_err:
                                                     st.error(f"⚠️ transactions அட்டவணையில் சேமிப்பதில் பிழை: {txn_err}")
 
-                                                # E. 🌟 RD அட்டவணையில் தவணையைப் புதுப்பித்தல்
-                                                if any(k in t_type for k in ["RD", "ஆர்டி", "Installment"]):
-                                                    try:
-                                                        rd_acc_no = item.get("account_no") or item.get("rd_account_no") or ""
-                                                        if not rd_acc_no and "RD No:" in str(item.get("remarks", "")):
-                                                            try:
-                                                                rd_acc_no = str(item.get("remarks")).split("RD No:")[1].split("|")[0].strip()
-                                                            except Exception:
-                                                                rd_acc_no = ""
-                                                        
-                                                        if rd_acc_no:
-                                                            supabase.table("recurring_deposits").update({
-                                                                "total_received_amount": float(r_amt)
-                                                            }).eq("rd_account_no", rd_acc_no).execute()
-                                                    except Exception as rd_err:
-                                                        st.caption(f"RD Update Note: {rd_err}")
-
                                             # செஷன் மாறிகளை அழித்தல்
                                             st.session_state.transactions_cart = []
                                             st.session_state.current_visit = None
@@ -8310,7 +8445,7 @@ if st.session_state.get("logged_in", False):
                                         st.error(f"❌ வருகையைச் சேமிப்பதில் பிழை ஏற்பட்டது: {save_err}")
 
                         # =========================================================================
-                        # விருப்பம் 2: தற்காலிகச் சேமிப்பு (Save as Draft - OTP Pending)
+                        # விருப்பம் 2: தற்காலிகச் சேமிப்பு (Save as Draft - எண்களை அப்படியே லாக் செய்தல்)
                         # =========================================================================
                         with act_col2:
                             if st.button("💾 தற்காலிகமாகச் சேமி (Save as Draft - OTP Pending)", type="secondary", use_container_width=True):
@@ -8359,19 +8494,35 @@ if st.session_state.get("logged_in", False):
                                             v_ins = supabase.table("customer_visits").insert(draft_visit_data).execute()
                                             new_v_id = v_ins.data[0]["id"]
 
+                                            # 🌟 கார்ட்டில் உள்ள ஒவ்வொரு நடவடிக்கைக்கும் அந்த நேரத்தில் ஒதுக்கப்பட்ட எண்களை பத்திரமாகப் பூட்டுதல்:
                                             for item in st.session_state.transactions_cart:
                                                 p_amt = float(item.get("paid_amount", 0.0) or 0.0)
                                                 r_amt = float(item.get("received_amount", 0.0) or 0.0)
+                                                draft_remarks = item.get("remarks") or ""
+
+                                                # டிராஃப்ட் செய்யப்படும்போது ஒதுக்கப்பட்ட எண்ணை remarks-ல் உறுதி செய்தல்:
+                                                if item.get("loan_no") and "GL:" not in draft_remarks:
+                                                    draft_remarks = f"GL: {item.get('loan_no')} | {draft_remarks}".strip(" |")
+                                                elif item.get("account_no") and "A/C:" not in draft_remarks:
+                                                    draft_remarks = f"A/C: {item.get('account_no')} | {draft_remarks}".strip(" |")
+
                                                 gen_txn = {
-                                                    "visit_id": new_v_id, "branch_id": clean_b_id, "customer_id": c_id,
-                                                    "customer_name": c_name, "mobile": c_mob_final,
-                                                    "transaction_type": item.get("transaction_type"), "staff_name": item.get("staff_name", ""),
+                                                    "visit_id": new_v_id,
+                                                    "branch_id": clean_b_id,
+                                                    "customer_id": c_id,
+                                                    "customer_name": c_name,
+                                                    "mobile": c_mob_final,
+                                                    "transaction_type": item.get("transaction_type"),
+                                                    "staff_name": item.get("staff_name", ""),
                                                     "amount": float(item.get("amount", 0.0) or (p_amt if p_amt > 0 else r_amt)),
-                                                    "paid_amount": p_amt, "received_amount": r_amt,
+                                                    "paid_amount": p_amt,
+                                                    "received_amount": r_amt,
                                                     "gross_weight": float(item.get("total_weight", 0.0) or item.get("gross_weight", 0.0) or 0.0),
                                                     "net_weight": float(item.get("net_weight", 0.0) or 0.0),
-                                                    "item_details": item.get("ornament_details", ""), "remarks": item.get("remarks", ""),
+                                                    "item_details": item.get("ornament_details", ""),
+                                                    "remarks": draft_remarks,
                                                     "payment_mode": pm_label,
+                                                    "transaction_details": item,  # 👈 அசல் எண்கள் அடங்கிய முழு கார்ட் ஆப்ஜெக்ட்டும் பத்திரமாக சேமிக்கப்படுகிறது
                                                     "status": "Draft_Locked"
                                                 }
                                                 supabase.table("transactions").insert(gen_txn).execute()
@@ -8381,7 +8532,7 @@ if st.session_state.get("logged_in", False):
                                             st.session_state.otp_cleared = False
                                             st.session_state.otp_already_sent = False
                                             st.session_state.generated_otp = None
-                                            st.success(f"💾 வருகை `{current_v_no}` தற்காலிகமாகச் சேமிக்கப்பட்டது!")
+                                            st.success(f"💾 வருகை `{current_v_no}` தற்காலிகமாகச் சேமிக்கப்பட்டது! எண்கள் லாக் செய்யப்பட்டன.")
                                             st.rerun()
 
                                     except Exception as d_err:
