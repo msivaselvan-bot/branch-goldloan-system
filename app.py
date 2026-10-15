@@ -1039,12 +1039,17 @@ def get_branch_code_by_id(branch_id: int) -> str:
 
 
 def generate_fd_account_no(branch_id: int) -> str:
-    """fixed_deposits அட்டவணை மற்றும் கார்ட்டில் (transactions_cart) உள்ள உச்சபட்ச எண்ணைப் பார்த்து அடுத்த எண்ணை உருவாக்குதல்"""
+    """
+    1. fixed_deposits அட்டவணை
+    2. transactions அட்டவணை (Approved மற்றும் Draft_Locked/Draft_Pending_OTP)
+    3. தற்போதைய transactions_cart
+    ஆகிய அனைத்திலும் உள்ள அதிகபட்ச எண்ணைக் கண்டறிந்து அடுத்த FD எண்ணை உருவாக்குதல்.
+    """
     b_code = get_branch_code_by_id(branch_id)
     max_seq = 0
     pattern = re.compile(rf"{re.escape(b_code)}/FD/(\d+)", re.IGNORECASE)
 
-    # 1. Supabase database-ல் உள்ள அதிகபட்ச எண்ணை எடுத்தல்
+    # 1. fixed_deposits அட்டவணையில் உள்ள அதிகபட்ச எண்ணை எடுத்தல்
     try:
         res = (
             supabase.table("fixed_deposits")
@@ -1058,17 +1063,18 @@ def generate_fd_account_no(branch_id: int) -> str:
             if m:
                 max_seq = max(max_seq, int(m.group(1)))
 
-        # transactions டேபிளிலும் சரிபார்த்தல் (பழைய பல்க் பதிவுகள்)
+        # 2. 🌟 transactions அட்டவணையில் உள்ள பழைய மற்றும் டிராஃப்ட் (Draft) பதிவுகளைச் சரிபார்த்தல்
+        # (சிக்கலான customer_visits!inner நீக்கப்பட்டு நேரடியாக branch_id மூலம் வினவப்படுகிறது)
         txns = (
             supabase.table("transactions")
-            .select("transaction_details, remarks, customer_visits!inner(branch_id)")
-            .eq("customer_visits.branch_id", int(branch_id))
+            .select("transaction_details, remarks")
+            .eq("branch_id", int(branch_id))
             .ilike("transaction_type", "%FD%")
             .execute()
-            .data
-            or []
+            .data or []
         )
         for t in txns:
+            # transaction_details மற்றும் remarks-ல் உள்ள FD எண்ணைத் துல்லியமாக Regex மூலம் எடுத்தல்
             m1 = pattern.search(str(t.get("transaction_details") or ""))
             if m1:
                 max_seq = max(max_seq, int(m1.group(1)))
@@ -1078,7 +1084,7 @@ def generate_fd_account_no(branch_id: int) -> str:
     except Exception:
         pass
 
-    # 2. 🌟 தற்போதைய கார்ட்டில் (transactions_cart) உள்ள "FD Open" பதிவுகளைச் சரிபார்த்தல்
+    # 3. 🌟 தற்போதைய கார்ட்டில் (transactions_cart) உள்ள "FD Open" பதிவுகளைச் சரிபார்த்தல்
     try:
         cart_items = st.session_state.get("transactions_cart", [])
         for item in cart_items:
