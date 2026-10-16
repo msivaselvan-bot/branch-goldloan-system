@@ -9725,8 +9725,7 @@ if st.session_state.get("logged_in", False):
 
         elif selected_section == "🏦 HO பணப் பரிமாற்றம்":
             st.subheader(
-                "🏦 தலைமையக பணப் பரிமாற்றம் (Head Office ⇄ Branch Fund Transfer"
-                " Desk)"
+                "🏦 தலைமையக பணப் பரிமாற்றம் (Head Office ⇄ Branch Fund Transfer Desk)"
             )
             st.caption(
                 "தலைமையகத்திலிருந்து ரொக்கம் பெறுதல் அல்லது தலைமையகத்திற்கு ரொக்கம்"
@@ -9734,7 +9733,77 @@ if st.session_state.get("logged_in", False):
                 " கல்லாவில் கணக்கிடப்படும்)."
             )
 
-            curr_b_drawer = get_current_branch_cash_drawer(st.session_state.branch_id)
+            # 1. branch_id-ஐப் பெறுதல்
+            raw_b_id = st.session_state.get("branch_id")
+            try:
+                clean_b_id = int(raw_b_id) if raw_b_id not in (None, "", "null") else 2
+            except (ValueError, TypeError):
+                clean_b_id = 2
+
+            # ---------------------------------------------------------------------
+            # 🌟 📅 வணிகத் தேதித் தேர்வு & தொடர் நாள் வரலாற்றுப் பூட்டுச் சோதனை
+            # ---------------------------------------------------------------------
+            ho_d_col1, ho_d_col2 = st.columns(2)
+            with ho_d_col1:
+                ho_transfer_date = st.date_input(
+                    "📅 பரிவர்த்தனை வணிகத் தேதி (Business Date) *:",
+                    value=date.today(),
+                    max_value=date.today(),
+                    key="ho_fund_transfer_date"
+                )
+                ho_transfer_date_str = str(ho_transfer_date)
+
+            # 🔒 இந்தக் கிளையில் கடைசியாகப் பூட்டப்பட்ட அதிகபட்ச தேதியைக் கண்டறிதல்
+            last_closed_ho = (
+                supabase.table("branch_daily_cash_summary")
+                .select("summary_date, closing_balance, closed_by")
+                .in_("branch_id", [clean_b_id, str(clean_b_id)])
+                .eq("is_closed", True)
+                .order("summary_date", desc=True)
+                .limit(1)
+                .execute()
+                .data or []
+            )
+
+            ho_day_locked = False
+            ho_lock_reason = ""
+
+            if last_closed_ho:
+                latest_c_rec = last_closed_ho[0]
+                max_c_date_str = str(latest_c_rec.get("summary_date"))
+
+                # ஊழியர் தேர்ந்தெடுத்த தேதி, பூட்டப்பட்ட தேதி அல்லது அதற்கு முந்தைய தேதியாக இருந்தால் தடுத்தல்:
+                if ho_transfer_date_str <= max_c_date_str:
+                    ho_day_locked = True
+                    c_staff = latest_c_rec.get("closed_by") or "நிர்வாகம்"
+                    c_amt = float(latest_c_rec.get("closing_balance") or 0.0)
+                    ho_lock_reason = (
+                        f"இக்கிளையில் **{max_c_date_str}** வரையிலான கணக்குகள் ஏற்கனவே "
+                        f"**{c_staff}** என்பவரால் உறுதிசெய்யப்பட்டுப் பூட்டப்பட்டுவிட்டது (கல்லா இருப்பு: ₹{c_amt:,.2f})."
+                    )
+
+            with ho_d_col2:
+                if ho_day_locked:
+                    st.error(f"🔒 **{ho_transfer_date_str} தேதிக்கான கணக்கு ஏற்கனவே பூட்டப்பட்டுவிட்டது!**")
+                elif ho_transfer_date < date.today():
+                    st.warning(f"⚠️ முந்தைய நாள் விடுபட்ட பரிமாற்றமாகப் பதியப்படுகிறது: **{ho_transfer_date_str}**")
+                else:
+                    st.info(f"✅ இன்றைய வணிகத் தேதி: **{ho_transfer_date_str}**")
+
+            # 🚫 பூட்டப்பட்ட தேதியைத் தேர்வு செய்தால் படிவத்தை முழுமையாக முடக்குதல்:
+            if ho_day_locked:
+                st.error(
+                    f"### 🚫 பணப் பரிமாற்றப் பதிவு அனுமதிக்கப்படாது!\n\n"
+                    f"{ho_lock_reason}\n\n"
+                    f"👉 **பாதுகாப்பு விதி:** ஒரு தேதி பூட்டப்பட்டுவிட்டால், அந்தத் தேதியிலோ அல்லது அதற்கு முந்தைய தேதிகளிலோ "
+                    f"(எ.கா: **{ho_transfer_date_str}**) புதிய HO நிதி வரவு/பற்றுப் பரிவர்த்தனைகளைப் பதிவு செய்ய முடியாது!\n\n"
+                    f"தயவுசெய்து மேலே உள்ள காலண்டரில் **பூட்டப்படாத நடப்பு வணிகத் தேதியைத் தேர்வு செய்யவும்**."
+                )
+                st.stop()  # 👈 பூட்டப்பட்ட நாளாக இருந்தால் கீழே உள்ள படிவம் திறக்காது!
+
+            st.markdown("---")
+
+            curr_b_drawer = get_current_branch_cash_drawer(clean_b_id)
 
             with st.expander(
                 "💼 தற்போதைய நேரடி கல்லா கையிருப்பு (Live Approved Stock)",
@@ -9752,21 +9821,15 @@ if st.session_state.get("logged_in", False):
 
             with st.form("branch_fund_transfer_flow_form", clear_on_submit=True):
                 st.markdown(
-                    "##### 🔄 புதிய பணப் பரிமாற்றப் பதிவு (Submit for Operations"
-                    " Approval)"
+                    "##### 🔄 புதிய பணப் பரிமாற்றப் பதிவு (Submit for Operations Approval)"
                 )
                 b_ft_c1, b_ft_c2, b_ft_c3 = st.columns(3)
                 with b_ft_c1:
                     b_ft_dir = st.selectbox(
                         "பரிமாற்ற திசை (Direction) *:",
                         [
-                            (
-                                "HO_TO_BRANCH (தலைமையகத்திலிருந்து கிளைக்கு ரொக்கம் பெறுதல்)"
-                            ),
-                            (
-                                "BRANCH_TO_HO (கிளையிலிருந்து தலைமையகத்திற்கு ரொக்கம்"
-                                " அனுப்புதல்)"
-                            ),
+                            "HO_TO_BRANCH (தலைமையகத்திலிருந்து கிளைக்கு ரொக்கம் பெறுதல்)",
+                            "BRANCH_TO_HO (கிளையிலிருந்து தலைமையகத்திற்கு ரொக்கம் அனுப்புதல்)",
                         ],
                         key="b_ft_dir_select",
                     )
@@ -9901,8 +9964,8 @@ if st.session_state.get("logged_in", False):
                         try:
                             supabase.table("branch_fund_transfers").insert(
                                 {
-                                    "branch_id": st.session_state.branch_id,
-                                    "transfer_date": str(date.today()),
+                                    "branch_id": clean_b_id,
+                                    "transfer_date": ho_transfer_date_str,  # 👈 தேர்ந்தெடுக்கப்பட்ட வணிகத் தேதி
                                     "transfer_type": pure_dir,
                                     "amount": b_final_fund_amt,
                                     "payment_mode": pure_m,
@@ -9927,7 +9990,7 @@ if st.session_state.get("logged_in", False):
                             ).execute()
 
                             st.success(
-                                f"✅ ₹{b_final_fund_amt:,.2f} பணப் பரிமாற்றம் ஆப்பரேஷன்ஸ்"
+                                f"✅ ₹{b_final_fund_amt:,.2f} பணப் பரிமாற்றம் ({ho_transfer_date_str}) ஆப்பரேஷன்ஸ்"
                                 " ஒப்புதலுக்கு அனுப்பப்பட்டது!"
                             )
                             st.rerun()
@@ -9941,19 +10004,10 @@ if st.session_state.get("logged_in", False):
                 "📋 உங்கள் கிளையின் சமீபத்திய பணப் பரிமாற்றங்கள் & ஒப்புதல் நிலை"
             )
             # -------------------------------------------------------------
-            # 🏦 நிதிப் பரிமாற்றப் பதிவுகள் (Fund Transfer Logs) - பாதுகாப்பான வினவல்
+            # 🏦 நிதிப் பரிமாற்றப் பதிவுகள் (Fund Transfer Logs)
             # -------------------------------------------------------------
-            # 1. branch_id-ஐ பாதுகாப்பான Integer-ஆக மாற்றுதல்
-            raw_b_id = st.session_state.get("branch_id")
-            try:
-                clean_b_id = int(raw_b_id) if raw_b_id not in (None, "", "null") else 1
-            except (ValueError, TypeError):
-                clean_b_id = 1
-
-            # 2. வினவலைத் தயார் செய்தல்
             fund_query = supabase.table("branch_fund_transfers").select("*")
 
-            # 3. அட்மின் அல்லது தணிக்கையாளர் இல்லையெனில் மட்டும் கிளையை வடிகட்டவும்
             current_role = str(st.session_state.get("user_role") or st.session_state.get("role") or "").strip()
             user_is_admin = (
                 current_role in ["Admin", "Operations", "Auditor"]
@@ -9964,7 +10018,6 @@ if st.session_state.get("logged_in", False):
             if not user_is_admin:
                 fund_query = fund_query.eq("branch_id", clean_b_id)
 
-            # 4. பதிவுகளைப் பெறுதல்
             b_fund_logs = (
                 fund_query
                 .order("id", desc=True)
