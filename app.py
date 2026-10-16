@@ -10819,7 +10819,19 @@ if st.session_state.get("logged_in", False):
             # 3. வாடிக்கையாளர் வங்கிப் பரிமாற்ற மேசை (Customer Bank Transfers - Payout)
             # -------------------------------------------------------------
             st.subheader("💳 வாடிக்கையாளர் வங்கிப் பரிமாற்ற மேசை (Customer Bank Payout Queue)")
-            st.caption("கிளைகளில் பதிவு செய்யப்பட்ட ஆன்லைன்/ஸ்ப்ளிட் கடன்களுக்கான தலைமை அலுவலக வங்கிப் பரிமாற்றம் மற்றும் UTR பதிவு.")
+            st.caption("கிளைகளில் பதிவு செய்யப்பட்ட ஆன்லைன்/ஸ்ப்ளிட் கடன்களுக்கான தலைமை அலுவலக வங்கிப் பரிமாற்றம், வங்கித் தேர்வு மற்றும் UTR பதிவு.")
+
+            # 🌟 நிறுவனத்தின் 4 வங்கிக் கணக்குகளை எடுத்தல்
+            comp_banks_data = (
+                supabase.table("company_bank_accounts")
+                .select("id, bank_name, display_name, current_balance")
+                .eq("is_active", True)
+                .order("id")
+                .execute()
+                .data or []
+            )
+            bank_options_map = {b["display_name"]: b["id"] for b in comp_banks_data} if comp_banks_data else {"Corporate Bank": 1}
+            bank_names_list = list(bank_options_map.keys())
 
             try:
                 # 🌟 நாம் வாடிக்கையாளருக்கு வங்கி மூலம் பணம் அனுப்ப வேண்டிய (Payout) பதிவுகள்:
@@ -10833,7 +10845,7 @@ if st.session_state.get("logged_in", False):
                     .data or []
                 )
                 
-                # நாம் வாடிக்கையாளருக்கு பணம் தர வேண்டிய பதிவுகளை மட்டும் வடிகட்டுதல் (Pay-OUT: total_paid > total_received)
+                # நாம் வாடிக்கையாளருக்கு பணம் தர வேண்டிய பதிவுகளை மட்டும் வடிகட்டுதல் (Pay-OUT: total_paid >= total_received)
                 pending_payouts = [p for p in pending_payouts if float(p.get("total_paid", 0.0) or 0.0) >= float(p.get("total_received", 0.0) or 0.0)]
 
                 branches_list = supabase.table("branches").select("id, branch_name").execute().data or []
@@ -10850,6 +10862,7 @@ if st.session_state.get("logged_in", False):
                     b_p_name = b_map.get(p.get("branch_id"), f"கிளை #{p.get('branch_id')}")
                     p_amt = float(p.get("bank_amount", 0.0) or 0.0)
                     t_mode = p.get("bank_transfer_type", "வாடிக்கையாளர்")
+                    cur_ref_val = p.get("bank_reference_no") or ""
 
                     with st.expander(f"🏦 {p.get('visit_no')} | கிளை: {b_p_name} | அனுப்ப வேண்டிய தொகை: ₹{p_amt:,.2f}"):
                         col_v1, col_v2, col_v3 = st.columns([1.8, 2, 1.4])
@@ -10860,10 +10873,10 @@ if st.session_state.get("logged_in", False):
                             st.markdown(f"### அனுப்ப வேண்டிய தொகை: `₹{p_amt:,.2f}`")
 
                         with col_v2:
-                            st.markdown("##### 🏛️ வங்கி கணக்கு விவரங்கள்:")
+                            st.markdown("##### 🏛️ வாடிக்கையாளர் வங்கி கணக்கு விவரங்கள்:")
                             st.write(f"• **பெயர்:** {p.get('bank_acc_holder_name', '-')}")
-                            st.write(f"• **A/C எண்:** `{p.get('bank_acc_number', '-')}` ({p.get('bank_acc_type', 'Savings')})")
-                            st.write(f"• **வங்கி & கிளை:** {p.get('bank_name', '-')} - {p.get('bank_branch', '-')}")
+                            st.write(f"• **A/C எண்:** `{p.get('bank_acc_number', '-')}`")
+                            st.write(f"• **வங்கி & கிளை:** {p.get('bank_name', '-')} | {p.get('bank_branch', '-')}")
                             st.write(f"• **IFSC:** `{p.get('bank_ifsc_code', '-')}`")
 
                         with col_v3:
@@ -10879,14 +10892,26 @@ if st.session_state.get("logged_in", False):
                                 st.caption("ஒப்புதல் படிவம் இல்லை")
 
                         st.markdown("---")
-                        utr_c1, utr_c2 = st.columns([3, 1])
+                        st.markdown("##### ⚙️ தலைமை அலுவலக வங்கிப் பட்டுவாடா பதிவு:")
+                        utr_c1, utr_c2, utr_c3 = st.columns([2, 2, 1.5])
+                        
                         with utr_c1:
+                            sel_out_bank_label = st.selectbox(
+                                "பணம் அனுப்பிய நமது வங்கி *:",
+                                options=bank_names_list,
+                                key=f"payout_bank_sel_{p['id']}"
+                            )
+                            chosen_out_bank_id = bank_options_map[sel_out_bank_label]
+
+                        with utr_c2:
                             utr_no = st.text_input(
-                                f"வங்கி UTR / Ref எண் உள்ளிடவும் * ({p.get('visit_no')}):",
-                                placeholder="எ.கா: UTR1234567890 / IMPS / NEFT Ref",
+                                "வங்கி UTR / Ref எண் *:",
+                                value=cur_ref_val,
+                                placeholder="எ.கா: UTR1234567890 / IMPS Ref",
                                 key=f"utr_in_{p['id']}"
                             )
-                        with utr_c2:
+
+                        with utr_c3:
                             st.write("")
                             st.write("")
                             if st.button("பரிமாற்றம் முடிந்தது (Confirm Payout)", key=f"btn_confirm_pay_{p['id']}", type="primary", use_container_width=True):
@@ -10895,20 +10920,40 @@ if st.session_state.get("logged_in", False):
                                 else:
                                     try:
                                         curr_user = st.session_state.get("username", "Admin")
-                                        now_time = str(datetime.now())
 
-                                        # 1. customer_visits-ல் UTR பதிவு செய்து Transferred என முடித்தல்
+                                        # 1. customer_visits-ல் வங்கிக் கணக்கு மற்றும் UTR பதிவு செய்து Transferred என மாற்றுதல்
                                         supabase.table("customer_visits").update({
+                                            "bank_name": sel_out_bank_label,
                                             "bank_reference_no": utr_no.strip(),
                                             "bank_transfer_status": "Transferred"
                                         }).eq("id", p["id"]).execute()
 
-                                        # 2. transactions அட்டவணையிலும் இந்த வருகைக்குரிய நிலையை முடித்தல்
+                                        # 2. transactions அட்டவணையிலும் இந்த வருகைக்குரிய நிலையை மாற்றுதல்
                                         supabase.table("transactions").update({
                                             "status": "Approved"
                                         }).eq("visit_id", p["id"]).execute()
 
-                                        st.success(f"✅ வருகை `{p.get('visit_no')}`-க்கான UTR எண் ({utr_no.strip()}) பதியப்பட்டது!")
+                                        # 3. 🌟 நமது குறிப்பிட்ட வங்கிக் கணக்கின் நேரடி இருப்பைக் கழித்தல் (Bank OUT)
+                                        b_acc_data = supabase.table("company_bank_accounts").select("current_balance").eq("id", chosen_out_bank_id).single().execute().data
+                                        if b_acc_data:
+                                            old_bal = float(b_acc_data.get("current_balance") or 0.0)
+                                            new_bal = old_bal - p_amt
+                                            supabase.table("company_bank_accounts").update({"current_balance": new_bal}).eq("id", chosen_out_bank_id).execute()
+
+                                            # 4. வங்கிப் பேரேட்டில் (Passbook) பற்று பதிவு
+                                            supabase.table("bank_transactions").insert({
+                                                "bank_account_id": chosen_out_bank_id,
+                                                "branch_id": p.get("branch_id"),
+                                                "visit_id": p["id"],
+                                                "txn_date": str(p.get("created_at", "")[:10] or date.today()),
+                                                "txn_flow": "OUT",
+                                                "amount": p_amt,
+                                                "reference_no": utr_no.strip(),
+                                                "remarks": f"Payout to Customer: {p.get('bank_acc_holder_name', '-')} (Token: {p.get('visit_no')})",
+                                                "created_by": curr_user
+                                            }).execute()
+
+                                        st.success(f"✅ வருகை `{p.get('visit_no')}`-க்கான UTR எண் ({utr_no.strip()}) பதியப்பட்டு, வங்கி இருப்பு குறைக்கப்பட்டது!")
                                         st.rerun()
                                     except Exception as utr_err:
                                         st.error(f"UTR பதிவு செய்வதில் பிழை: {utr_err}")
@@ -10926,10 +10971,10 @@ if st.session_state.get("logged_in", False):
             if is_authorized_ops:
                 st.markdown("---")
                 st.subheader("🏛️ வாடிக்கையாளர் வங்கி & UPI வரவு சரிபார்ப்புப் பிரிவு (Customer Inflow Approvals)")
-                st.caption("வாடிக்கையாளர்கள் மீட்டெடுப்பு, RD அல்லது பிற சேவைகளுக்காக வங்கி/UPI மூலம் செலுத்திய பணத்தை UTR மற்றும் ரசீது பார்த்து சரிபார்க்கும் மேசை.")
+                st.caption("வாடிக்கையாளர்கள் செலுத்திய வங்கிப் பணத்தை சரிபார்த்து, வங்கி அல்லது UTR எண்ணை தேவைப்பட்டால் திருத்தி ஒப்புதல் அளிக்கும் மேசை.")
 
                 try:
-                    # 🌟 1. customer_visits அட்டவணையில் Pending_Bank_Verification உள்ள பதிவுகளை எடுத்தல்
+                    # 1. Pending_Bank_Verification உள்ள பதிவுகளை எடுத்தல்
                     pending_bank_visits = (
                         supabase.table("customer_visits")
                         .select("*")
@@ -10939,7 +10984,6 @@ if st.session_state.get("logged_in", False):
                         .data or []
                     )
 
-                    # கிளைப் பெயர்களுக்கான மேப்
                     branches_list = supabase.table("branches").select("id, branch_name").execute().data or []
                     b_map = {b["id"]: b["branch_name"] for b in branches_list}
 
@@ -10956,7 +11000,6 @@ if st.session_state.get("logged_in", False):
                         c_id = v_item.get("customer_id")
                         b_id = v_item.get("branch_id")
                         
-                        # வாடிக்கையாளர் பெயர் மற்றும் மொபைலை customers அட்டவணையிலிருந்து எடுத்தல்
                         c_name = v_item.get("customer_name") or "Customer"
                         c_mob = "-"
                         if c_id:
@@ -10971,10 +11014,18 @@ if st.session_state.get("logged_in", False):
                         b_name = b_map.get(b_id, f"கிளை #{b_id}")
                         b_amt = float(v_item.get("bank_amount", 0.0) or 0.0)
                         c_amt = float(v_item.get("cash_amount", 0.0) or 0.0)
-                        utr = v_item.get("bank_reference_no") or "-"
+                        orig_utr = v_item.get("bank_reference_no") or ""
+                        orig_bank = v_item.get("bank_name") or ""
+
+                        # இயல்புநிலை வங்கி குறியீட்டைக் கண்டறிதல்
+                        default_bank_idx = 0
+                        for idx, b_label in enumerate(bank_names_list):
+                            if orig_bank and orig_bank in b_label:
+                                default_bank_idx = idx
+                                break
 
                         with st.container(border=True):
-                            col_op1, col_op2, col_op3 = st.columns([2.5, 2, 1.5])
+                            col_op1, col_op2, col_op3 = st.columns([2.2, 2.5, 1.5])
 
                             with col_op1:
                                 st.markdown(f"**வருகை எண்:** `{v_no}` | **கிளை:** {b_name}")
@@ -10982,38 +11033,75 @@ if st.session_state.get("logged_in", False):
                                 st.write(f"💵 ரொக்கம்: ₹{c_amt:,.2f} | 🏛️ **வங்கி வரவு: ₹{b_amt:,.2f}**")
                                 st.caption(f"தேதி: {v_item.get('created_at', '-')[:10]}")
 
-                            with col_op2:
-                                st.markdown("##### 🔍 வங்கி விவரங்கள்")
-                                st.write(f"🔢 UTR / Ref எண்: **`{utr}`**")
-                                st.write(f"💳 முறை: **{v_item.get('payment_mode', 'Bank/UPI')}**")
-
                                 # ஸ்கிரீன்ஷாட் / ரசீது லிங்க்
                                 proof = v_item.get("bank_proof_url")
                                 if proof:
                                     st.link_button("🖼️ ரசீது / Screenshot பார்க்க", proof, use_container_width=True)
                                 else:
-                                    st.caption("⚠️ அட்டாச்மென்ட் இணைக்கப்படவில்லை")
+                                    st.caption("⚠️ ரசீது அட்டாச்மென்ட் இல்லை")
+
+                            with col_op2:
+                                st.markdown("##### ✏️ வரவு விவரங்களைச் சரிபார்த்து திருத்துக:")
+                                edit_bank_name = st.selectbox(
+                                    "பணம் வந்து சேர்ந்த நமது வங்கி *:",
+                                    options=bank_names_list,
+                                    index=default_bank_idx,
+                                    key=f"edit_in_bank_{v_id}"
+                                )
+                                chosen_in_bank_id = bank_options_map[edit_bank_name]
+
+                                edit_utr = st.text_input(
+                                    "பரிவர்த்தனை எண் (UTR / Ref No) *:",
+                                    value=orig_utr,
+                                    key=f"edit_in_utr_{v_id}"
+                                )
 
                             with col_op3:
+                                st.write("")
                                 st.write("")
                                 ops_user = st.session_state.get("username", "Operations")
 
                                 if st.button("✅ சரிபார்த்து அனுமதி", key=f"app_vis_{v_id}", type="primary", use_container_width=True):
-                                    try:
-                                        # 1. customer_visits அட்டவணையின் நிலையை அழைப்பு சரிபார்ப்பிற்கு மாற்றுதல்
-                                        supabase.table("customer_visits").update({
-                                            "status": "Pending_Calling_Verification"
-                                        }).eq("id", v_id).execute()
+                                    if not edit_utr.strip():
+                                        st.error("⚠️ UTR எண் கட்டாயம் தேவை!")
+                                    else:
+                                        try:
+                                            # 1. திருத்தப்பட்ட வங்கி மற்றும் UTR விவரங்களுடன் நிலையை மாற்றுதல்
+                                            supabase.table("customer_visits").update({
+                                                "bank_name": edit_bank_name,
+                                                "bank_reference_no": edit_utr.strip(),
+                                                "status": "Pending_Calling_Verification"
+                                            }).eq("id", v_id).execute()
 
-                                        # 2. transactions அட்டவணையில் நிலையை மட்டும் மாற்றுதல் (bank_reference_no நீக்கப்பட்டது)
-                                        supabase.table("transactions").update({
-                                            "status": "Pending"
-                                        }).eq("visit_id", v_id).execute()
+                                            # 2. transactions அட்டவணையில் நிலையை மாற்றுதல்
+                                            supabase.table("transactions").update({
+                                                "status": "Approved"
+                                            }).eq("visit_id", v_id).execute()
 
-                                        st.success(f"✅ வருகை `{v_no}` வங்கி வரவு அங்கீகரிக்கப்பட்டு அழைப்புச் சரிபார்ப்பிற்கு மாற்றப்பட்டது!")
-                                        st.rerun()
-                                    except Exception as app_err:
-                                        st.error(f"அங்கீகரிப்பதில் பிழை: {app_err}")
+                                            # 3. 🌟 தேர்ந்தெடுக்கப்பட்ட நமது வங்கியின் இருப்பைக் கூட்டுதல் (Bank IN)
+                                            b_acc_data = supabase.table("company_bank_accounts").select("current_balance").eq("id", chosen_in_bank_id).single().execute().data
+                                            if b_acc_data:
+                                                old_bal = float(b_acc_data.get("current_balance") or 0.0)
+                                                new_bal = old_bal + b_amt
+                                                supabase.table("company_bank_accounts").update({"current_balance": new_bal}).eq("id", chosen_in_bank_id).execute()
+
+                                                # 4. வங்கிப் பேரேட்டில் (Passbook) வரவு பதிவு செய்தல்
+                                                supabase.table("bank_transactions").insert({
+                                                    "bank_account_id": chosen_in_bank_id,
+                                                    "branch_id": b_id,
+                                                    "visit_id": v_id,
+                                                    "txn_date": str(v_item.get("created_at", "")[:10] or date.today()),
+                                                    "txn_flow": "IN",
+                                                    "amount": b_amt,
+                                                    "reference_no": edit_utr.strip(),
+                                                    "remarks": f"Customer Collection: {c_name} (Token: {v_no})",
+                                                    "created_by": ops_user
+                                                }).execute()
+
+                                            st.success(f"✅ வருகை `{v_no}` வங்கி வரவு ({edit_bank_name}) உறுதிசெய்யப்பட்டு, வங்கி இருப்பு கூட்டப்பட்டது!")
+                                            st.rerun()
+                                        except Exception as app_err:
+                                            st.error(f"அங்கீகரிப்பதில் பிழை: {app_err}")
 
                                 # ❌ நிராகரிக்கும் பட்டன்
                                 if st.button("❌ நிராகரி (Reject)", key=f"rej_vis_{v_id}", type="secondary", use_container_width=True):
