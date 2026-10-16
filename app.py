@@ -8630,9 +8630,52 @@ if st.session_state.get("logged_in", False):
                                             else:
                                                 # நேரடி வருகை எனில் புதிய வரிகளை இன்சர்ட் செய்தல்:
                                                 for item in st.session_state.transactions_cart:
-                                                    p_amt = float(item.get("paid_amount", 0.0) or 0.0)
-                                                    r_amt = float(item.get("received_amount", 0.0) or item.get("amount", 0.0) or 0.0)
-                                                    final_amt = r_amt if r_amt > 0 else (p_amt if p_amt > 0 else float(item.get("amount", 0.0) or 0.0))
+                                                    t_type = str(item.get("transaction_type", ""))
+                                                    
+                                                    raw_p_amt = float(item.get("paid_amount", 0.0) or 0.0)
+                                                    raw_r_amt = float(item.get("received_amount", 0.0) or 0.0)
+                                                    base_amount = float(item.get("amount", 0.0) or 0.0)
+
+                                                    # -------------------------------------------------------------
+                                                    # 🔴 1. பட்டுவாடா / பற்று மட்டுமே (Cash OUT - நிறுவனக் கல்லாவிலிருந்து பணம் வெளியே செல்லுதல்)
+                                                    # -------------------------------------------------------------
+                                                    # (Pledge கடன், RD முதிர்வு, FD முதிர்வு, FD வட்டி பட்டுவாடா, GP தங்கம் கொள்முதல்)
+                                                    is_cash_out = any(k in t_type for k in [
+                                                        "Pledge", "Loan", "நகைக் கடன்",
+                                                        "RD Closure", "RD முதிர்வு",
+                                                        "FD Closure", "FD முதிர்வு",
+                                                        "FD Interest", "FD வட்டி",
+                                                        "GP", "Purchase", "கொள்முதல்"
+                                                    ])
+
+                                                    # -------------------------------------------------------------
+                                                    # 🟢 2. வரவு மட்டுமே (Cash IN - வாடிக்கையாளரிடமிருந்து பணம் உள்ளே வருதல்)
+                                                    # -------------------------------------------------------------
+                                                    # (அடமானம் மீட்டல், வட்டி, அசல், RD தொடக்கம், RD தவணை, FD முதலீடு, GS தங்கம் விற்பனை)
+                                                    is_cash_in = any(k in t_type for k in [
+                                                        "Release", "Interest Payment", "Part Payment", "மீட்டல்", "அசல் வரவு", "வட்டி வரவு",
+                                                        "RD Open", "புதிய RD", "RD Due", "RD தவணை",
+                                                        "FD Open", "புதிய வைப்பு",
+                                                        "GS", "Sale", "விற்பனை"
+                                                    ])
+
+                                                    # தொகைகளைத் துல்லியமாக நிர்ணயித்தல்:
+                                                    if is_cash_out:
+                                                        p_amt = raw_p_amt if raw_p_amt > 0 else base_amount
+                                                        r_amt = 0.0
+                                                        final_amt = p_amt
+
+                                                    elif is_cash_in:
+                                                        p_amt = 0.0
+                                                        r_amt = raw_r_amt if raw_r_amt > 0 else base_amount
+                                                        final_amt = r_amt
+
+                                                    else:
+                                                        # இதர வரவு/செலவுகள்
+                                                        p_amt = raw_p_amt
+                                                        r_amt = raw_r_amt
+                                                        final_amt = r_amt if r_amt > 0 else (p_amt if p_amt > 0 else base_amount)
+
                                                     combined_remarks = item.get("remarks") or ""
 
                                                     if item.get("loan_no") and "GL:" not in combined_remarks:
@@ -8653,8 +8696,8 @@ if st.session_state.get("logged_in", False):
                                                         "transaction_type": item.get("transaction_type"),
                                                         "staff_name": s_name,
                                                         "amount": final_amt,
-                                                        "paid_amount": p_amt,
-                                                        "received_amount": r_amt,
+                                                        "paid_amount": p_amt,         # 👈 துல்லியமான பற்று
+                                                        "received_amount": r_amt,     # 👈 துல்லியமான வரவு
                                                         "gross_weight": float(item.get("total_weight", 0.0) or item.get("gross_weight", 0.0) or 0.0),
                                                         "net_weight": float(item.get("net_weight", 0.0) or 0.0),
                                                         "item_details": item.get("ornament_details") or item.get("item_details", ""),
@@ -8736,8 +8779,45 @@ if st.session_state.get("logged_in", False):
 
                                             # 🌟 கார்ட்டில் உள்ள ஒவ்வொரு நடவடிக்கைக்கும் அந்த நேரத்தில் ஒதுக்கப்பட்ட எண்களை பத்திரமாகப் பூட்டுதல்:
                                             for item in st.session_state.transactions_cart:
-                                                p_amt = float(item.get("paid_amount", 0.0) or 0.0)
-                                                r_amt = float(item.get("received_amount", 0.0) or 0.0)
+                                                t_type = str(item.get("transaction_type", ""))
+                                                
+                                                raw_p_amt = float(item.get("paid_amount", 0.0) or 0.0)
+                                                raw_r_amt = float(item.get("received_amount", 0.0) or 0.0)
+                                                base_amount = float(item.get("amount", 0.0) or 0.0)
+
+                                                # 🔴 1. பட்டுவாடா / பற்று மட்டுமே (Cash OUT - நிறுவனக் கல்லாவிலிருந்து பணம் வெளியே செல்லுதல்)
+                                                # (Pledge கடன், RD முதிர்வு, FD முதிர்வு, FD வட்டி பட்டுவாடா, GP தங்கம் கொள்முதல்)
+                                                is_cash_out = any(k in t_type for k in [
+                                                    "Pledge", "Loan", "நகைக் கடன்",
+                                                    "RD Closure", "RD முதிர்வு",
+                                                    "FD Closure", "FD முதிர்வு",
+                                                    "FD Interest", "FD வட்டி",
+                                                    "GP", "Purchase", "கொள்முதல்"
+                                                ])
+
+                                                # 🟢 2. வரவு மட்டுமே (Cash IN - வாடிக்கையாளரிடமிருந்து பணம் உள்ளே வருதல்)
+                                                # (அடமானம் மீட்டல், வட்டி, அசல், RD தொடக்கம், RD தவணை, FD முதலீடு, GS தங்கம் விற்பனை)
+                                                is_cash_in = any(k in t_type for k in [
+                                                    "Release", "Interest Payment", "Part Payment", "மீட்டல்", "அசல் வரவு", "வட்டி வரவு",
+                                                    "RD Open", "புதிய RD", "RD Due", "RD தவணை",
+                                                    "FD Open", "புதிய வைப்பு",
+                                                    "GS", "Sale", "விற்பனை"
+                                                ])
+
+                                                # தொகைகளைத் துல்லியமாக நிர்ணயித்தல்:
+                                                if is_cash_out:
+                                                    p_amt = raw_p_amt if raw_p_amt > 0 else base_amount
+                                                    r_amt = 0.0
+                                                    final_amt = p_amt
+                                                elif is_cash_in:
+                                                    p_amt = 0.0
+                                                    r_amt = raw_r_amt if raw_r_amt > 0 else base_amount
+                                                    final_amt = r_amt
+                                                else:
+                                                    p_amt = raw_p_amt
+                                                    r_amt = raw_r_amt
+                                                    final_amt = r_amt if r_amt > 0 else (p_amt if p_amt > 0 else base_amount)
+
                                                 draft_remarks = item.get("remarks") or ""
 
                                                 # டிராஃப்ட் செய்யப்படும்போது ஒதுக்கப்பட்ட எண்ணை remarks-ல் உறுதி செய்தல்:
@@ -8754,9 +8834,9 @@ if st.session_state.get("logged_in", False):
                                                     "mobile": c_mob_final,
                                                     "transaction_type": item.get("transaction_type"),
                                                     "staff_name": item.get("staff_name", ""),
-                                                    "amount": float(item.get("amount", 0.0) or (p_amt if p_amt > 0 else r_amt)),
-                                                    "paid_amount": p_amt,
-                                                    "received_amount": r_amt,
+                                                    "amount": final_amt,
+                                                    "paid_amount": p_amt,         # 👈 துல்லியமான பற்று
+                                                    "received_amount": r_amt,     # 👈 துல்லியமான வரவு
                                                     "gross_weight": float(item.get("total_weight", 0.0) or item.get("gross_weight", 0.0) or 0.0),
                                                     "net_weight": float(item.get("net_weight", 0.0) or 0.0),
                                                     "item_details": item.get("ornament_details", ""),
