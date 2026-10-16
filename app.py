@@ -6839,7 +6839,7 @@ if st.session_state.get("logged_in", False):
             if st.session_state.current_visit is None:
                 st.subheader("படி 1: வாடிக்கையாளர் வருகைப் பதிவு (Visit Token)")
 
-                # 🌟 📅 வணிகத் தேதித் தேர்வு (நேற்றைய விடுபட்ட பதிவுகளுக்கும் ஏதுவாக)
+                # 🌟 📅 வணிகத் தேதித் தேர்வு (பூட்டப்பட்ட தேதிகளில் புதிய பதிவுகளைத் தடுக்கும் பாதுகாப்பு)
                 v_col1, v_col2 = st.columns(2)
                 with v_col1:
                     visit_date = st.date_input(
@@ -6849,11 +6849,37 @@ if st.session_state.get("logged_in", False):
                         key="counter_visit_date"
                     )
                     visit_date_str = str(visit_date)
+
+                # 🔒 இந்தத் தேதி ஏற்கனவே பூட்டப்பட்டுவிட்டதா என டேட்டாபேஸில் சரிபார்த்தல்
+                check_selected_day_closed = (
+                    supabase.table("branch_daily_cash_summary")
+                    .select("is_closed, closed_by, closing_balance")
+                    .eq("branch_id", clean_b_id)
+                    .eq("summary_date", visit_date_str)
+                    .eq("is_closed", True)
+                    .execute()
+                    .data or []
+                )
+
                 with v_col2:
-                    if visit_date < date.today():
+                    if check_selected_day_closed:
+                        st.error(f"🔒 **{visit_date_str} தேதிக்கான கணக்கு ஏற்கனவே பூட்டப்பட்டுவிட்டது!**")
+                    elif visit_date < date.today():
                         st.warning(f"⚠️ முந்தைய நாள் பதிவாகக் குறிக்கப்படுகிறது: **{visit_date_str}**")
                     else:
                         st.info(f"✅ இன்றைய வணிகத் தேதி: **{visit_date_str}**")
+
+                # 🚫 பூட்டப்பட்ட தேதியைத் தேர்வு செய்தால் படிவம் மற்றும் வாடிக்கையாளர் தேர்வை முழுமையாக முடக்குதல்
+                if check_selected_day_closed:
+                    closed_staff = check_selected_day_closed[0].get("closed_by", "Staff")
+                    closed_bal = float(check_selected_day_closed[0].get("closing_balance", 0.0))
+                    st.error(
+                        f"🚫 **அனுமதி மறுக்கப்பட்டது:** {visit_date_str} தேதிக்கான கல்லா இறுதி இருப்பு (₹{closed_bal:,.2f}) "
+                        f"ஏற்கனவே **{closed_staff}** என்பவரால் உறுதிசெய்யப்பட்டுப் பூட்டப்பட்டுவிட்டது!\n\n"
+                        "பூட்டப்பட்ட தேதியில் புதிய வாடிக்கையாளர் வருகையையோ அல்லது கடன்/பரிவர்த்தனைப் பதிவுகளையோ செய்ய இயலாது. "
+                        "தயவுசெய்து மேலே உள்ள காலண்டரில் **பூட்டப்படாத நடப்பு தேதியைத் தேர்வு செய்யவும்**."
+                    )
+                    st.stop()  # 👈 பூட்டப்பட்ட நாளாக இருந்தால் கீழே உள்ள ரேடியோ பட்டன்கள், வாடிக்கையாளர் தேடல் எதுவும் திறக்காது!
 
                 st.markdown("---")
 
