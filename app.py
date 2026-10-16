@@ -8857,8 +8857,8 @@ if st.session_state.get("logged_in", False):
                                             time.sleep(2.5)  # பலூன்கள் திரையில் பறந்து முடியும் வரை காத்திருப்பு
                                             st.rerun()
 
-                                            except Exception as save_err:
-                                                st.error(f"❌ வருகையைச் சேமிப்பதில் பிழை ஏற்பட்டது: {save_err}")
+                                    except Exception as save_err:
+                                            st.error(f"❌ வருகையைச் சேமிப்பதில் பிழை ஏற்பட்டது: {save_err}")
 
                                             # =========================================================================
                                             # விருப்பம் 2: தற்காலிகச் சேமிப்பு (Save as Draft - எண்களை அப்படியே லாக் செய்தல்)
