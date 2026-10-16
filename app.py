@@ -6989,65 +6989,22 @@ if st.session_state.get("logged_in", False):
                                     can_proceed = True
 
                                 if can_proceed:
-                                    # 🌟 1. customer_visits அட்டவணையைப் புதுப்பித்தல்
                                     supabase.table("customer_visits").update({
-                                        "status": "Pending_Calling_Verification",
-                                        "otp_verified": True
+                                        "status": "Pending_Calling_Verification"
                                     }).eq("id", selected_draft["id"]).execute()
                                     
-                                    # 🌟 2. transactions அட்டவணையை Approved நிலைக்கு மாற்றுதல்
                                     supabase.table("transactions").update({
-                                        "status": "Approved"
+                                        "status": "Pending"
                                     }).eq("visit_id", selected_draft["id"]).execute()
                                     
-                                    # 🌟 3. நகைக்கடன் பதிவை உறுதிசெய்தல் / சேர்த்தல்
-                                    try:
-                                        chk_gl = supabase.table("gold_loans").select("id").eq("visit_id", selected_draft["id"]).execute().data
-                                        if chk_gl:
-                                            supabase.table("gold_loans").update({
-                                                "status": "Active"
-                                            }).eq("visit_id", selected_draft["id"]).execute()
-                                        else:
-                                            # நகைக்கடன் விடுபட்டிருந்தால் transactions-லிருந்து எடுத்துச் சேர்த்தல்
-                                            for t in saved_txns:
-                                                t_type_str = str(t.get("transaction_type", ""))
-                                                if any(k in t_type_str for k in ["Pledge", "Loan", "நகைக்கடன்"]):
-                                                    gl_no = t.get("remarks", "")
-                                                    clean_gl = None
-                                                    if "GL:" in gl_no:
-                                                        try:
-                                                            clean_gl = gl_no.split("GL:")[1].split("|")[0].strip()
-                                                        except Exception:
-                                                            clean_gl = None
-                                                    if not clean_gl:
-                                                        clean_gl, _ = get_current_display_gl_number(clean_b_id)
-
-                                                    supabase.table("gold_loans").insert({
-                                                        "visit_id": selected_draft["id"],
-                                                        "branch_id": clean_b_id,
-                                                        "customer_id": cust_id,
-                                                        "loan_no": clean_gl,
-                                                        "ornament_details": t.get("item_details", "Gold Jewellery"),
-                                                        "items_count": 1,
-                                                        "gross_weight": float(t.get("gross_weight") or 0.0),
-                                                        "net_weight": float(t.get("net_weight") or 0.0),
-                                                        "purity": "916 KDM",
-                                                        "sanctioned_amount": float(t.get("paid_amount") or t.get("amount") or 0.0),
-                                                        "scheme_name": "Regular",
-                                                        "interest_rate": 18.0,
-                                                        "staff_name": t.get("staff_name", "Staff"),
-                                                        "status": "Active"
-                                                    }).execute()
-                                    except Exception as gl_err:
-                                        st.error(f"நகைக்கடன் புதுப்பிப்பில் பிழை: {gl_err}")
+                                    supabase.table("gold_loans").update({
+                                        "status": "Approved"
+                                    }).eq("visit_id", selected_draft["id"]).execute()
 
                                     st.session_state.pop(f"active_draft_otp_{d_vno}", None)
                                     st.session_state.pop("current_active_draft", None)
                                     
-                                    st.balloons()
                                     st.success("🎉 வருகை வெற்றிகரமாக நிறைவு செய்யப்பட்டு அழைப்புச் சரிபார்ப்பிற்கு மாற்றப்பட்டது!")
-                                    import time
-                                    time.sleep(2)
                                     st.rerun()
                                 else:
                                     if not is_bypass_approved and not dr_entered_otp:
@@ -7090,6 +7047,8 @@ if st.session_state.get("logged_in", False):
                             .neq("kyc_status", "Rejected").neq("kyc_status", "Pending_KYC_Approval")
                         )
                         if st.session_state.get("user_role") not in ["Admin", "Auditor", "Operations"]:
+                            raw_b_id = st.session_state.get("branch_id")
+                            clean_b_id = int(raw_b_id) if raw_b_id not in (None, "", "null") else 1
                             cust_filter_query = cust_filter_query.eq("branch_id", clean_b_id)
 
                         matched_custs = cust_filter_query.or_(f"name.ilike.%{q}%,mobile.ilike.%{q}%,customer_code.ilike.%{q}%").limit(20).execute().data or []
@@ -7119,7 +7078,10 @@ if st.session_state.get("logged_in", False):
                                         st.warning("⏳ **விவரத் திருத்தக் கோரிக்கை ஆப்பரேஷன்ஸ் ஒப்புதலுக்கு நிலுவையில் உள்ளது!**")
                                 with c_col3:
                                     if st.button("வருகையைத் தொடங்கு ➔", key=f"start_v_{selected_cust['id']}", type="primary", use_container_width=True):
+                                        raw_b_id = st.session_state.get("branch_id")
+                                        clean_b_id = int(raw_b_id) if raw_b_id not in (None, "", "null") else 1
                                         b_code = st.session_state.get("branch_code", st.session_state.get("branch", "BR")[:3]).upper()
+                                        
                                         v_token = generate_branch_visit_no(clean_b_id, b_code)
 
                                         keys_to_purge = [
@@ -7129,7 +7091,6 @@ if st.session_state.get("logged_in", False):
                                         for k in keys_to_purge:
                                             st.session_state.pop(k, None)
 
-                                        # 🌟 தேர்ந்தெடுக்கப்பட்ட வணிகத் தேதியுடன் டோக்கன் அமைத்தல்
                                         st.session_state.current_visit = {
                                             "visit_no": v_token,
                                             "customer_id": selected_cust["id"],
@@ -7184,7 +7145,7 @@ if st.session_state.get("logged_in", False):
 
                                                     request_payload = {
                                                         "customer_id": selected_cust["id"],
-                                                        "branch_id": clean_b_id,
+                                                        "branch_id": st.session_state.branch_id,
                                                         "requested_by": st.session_state.username,
                                                         "updated_data": {
                                                             "name": req_name.strip(),
@@ -7245,33 +7206,24 @@ if st.session_state.get("logged_in", False):
 
                                 tcode = f"CUST-{datetime.now().strftime('%m%d%H%M%S')}"
                                 supabase.table("customers").insert({
-                                    "branch_id": clean_b_id, 
-                                    "customer_code": tcode,
-                                    "name": new_name.strip(), 
-                                    "guardian_name": new_guardian.strip(),
-                                    "dob": str(new_dob), 
-                                    "gender": new_gender, 
-                                    "mobile": new_mob1.strip(), 
-                                    "mobile2": new_mob2.strip(),
-                                    "address": new_address.strip(), 
-                                    "nominee_name": new_nominee.strip(), 
-                                    "nominee_relation": new_relation.strip(),
-                                    "photo_url": photo_url, 
-                                    "id_proof_url": id_doc_url, 
-                                    "address_proof_url": addr_doc_url,
-                                    "kyc_status": "Pending_KYC_Approval", 
-                                    "is_active": False
+                                    "branch_id": st.session_state.branch_id, "customer_code": tcode,
+                                    "name": new_name.strip(), "guardian_name": new_guardian.strip(),
+                                    "dob": str(new_dob), "gender": new_gender, "mobile": new_mob1.strip(), "mobile2": new_mob2.strip(),
+                                    "address": new_address.strip(), "nominee_name": new_nominee.strip(), "nominee_relation": new_relation.strip(),
+                                    "photo_url": photo_url, "id_proof_url": id_doc_url, "address_proof_url": addr_doc_url,
+                                    "kyc_status": "Pending_KYC_Approval", "is_active": False
                                 }).execute()
                                 st.success(f"✅ வாடிக்கையாளர் {new_name} பதிவு செய்யப்பட்டு ஒப்புதலுக்கு அனுப்பப்பட்டது!")
                                 st.rerun()
 
-            # =========================================================================
-            # 🌟 படி 2 & 3: வாடிக்கையாளர் வருகை செயலில் இருக்கும் போது (Active Visit)
-            # =========================================================================
-            else:
+            # ---------------------------------------------------------------------
+            # படி 2: வணிக நடவடிக்கைகள் சேர்த்தல் (TRANSACTIONS)
+            # ---------------------------------------------------------------------
+            elif st.session_state.current_visit and st.session_state.current_visit.get("step") == "TRANSACTIONS":
                 visit = st.session_state.current_visit
                 active_b_date = visit.get("visit_date", str(date.today()))
-                
+
+                # 🌟 வாடிக்கையாளர் டோக்கன் விவர அட்டை & ரத்து செய்யும் பொத்தான்:
                 st.markdown(
                     f"""
                     <div style="background-color: #f0f2f6; border-left: 5px solid #723a91; padding: 12px; border-radius: 8px; margin-bottom: 15px;">
@@ -7288,12 +7240,6 @@ if st.session_state.get("logged_in", False):
                     st.session_state.transactions_cart = []
                     st.rerun()
 
-            # ---------------------------------------------------------------------
-            # படி 2: வணிக நடவடிக்கைகள் சேர்த்தல் (TRANSACTIONS)
-            # ---------------------------------------------------------------------
-            elif st.session_state.current_visit and st.session_state.current_visit.get("step") == "TRANSACTIONS":
-                visit = st.session_state.current_visit
-                st.success(f"வாடிக்கையாளர்: **{visit['customer_name']}** (வருகை எண்: **{visit['visit_no']}**)")
                 st.subheader("படி 2: வணிக நடவடிக்கைகள் சேர்த்தல்")
 
                 if "form_reset_counter" not in st.session_state:
