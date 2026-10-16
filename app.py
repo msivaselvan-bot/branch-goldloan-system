@@ -2628,6 +2628,7 @@ if st.session_state.get("logged_in", False):
         "📈 கிளை காரணப் பணியாளர் அறிக்கை",
         "📦 நகைப் பாக்கெட்கள் மேலாண்மை",
         "🏦 நிதிப் பரிமாற்ற ஒப்புதல்",
+        "🏦 வங்கி கணக்குகள் மேலாண்மை",
         "👤 புதிய வாடிக்கையாளர் KYC",
         "📝 விவரத் திருத்தக் கோரிக்கைகள்",
         "🔔 பரிவர்த்தனை அழைப்பு சரிபார்ப்பு",
@@ -4090,6 +4091,7 @@ if st.session_state.get("logged_in", False):
                             "📈 கிளை காரணப் பணியாளர் அறிக்கை",
                             "📦 நகைப் பாக்கெட்கள் மேலாண்மை",
                             "🏦 நிதிப் பரிமாற்ற ஒப்புதல்",
+                            "🏦 வங்கி கணக்குகள் மேலாண்மை",
                             "👤 புதிய வாடிக்கையாளர் KYC",
                             "📝 விவரத் திருத்தக் கோரிக்கைகள்",
                             "🔔 பரிவர்த்தனை அழைப்பு சரிபார்ப்பு",
@@ -11118,6 +11120,180 @@ if st.session_state.get("logged_in", False):
                                         st.rerun()
                                     except Exception as rej_err:
                                         st.error(f"நிராகரிப்பதில் பிழை: {rej_err}")
+        
+        elif selected_section == "🏦 வங்கி கணக்குகள் மேலாண்மை":
+            st.title("🏦 நிறுவன வங்கிக் கணக்குகள் மேலாண்மை (Corporate Multi-Bank Desk)")
+            st.caption("நிறுவனத்தின் நடப்புக் கணக்குகளை நிர்வகித்தல், நேரடி வங்கி இருப்பு மற்றும் பாஸ்புக் பரிவர்த்தனைகளைக் கண்காணிக்கும் மேசை.")
+
+            # 🔒 1. அட்மின் / ஆப்பரேஷன்ஸ் அனுமதி சரிபார்ப்பு
+            current_role = str(st.session_state.get("user_role") or st.session_state.get("role") or "").strip()
+            is_authorized_ops = (
+                current_role in ["Admin", "Operations", "Auditor", "Director"]
+                or st.session_state.get("is_admin", False)
+                or str(st.session_state.get("username", "")).lower() == "admin"
+            )
+
+            if not is_authorized_ops:
+                st.error("🚫 இந்தப் பக்கத்தை அணுக நிர்வாகிகளுக்கு (Admin / Operations) மட்டுமே அனுமதி உண்டு!")
+                st.stop()
+
+            # -------------------------------------------------------------------------
+            # 🌟 2. நேரடி வங்கி இருப்புகள் பலகை (Live Multi-Bank Status Metrics)
+            # -------------------------------------------------------------------------
+            try:
+                current_banks = (
+                    supabase.table("company_bank_accounts")
+                    .select("*")
+                    .eq("is_active", True)
+                    .order("id")
+                    .execute()
+                    .data or []
+                )
+            except Exception as e:
+                st.error(f"வங்கிக் கணக்கு விவரங்களைப் பெறுவதில் பிழை: {e}")
+                current_banks = []
+
+            if current_banks:
+                st.markdown("### 💼 நிறுவன நேரடி வங்கி இருப்புகள் (Live Bank Balances)")
+                total_bank_liquidity = sum(float(b.get("current_balance") or 0.0) for b in current_banks)
+                
+                # வங்கிகளின் எண்ணிக்கைக்கு ஏற்ப காலம்கள் அமைத்தல்
+                b_cols = st.columns(min(len(current_banks), 4))
+                for idx, acc in enumerate(current_banks):
+                    col_target = b_cols[idx % 4]
+                    c_bal = float(acc.get("current_balance") or 0.0)
+                    acc_tail = str(acc.get("account_number", ""))[-4:]
+                    with col_target:
+                        st.metric(
+                            label=acc.get("bank_name", "Bank"),
+                            value=f"₹{c_bal:,.2f}",
+                            delta=f"A/C: ...{acc_tail}"
+                        )
+                st.info(f"💰 **நிறுவனத்தின் மொத்த வங்கி பணப்புழக்க இருப்பு (Total Liquidity):** `₹{total_bank_liquidity:,.2f}`")
+
+            st.markdown("---")
+
+            # -------------------------------------------------------------------------
+            # 🌟 3. புதிய வங்கிக் கணக்கு சேர்க்கும் படிவம் (Add New Bank Account Form)
+            # -------------------------------------------------------------------------
+            with st.expander("➕ புதிய வங்கிக் கணக்கை இணைக்க (Add Corporate Bank Account)", expanded=False):
+                with st.form("add_bank_form", clear_on_submit=True):
+                    st.markdown("##### 🏛️ புதிய வங்கி விவரங்கள்:")
+                    b1, b2 = st.columns(2)
+                    with b1:
+                        new_b_name = st.text_input("வங்கிப் பெயர் *:", placeholder="எ.கா: HDFC Bank / Kotak Mahindra")
+                        new_acc_no = st.text_input("கணக்கு எண் (A/C No) *:", placeholder="எ.கா: 50200012345678")
+                        new_disp = st.text_input("காட்சிப் பெயர் (Display Name) *:", placeholder="எ.கா: HDFC - Current (5678)")
+                    with b2:
+                        new_ifsc = st.text_input("IFSC குறியீடு *:", placeholder="எ.கா: HDFC0001234").upper().strip()
+                        new_branch = st.text_input("வங்கி கிளை (Branch):", placeholder="எ.கா: Nagercoil Main Branch")
+                        new_open_bal = st.number_input("தொடக்க இருப்பு (Opening Balance ₹) *:", min_value=0.0, step=1000.0)
+
+                    if st.form_submit_button("வங்கியினைச் சேமிக்க", type="primary", use_container_width=True):
+                        if new_b_name.strip() and new_acc_no.strip() and new_disp.strip() and new_ifsc.strip():
+                            try:
+                                # கணக்கு எண் ஏற்கனவே உள்ளதா எனப் பார்த்தல்
+                                chk_acc = supabase.table("company_bank_accounts").select("id").eq("account_number", new_acc_no.strip()).execute()
+                                if chk_acc.data:
+                                    st.error(f"❌ இந்தக் கணக்கு எண் ({new_acc_no.strip()}) ஏற்கனவே இணைக்கப்பட்டுள்ளது!")
+                                else:
+                                    supabase.table("company_bank_accounts").insert({
+                                        "bank_name": new_b_name.strip(),
+                                        "account_number": new_acc_no.strip(),
+                                        "display_name": new_disp.strip(),
+                                        "ifsc_code": new_ifsc.strip(),
+                                        "opening_balance": float(new_open_bal),
+                                        "current_balance": float(new_open_bal),
+                                        "is_active": True
+                                    }).execute()
+                                    st.success(f"✅ {new_disp.strip()} வெற்றிகரமாக இணைக்கப்பட்டது!")
+                                    st.rerun()
+                            except Exception as ins_err:
+                                st.error(f"வங்கி சேமிப்பதில் பிழை: {ins_err}")
+                        else:
+                            st.warning("⚠️ தயவுசெய்து அனைத்து முக்கிய விவரங்களையும் முழுமையாக உள்ளிடவும்.")
+
+            # -------------------------------------------------------------------------
+            # 🌟 4. இணைக்கப்பட்டுள்ள வங்கிக் கணக்குகளின் முழுப் பட்டியல்
+            # -------------------------------------------------------------------------
+            st.markdown("##### 📋 இணைக்கப்பட்டுள்ள வங்கிக் கணக்குகள் விபரம்")
+            if current_banks:
+                df_banks = pd.DataFrame([
+                    {
+                        "வங்கிப் பெயர்": b.get("bank_name"),
+                        "முழு கணக்கு எண்": b.get("account_number"),
+                        "காட்சிப் பெயர்": b.get("display_name"),
+                        "IFSC கோடு": b.get("ifsc_code", "-"),
+                        "தொடக்க இருப்பு (₹)": f"₹{float(b.get('opening_balance', 0.0)):,.2f}",
+                        "நேரடி இருப்பு (₹)": f"₹{float(b.get('current_balance', 0.0)):,.2f}",
+                        "நிலை": "🟢 Active" if b.get("is_active") else "🔴 Inactive"
+                    }
+                    for b in current_banks
+                ])
+                st.dataframe(df_banks, use_container_width=True)
+            else:
+                st.info("💡 தற்போது எந்த வங்கிக் கணக்குகளும் இணைக்கப்படவில்லை. மேலே உள்ள படிவத்தைப் பயன்படுத்தி இணைக்கவும்.")
+
+            st.markdown("---")
+
+            # -------------------------------------------------------------------------
+            # 🌟 5. வங்கி பாஸ்புக் பேரேடு (Bank Passbook Ledger - Inflow / Outflow Audit)
+            # -------------------------------------------------------------------------
+            st.subheader("📑 வங்கி பாஸ்புக் பரிவர்த்தனை ஏடு (Bank Passbook Ledger)")
+            st.caption("நிறுவனத்தின் வங்கிக் கணக்குகளில் கவுண்ட்டர் அல்லது HO வழியே நிகழ்ந்த வரவு/பற்று வரலாற்றைக் காணும் பகுதி.")
+
+            if current_banks:
+                f_col1, f_col2 = st.columns([2, 1])
+                bank_map_filter = {b["display_name"]: b["id"] for b in current_banks}
+                
+                with f_col1:
+                    sel_filter_bank = st.selectbox(
+                        "பாஸ்புக் பார்க்க வேண்டிய வங்கியைத் தேர்வு செய்க:",
+                        options=list(bank_map_filter.keys()),
+                        key="filter_passbook_bank"
+                    )
+                    target_filter_b_id = bank_map_filter[sel_filter_bank]
+
+                with f_col2:
+                    st.write("")
+                    st.write("")
+                    btn_refresh_txns = st.button("🔄 ஏட்டைப் புதுப்பிக்க", use_container_width=True)
+
+                try:
+                    # தேர்ந்தெடுக்கப்பட்ட வங்கியின் சமீபத்திய 50 பரிவர்த்தனைகளைப் பெறுதல்
+                    bank_txns = (
+                        supabase.table("bank_transactions")
+                        .select("*")
+                        .eq("bank_account_id", target_filter_b_id)
+                        .order("id", desc=True)
+                        .limit(50)
+                        .execute()
+                        .data or []
+                    )
+
+                    # கிளைப் பெயர்களுக்கான மேப்
+                    branches_list = supabase.table("branches").select("id, branch_name").execute().data or []
+                    b_name_map = {br["id"]: br["branch_name"] for br in branches_list}
+
+                    if bank_txns:
+                        df_txns = pd.DataFrame([
+                            {
+                                "தேதி": tx.get("txn_date") or (tx.get("created_at", "-")[:10] if tx.get("created_at") else "-"),
+                                "கிளை": b_name_map.get(tx.get("branch_id"), f"கிளை #{tx.get('branch_id')}"),
+                                "பரிவர்த்தனை வகை": "📥 வரவு (IN)" if tx.get("txn_flow") == "IN" else "📤 பட்டுவாடா (OUT)",
+                                "தொகை (₹)": f"₹{float(tx.get('amount', 0.0)):,.2f}",
+                                "UTR / Ref எண்": tx.get("reference_no") or "-",
+                                "விளக்கம் / குறிப்பு": tx.get("remarks") or "-",
+                                "பதிவு செய்தவர்": tx.get("created_by") or "-"
+                            }
+                            for tx in bank_txns
+                        ])
+                        st.dataframe(df_txns, use_container_width=True)
+                    else:
+                        st.info(f"💡 {sel_filter_bank} வங்கிக் கணக்கில் சமீபத்திய பாஸ்புக் பரிவர்த்தனைகள் எதுவும் இல்லை.")
+
+                except Exception as txn_err:
+                    st.error(f"பாஸ்புக் விவரங்களைப் பெறுவதில் பிழை: {txn_err}")
 
         elif selected_section == "👤 புதிய வாடிக்கையாளர் KYC":
             st.subheader("👤 புதிய வாடிக்கையாளர் KYC ஒப்புதல்")
