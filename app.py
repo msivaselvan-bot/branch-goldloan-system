@@ -8761,7 +8761,8 @@ if st.session_state.get("logged_in", False):
                                                         combined_remarks = f"A/C: {item.get('account_no')} | {combined_remarks}".strip(" |")
 
                                                     if bank_portion > 0:
-                                                        ref_str = f"Bank: {bank_name} | Ref: {bank_ref_no}" if bank_ref_no else f"Bank: {bank_name}"
+                                                        b_label_txt = sel_company_bank_name if 'sel_company_bank_name' in locals() and sel_company_bank_name else bank_name
+                                                        ref_str = f"Bank: {b_label_txt} | Ref: {bank_ref_no}" if bank_ref_no else f"Bank: {b_label_txt}"
                                                         combined_remarks = f"{combined_remarks} | {ref_str}".strip(" |")
 
                                                     gen_txn = {
@@ -8785,7 +8786,62 @@ if st.session_state.get("logged_in", False):
                                                     supabase.table("transactions").insert(gen_txn).execute()
 
                                             # =========================================================================
-                                            # 🌟 4. முடித்தல், பலூன் மற்றும் மறுஏற்றம் (Reset & Balloons)
+                                            # 🌟 4. வங்கிப் பரிவர்த்தனை இருப்பைப் புதுப்பித்தல் (Bank Liquidity Update)
+                                            # =========================================================================
+                                            target_bank_id = sel_company_bank_id if 'sel_company_bank_id' in locals() and sel_company_bank_id else (sel_bank_id if 'sel_bank_id' in locals() else None)
+
+                                            if float(bank_portion) > 0 and target_bank_id:
+                                                try:
+                                                    # 1. நிறுவன வங்கியின் தற்போதைய நேரடி இருப்பை எடுத்தல்
+                                                    b_acc_data = (
+                                                        supabase.table("company_bank_accounts")
+                                                        .select("current_balance, display_name")
+                                                        .eq("id", target_bank_id)
+                                                        .single()
+                                                        .execute()
+                                                        .data
+                                                    )
+                                                    current_b_bal = float(b_acc_data.get("current_balance") or 0.0) if b_acc_data else 0.0
+                                                    b_disp_name = b_acc_data.get("display_name", "Corporate Bank") if b_acc_data else "Corporate Bank"
+
+                                                    # net_target > 0 எனில் நிறுவனம் வாடிக்கையாளருக்கு வழங்கியது (Bank OUT - பட்டுவாடா)
+                                                    # net_target <= 0 எனில் வாடிக்கையாளர் நிறுவனத்திற்குச் செலுத்தியது (Bank IN - வரவு)
+                                                    c_disp_name = c_name or visit.get("customer_name", "வாடிக்கையாளர்")
+                                                    c_token_no = current_v_no or visit.get("visit_no", "-")
+                                                    b_txn_date = str(visit.get("visit_date") or date.today())
+
+                                                    if net_target > 0:
+                                                        new_b_bal = current_b_bal - float(bank_portion)
+                                                        flow_direction = "OUT"
+                                                        rem_text = f"Customer Payout (கடன்/பட்டுவாடா): {c_disp_name} (Token: {c_token_no})"
+                                                    else:
+                                                        new_b_bal = current_b_bal + float(bank_portion)
+                                                        flow_direction = "IN"
+                                                        rem_text = f"Customer Collection (மீட்டல்/வரவு): {c_disp_name} (Token: {c_token_no})"
+
+                                                    # 2. வங்கிக் கணக்கின் நேரடி இருப்பை மாற்றுதல் (Update Balance)
+                                                    supabase.table("company_bank_accounts").update({
+                                                        "current_balance": new_b_bal
+                                                    }).eq("id", target_bank_id).execute()
+
+                                                    # 3. பாஸ்புக் லெட்ஜரில் பதிவு செய்தல் (Passbook Entry)
+                                                    supabase.table("bank_transactions").insert({
+                                                        "bank_account_id": target_bank_id,
+                                                        "branch_id": clean_b_id,
+                                                        "visit_id": new_visit_id,
+                                                        "txn_date": b_txn_date,
+                                                        "txn_flow": flow_direction,
+                                                        "amount": float(bank_portion),
+                                                        "reference_no": str(bank_ref_no or "").strip(),
+                                                        "remarks": rem_text,
+                                                        "created_by": st.session_state.get("username", "Staff")
+                                                    }).execute()
+
+                                                except Exception as b_err:
+                                                    st.error(f"⚠️ வங்கி இருப்பைப் புதுப்பிப்பதில் பிழை: {b_err}")
+
+                                            # =========================================================================
+                                            # 🌟 5. முடித்தல், பலூன் மற்றும் மறுஏற்றம் (Reset & Balloons)
                                             # =========================================================================
                                             st.session_state.transactions_cart = []
                                             st.session_state.current_visit = None
@@ -8796,144 +8852,142 @@ if st.session_state.get("logged_in", False):
 
                                             st.balloons()
                                             st.success(f"🎉 வருகை {current_v_no} வெற்றிகரமாக நிறைவுபெற்றது!")
-                                            
+
                                             import time
                                             time.sleep(2.5)  # பலூன்கள் திரையில் பறந்து முடியும் வரை காத்திருப்பு
                                             st.rerun()
 
-                                    except Exception as save_err:
-                                        st.error(f"❌ வருகையைச் சேமிப்பதில் பிழை ஏற்பட்டது: {save_err}")
+                                            except Exception as save_err:
+                                                st.error(f"❌ வருகையைச் சேமிப்பதில் பிழை ஏற்பட்டது: {save_err}")
 
-                        # =========================================================================
-                        # விருப்பம் 2: தற்காலிகச் சேமிப்பு (Save as Draft - எண்களை அப்படியே லாக் செய்தல்)
-                        # =========================================================================
-                        with act_col2:
-                            if st.button("💾 தற்காலிகமாகச் சேமி (Save as Draft - OTP Pending)", type="secondary", use_container_width=True):
-                                if not is_ready:
-                                    st.error("❌ நோட்டுகள் / வங்கி கணக்கீடு சரியாகப் பொருந்த வேண்டும்!")
-                                elif not st.session_state.get("transactions_cart"):
-                                    st.error("❌ கார்ட்டில் நடவடிக்கைகள் எதுவும் இல்லை!")
-                                else:
-                                    try:
-                                        with st.spinner("விவரங்கள் மாற்ற முடியாதவாறு பூட்டிச் சேமிக்கப்படுகின்றன..."):
-                                            current_v_no = visit.get("visit_no")
-                                            chk_exist = supabase.table("customer_visits").select("id").eq("visit_no", current_v_no).execute()
-                                            if chk_exist.data:
-                                                b_code = st.session_state.get("branch_code", "BR")[:3].upper()
-                                                current_v_no = generate_branch_visit_no(clean_b_id, b_code)
+                                            # =========================================================================
+                                            # விருப்பம் 2: தற்காலிகச் சேமிப்பு (Save as Draft - எண்களை அப்படியே லாக் செய்தல்)
+                                            # =========================================================================
+                                            with act_col2:
+                                                if st.button("💾 தற்காலிகமாகச் சேமி (Save as Draft - OTP Pending)", type="secondary", use_container_width=True):
+                                                    if not is_ready:
+                                                        st.error("❌ நோட்டுகள் / வங்கி கணக்கீடு சரியாகப் பொருந்த வேண்டும்!")
+                                                    elif not st.session_state.get("transactions_cart"):
+                                                        st.error("❌ கார்ட்டில் நடவடிக்கைகள் எதுவும் இல்லை!")
+                                                    else:
+                                                        try:
+                                                            with st.spinner("விவரங்கள் மாற்ற முடியாதவாறு பூட்டிச் சேமிக்கப்படுகின்றன..."):
+                                                                current_v_no = visit.get("visit_no")
+                                                                chk_exist = supabase.table("customer_visits").select("id").eq("visit_no", current_v_no).execute()
+                                                                if chk_exist.data:
+                                                                    b_code = st.session_state.get("branch_code", "BR")[:3].upper()
+                                                                    current_v_no = generate_branch_visit_no(clean_b_id, b_code)
 
-                                            pm_label = "Cash" if bank_portion == 0 else ("Bank/UPI" if cash_portion == 0 else "Split")
-                                            payout_status = "Pending_Transfer" if (net_target > 0 and bank_portion > 0) else None
+                                                                pm_label = "Cash" if bank_portion == 0 else ("Bank/UPI" if cash_portion == 0 else "Split")
+                                                                payout_status = "Pending_Transfer" if (net_target > 0 and bank_portion > 0) else None
 
-                                            draft_visit_data = {
-                                                "visit_no": current_v_no,
-                                                "customer_id": c_id,
-                                                "branch_id": clean_b_id,
-                                                "total_paid": float(visit.get("total_paid", 0.0) or 0.0),
-                                                "total_received": float(visit.get("total_received", 0.0) or 0.0),
-                                                "net_cash_amount": float(cash_portion),
-                                                "cash_amount": float(cash_portion),
-                                                "bank_amount": float(bank_portion),
-                                                "payment_mode": pm_label,
-                                                "bank_transfer_status": payout_status,
-                                                "bank_transfer_type": bank_transfer_type if 'bank_transfer_type' in locals() else "Customer",
-                                                "bank_reference_no": bank_ref_no.strip() if bank_ref_no else None,
-                                                "bank_acc_holder_name": b_holder if 'b_holder' in locals() else None,
-                                                "bank_acc_number": b_acc if 'b_acc' in locals() else None,
-                                                "bank_name": bank_name if 'bank_name' in locals() else None,
-                                                "bank_branch": b_branch if 'b_branch' in locals() else None,
-                                                "bank_ifsc_code": b_ifsc if 'b_ifsc' in locals() else None,
-                                                "denomination_details": {
-                                                    "in": {"500": in_500, "200": in_200, "100": in_100, "50": in_50, "20": in_20, "10": in_10, "5": in_5, "coins": in_coins, "total": total_cash_in},
-                                                    "out": {"500": out_500, "200": out_200, "100": out_100, "50": out_50, "20": out_20, "10": out_10, "5": out_5, "coins": out_coins, "total": total_cash_out},
-                                                    "net_change": total_cash_in - total_cash_out,
-                                                },
-                                                "otp_verified": False,
-                                                "status": "Draft_Pending_OTP"
-                                            }
-                                            v_ins = supabase.table("customer_visits").insert(draft_visit_data).execute()
-                                            new_v_id = v_ins.data[0]["id"]
+                                                                draft_visit_data = {
+                                                                    "visit_no": current_v_no,
+                                                                    "customer_id": c_id,
+                                                                    "branch_id": clean_b_id,
+                                                                    "total_paid": float(visit.get("total_paid", 0.0) or 0.0),
+                                                                    "total_received": float(visit.get("total_received", 0.0) or 0.0),
+                                                                    "net_cash_amount": float(cash_portion),
+                                                                    "cash_amount": float(cash_portion),
+                                                                    "bank_amount": float(bank_portion),
+                                                                    "payment_mode": pm_label,
+                                                                    "bank_transfer_status": payout_status,
+                                                                    "bank_transfer_type": bank_transfer_type if 'bank_transfer_type' in locals() else "Customer",
+                                                                    "bank_reference_no": bank_ref_no.strip() if bank_ref_no else None,
+                                                                    "bank_acc_holder_name": b_holder if 'b_holder' in locals() else None,
+                                                                    "bank_acc_number": b_acc if 'b_acc' in locals() else None,
+                                                                    "bank_name": bank_name if 'bank_name' in locals() else None,
+                                                                    "bank_branch": b_branch if 'b_branch' in locals() else None,
+                                                                    "bank_ifsc_code": b_ifsc if 'b_ifsc' in locals() else None,
+                                                                    "denomination_details": {
+                                                                        "in": {"500": in_500, "200": in_200, "100": in_100, "50": in_50, "20": in_20, "10": in_10, "5": in_5, "coins": in_coins, "total": total_cash_in},
+                                                                        "out": {"500": out_500, "200": out_200, "100": out_100, "50": out_50, "20": out_20, "10": out_10, "5": out_5, "coins": out_coins, "total": total_cash_out},
+                                                                        "net_change": total_cash_in - total_cash_out,
+                                                                    },
+                                                                    "otp_verified": False,
+                                                                    "status": "Draft_Pending_OTP"
+                                                                }
+                                                                v_ins = supabase.table("customer_visits").insert(draft_visit_data).execute()
+                                                                new_v_id = v_ins.data[0]["id"]
 
-                                            # 🌟 கார்ட்டில் உள்ள ஒவ்வொரு நடவடிக்கைக்கும் அந்த நேரத்தில் ஒதுக்கப்பட்ட எண்களை பத்திரமாகப் பூட்டுதல்:
-                                            for item in st.session_state.transactions_cart:
-                                                t_type = str(item.get("transaction_type", ""))
-                                                
-                                                raw_p_amt = float(item.get("paid_amount", 0.0) or 0.0)
-                                                raw_r_amt = float(item.get("received_amount", 0.0) or 0.0)
-                                                base_amount = float(item.get("amount", 0.0) or 0.0)
+                                                                # 🌟 கார்ட்டில் உள்ள ஒவ்வொரு நடவடிக்கைக்கும் அந்த நேரத்தில் ஒதுக்கப்பட்ட எண்களை பத்திரமாகப் பூட்டுதல்:
+                                                                for item in st.session_state.transactions_cart:
+                                                                    t_type = str(item.get("transaction_type", ""))
+                                                                    
+                                                                    raw_p_amt = float(item.get("paid_amount", 0.0) or 0.0)
+                                                                    raw_r_amt = float(item.get("received_amount", 0.0) or 0.0)
+                                                                    base_amount = float(item.get("amount", 0.0) or 0.0)
 
-                                                # 🔴 1. பட்டுவாடா / பற்று மட்டுமே (Cash OUT - நிறுவனக் கல்லாவிலிருந்து பணம் வெளியே செல்லுதல்)
-                                                # (Pledge கடன், RD முதிர்வு, FD முதிர்வு, FD வட்டி பட்டுவாடா, GP தங்கம் கொள்முதல்)
-                                                is_cash_out = any(k in t_type for k in [
-                                                    "Pledge", "Loan", "நகைக் கடன்",
-                                                    "RD Closure", "RD முதிர்வு",
-                                                    "FD Closure", "FD முதிர்வு",
-                                                    "FD Interest", "FD வட்டி",
-                                                    "GP", "Purchase", "கொள்முதல்"
-                                                ])
+                                                                    # 🔴 1. பட்டுவாடா / பற்று மட்டுமே (Cash OUT)
+                                                                    is_cash_out = any(k in t_type for k in [
+                                                                        "Pledge", "Loan", "நகைக் கடன்",
+                                                                        "RD Closure", "RD முதிர்வு",
+                                                                        "FD Closure", "FD முதிர்வு",
+                                                                        "FD Interest", "FD வட்டி",
+                                                                        "GP", "Purchase", "கொள்முதல்"
+                                                                    ])
 
-                                                # 🟢 2. வரவு மட்டுமே (Cash IN - வாடிக்கையாளரிடமிருந்து பணம் உள்ளே வருதல்)
-                                                # (அடமானம் மீட்டல், வட்டி, அசல், RD தொடக்கம், RD தவணை, FD முதலீடு, GS தங்கம் விற்பனை)
-                                                is_cash_in = any(k in t_type for k in [
-                                                    "Release", "Interest Payment", "Part Payment", "மீட்டல்", "அசல் வரவு", "வட்டி வரவு",
-                                                    "RD Open", "புதிய RD", "RD Due", "RD தவணை",
-                                                    "FD Open", "புதிய வைப்பு",
-                                                    "GS", "Sale", "விற்பனை"
-                                                ])
+                                                                    # 🟢 2. வரவு மட்டுமே (Cash IN)
+                                                                    is_cash_in = any(k in t_type for k in [
+                                                                        "Release", "Interest Payment", "Part Payment", "மீட்டல்", "அசல் வரவு", "வட்டி வரவு",
+                                                                        "RD Open", "புதிய RD", "RD Due", "RD தவணை",
+                                                                        "FD Open", "புதிய வைப்பு",
+                                                                        "GS", "Sale", "விற்பனை"
+                                                                    ])
 
-                                                # தொகைகளைத் துல்லியமாக நிர்ணயித்தல்:
-                                                if is_cash_out:
-                                                    p_amt = raw_p_amt if raw_p_amt > 0 else base_amount
-                                                    r_amt = 0.0
-                                                    final_amt = p_amt
-                                                elif is_cash_in:
-                                                    p_amt = 0.0
-                                                    r_amt = raw_r_amt if raw_r_amt > 0 else base_amount
-                                                    final_amt = r_amt
-                                                else:
-                                                    p_amt = raw_p_amt
-                                                    r_amt = raw_r_amt
-                                                    final_amt = r_amt if r_amt > 0 else (p_amt if p_amt > 0 else base_amount)
+                                                                    # தொகைகளைத் துல்லியமாக நிர்ணயித்தல்:
+                                                                    if is_cash_out:
+                                                                        p_amt = raw_p_amt if raw_p_amt > 0 else base_amount
+                                                                        r_amt = 0.0
+                                                                        final_amt = p_amt
+                                                                    elif is_cash_in:
+                                                                        p_amt = 0.0
+                                                                        r_amt = raw_r_amt if raw_r_amt > 0 else base_amount
+                                                                        final_amt = r_amt
+                                                                    else:
+                                                                        p_amt = raw_p_amt
+                                                                        r_amt = raw_r_amt
+                                                                        final_amt = r_amt if r_amt > 0 else (p_amt if p_amt > 0 else base_amount)
 
-                                                draft_remarks = item.get("remarks") or ""
+                                                                    draft_remarks = item.get("remarks") or ""
 
-                                                # டிராஃப்ட் செய்யப்படும்போது ஒதுக்கப்பட்ட எண்ணை remarks-ல் உறுதி செய்தல்:
-                                                if item.get("loan_no") and "GL:" not in draft_remarks:
-                                                    draft_remarks = f"GL: {item.get('loan_no')} | {draft_remarks}".strip(" |")
-                                                elif item.get("account_no") and "A/C:" not in draft_remarks:
-                                                    draft_remarks = f"A/C: {item.get('account_no')} | {draft_remarks}".strip(" |")
+                                                                    # டிராஃப்ட் செய்யப்படும்போது ஒதுக்கப்பட்ட எண்ணை remarks-ல் உறுதி செய்தல்:
+                                                                    if item.get("loan_no") and "GL:" not in draft_remarks:
+                                                                        draft_remarks = f"GL: {item.get('loan_no')} | {draft_remarks}".strip(" |")
+                                                                    elif item.get("account_no") and "A/C:" not in draft_remarks:
+                                                                        draft_remarks = f"A/C: {item.get('account_no')} | {draft_remarks}".strip(" |")
 
-                                                gen_txn = {
-                                                    "visit_id": new_v_id,
-                                                    "branch_id": clean_b_id,
-                                                    "customer_id": c_id,
-                                                    "customer_name": c_name,
-                                                    "mobile": c_mob_final,
-                                                    "transaction_type": item.get("transaction_type"),
-                                                    "staff_name": item.get("staff_name", ""),
-                                                    "amount": final_amt,
-                                                    "paid_amount": p_amt,         # 👈 துல்லியமான பற்று
-                                                    "received_amount": r_amt,     # 👈 துல்லியமான வரவு
-                                                    "gross_weight": float(item.get("total_weight", 0.0) or item.get("gross_weight", 0.0) or 0.0),
-                                                    "net_weight": float(item.get("net_weight", 0.0) or 0.0),
-                                                    "item_details": item.get("ornament_details", ""),
-                                                    "remarks": draft_remarks,
-                                                    "payment_mode": pm_label,
-                                                    "transaction_details": item,  # 👈 அசல் எண்கள் அடங்கிய முழு கார்ட் ஆப்ஜெக்ட்டும் பத்திரமாக சேமிக்கப்படுகிறது
-                                                    "status": "Draft_Locked"
-                                                }
-                                                supabase.table("transactions").insert(gen_txn).execute()
+                                                                    gen_txn = {
+                                                                        "visit_id": new_v_id,
+                                                                        "branch_id": clean_b_id,
+                                                                        "customer_id": c_id,
+                                                                        "customer_name": c_name,
+                                                                        "mobile": c_mob_final,
+                                                                        "transaction_type": item.get("transaction_type"),
+                                                                        "staff_name": item.get("staff_name", ""),
+                                                                        "amount": final_amt,
+                                                                        "paid_amount": p_amt,         # 👈 துல்லியமான பற்று
+                                                                        "received_amount": r_amt,     # 👈 துல்லியமான வரவு
+                                                                        "gross_weight": float(item.get("total_weight", 0.0) or item.get("gross_weight", 0.0) or 0.0),
+                                                                        "net_weight": float(item.get("net_weight", 0.0) or 0.0),
+                                                                        "item_details": item.get("ornament_details", ""),
+                                                                        "remarks": draft_remarks,
+                                                                        "payment_mode": pm_label,
+                                                                        "transaction_details": item,  # 👈 அசல் எண்கள் அடங்கிய முழு கார்ட் ஆப்ஜெக்ட்டும் பத்திரமாக சேமிக்கப்படுகிறது
+                                                                        "status": "Draft_Locked"
+                                                                    }
+                                                                    supabase.table("transactions").insert(gen_txn).execute()
 
-                                            st.session_state.transactions_cart = []
-                                            st.session_state.current_visit = None
-                                            st.session_state.otp_cleared = False
-                                            st.session_state.otp_already_sent = False
-                                            st.session_state.generated_otp = None
-                                            st.success(f"💾 வருகை `{current_v_no}` தற்காலிகமாகச் சேமிக்கப்பட்டது! எண்கள் லாக் செய்யப்பட்டன.")
-                                            st.rerun()
+                                                                st.session_state.transactions_cart = []
+                                                                st.session_state.current_visit = None
+                                                                st.session_state.otp_cleared = False
+                                                                st.session_state.otp_already_sent = False
+                                                                st.session_state.generated_otp = None
+                                                                st.success(f"💾 வருகை `{current_v_no}` தற்காலிகமாகச் சேமிக்கப்பட்டது! எண்கள் லாக் செய்யப்பட்டன.")
+                                                                st.rerun()
 
-                                    except Exception as d_err:
-                                        st.error(f"❌ தற்காலிகமாகச் சேமிப்பதில் பிழை: {d_err}")
+                                                        except Exception as d_err:
+                                                            st.error(f"❌ தற்காலிகமாகச் சேமிப்பதில் பிழை: {d_err}")
 
         elif selected_section == "📁 கிளை ஆவணங்கள் பதிவேற்றம்":
             st.subheader("📁 கிளை ஆவணங்கள் பதிவேற்றம் (Upload Docs Desk)")
