@@ -8150,22 +8150,31 @@ if st.session_state.get("logged_in", False):
                                     st.error("❌ பட்டியலில் எந்த நடவடிக்கைகளும் சேர்க்கப்படவில்லை!")
                                 else:
                                     try:
-                                        with st.spinner("டேட்டாபேஸில் விவரங்கள் சேமிக்கப்படுகின்றன... தயவுசெய்து காத்திருக்கவும்..."):
+                                        with st.spinner("டேட்டாபேஸில் விவரங்கள் புதுப்பிக்கப்படுகின்றன..."):
                                             current_v_no = visit.get("visit_no")
-                                            chk_exist = supabase.table("customer_visits").select("id").eq("visit_no", current_v_no).execute()
-                                            if chk_exist.data:
-                                                b_code = st.session_state.get("branch_code", "BR")[:3].upper()
-                                                current_v_no = generate_branch_visit_no(clean_b_id, b_code)
+
+                                            # 🌟 1. ஏற்கனவே டிராஃப்ட்டில் உள்ள வருகையா எனப் பார்த்தல்:
+                                            chk_draft = (
+                                                supabase.table("customer_visits")
+                                                .select("id, status")
+                                                .eq("visit_no", current_v_no)
+                                                .in_("status", ["Draft_Pending_OTP", "Draft_Locked"])
+                                                .execute()
+                                            )
+                                            is_existing_draft = bool(chk_draft.data)
+
+                                            # புதிய நேரடி வருகைக்கான எண் மோதலைத் தவிர்த்தல்:
+                                            if not is_existing_draft:
+                                                chk_exist = supabase.table("customer_visits").select("id").eq("visit_no", current_v_no).execute()
+                                                if chk_exist.data:
+                                                    b_code = st.session_state.get("branch_code", "BR")[:3].upper()
+                                                    current_v_no = generate_branch_visit_no(clean_b_id, b_code)
 
                                             pm_label = "Cash" if bank_portion == 0 else ("Bank/UPI" if cash_portion == 0 else "Split")
-
-                                            # 🌟 வங்கி வரவு இருந்தால் ஆப்பரேஷன்ஸ் சரிபார்ப்பு நிலை:
                                             visit_main_status = "Pending_Bank_Verification" if (net_target <= 0 and bank_portion > 0) else "Pending_Calling_Verification"
-
-                                            # 🌟 நாம் வாடிக்கையாளருக்கு வங்கி மூலம் பணம் அனுப்ப வேண்டியிருந்தால் Payout நிலை:
                                             payout_status = "Pending_Transfer" if (net_target > 0 and bank_portion > 0) else None
 
-                                            # பாஸ்புக் மற்றும் ஒப்புதல் ஆவண URL-களைப் பதிவேற்றம் செய்து எடுத்தல்
+                                            # பாஸ்புக் மற்றும் ஒப்புதல் ஆவண URL-கள்
                                             passbook_url = None
                                             consent_url = None
                                             if net_target > 0 and bank_portion > 0:
@@ -8186,11 +8195,7 @@ if st.session_state.get("logged_in", False):
                                                     except Exception:
                                                         pass
 
-                                            # 🌟 வாடிக்கையாளர் வங்கி விவரங்கள் மற்றும் Payout நிலையுடன் இணைக்கப்பட்ட visit_data
-                                            visit_data = {
-                                                "visit_no": current_v_no,
-                                                "customer_id": c_id,
-                                                "branch_id": clean_b_id,
+                                            visit_payload = {
                                                 "total_paid": float(visit.get("total_paid", 0.0) or 0.0),
                                                 "total_received": float(visit.get("total_received", 0.0) or 0.0),
                                                 "net_cash_amount": float(cash_portion),
@@ -8212,18 +8217,27 @@ if st.session_state.get("logged_in", False):
                                                     "out": {"500": out_500, "200": out_200, "100": out_100, "50": out_50, "20": out_20, "10": out_10, "5": out_5, "coins": out_coins, "total": total_cash_out},
                                                     "net_change": total_cash_in - total_cash_out,
                                                 },
-                                                "otp_verified": True,
-                                                "status": visit_main_status
+                                                "otp_verified": True,       # 🌟 OTP சரிபார்க்கப்பட்டது
+                                                "status": visit_main_status # 🌟 Draft_Pending_OTP-லிருந்து மாற்றம்
                                             }
-                                            
-                                            v_insert = supabase.table("customer_visits").insert(visit_data).execute()
-                                            if not v_insert.data:
-                                                raise Exception("customer_visits அட்டவணையில் பதிவைச் சேர்க்க முடியவில்லை!")
-                                            
-                                            new_visit_id = v_insert.data[0]["id"]
+
+                                            if is_existing_draft:
+                                                # 🌟 A. டிராஃப்ட் வருகை எனில் UPDATE செய்தல்:
+                                                target_id = chk_draft.data[0]["id"]
+                                                supabase.table("customer_visits").update(visit_payload).eq("id", target_id).execute()
+                                                new_visit_id = target_id
+                                            else:
+                                                # 🌟 B. நேரடி வருகை எனில் INSERT செய்தல்:
+                                                visit_payload["visit_no"] = current_v_no
+                                                visit_payload["customer_id"] = c_id
+                                                visit_payload["branch_id"] = clean_b_id
+                                                v_insert = supabase.table("customer_visits").insert(visit_payload).execute()
+                                                if not v_insert.data:
+                                                    raise Exception("customer_visits அட்டவணையில் பதிவைச் சேர்க்க முடியவில்லை!")
+                                                new_visit_id = v_insert.data[0]["id"]
 
                                             # =========================================================================
-                                            # 🌟 நடவடிக்கைகளை அந்தந்த தனி அட்டவணைகளில் சேமித்தல்
+                                            # 🌟 2. நடவடிக்கைகள்: தனி அட்டவணைகளில் பதிவு செய்தல் (GL, FD, RD, Sale, GP)
                                             # =========================================================================
                                             for item in st.session_state.transactions_cart:
                                                 t_type = str(item.get("transaction_type", "RD Due (RD தவணை)"))
@@ -8238,7 +8252,6 @@ if st.session_state.get("logged_in", False):
                                                 # -------------------------------------------------------------
                                                 if any(k in t_type for k in ["Pledge", "Loan", "நகைக்கடன்"]):
                                                     try:
-                                                        # 🌟 டிராஃப்ட்டில் ஒதுக்கப்பட்ட கடன் எண்ணை அப்படியே மீட்டெடுத்தல்:
                                                         actual_gl_no = item.get("loan_no") or item.get("gp_number")
                                                         if not actual_gl_no and "GL:" in combined_remarks:
                                                             try:
@@ -8246,7 +8259,6 @@ if st.session_state.get("logged_in", False):
                                                             except Exception:
                                                                 actual_gl_no = None
 
-                                                        # டிராஃப்ட்டில் எண் இல்லாவிட்டால் மட்டுமே புதிய எண்:
                                                         if not actual_gl_no:
                                                             actual_gl_no, num_val = get_current_display_gl_number(clean_b_id)
                                                         else:
@@ -8275,7 +8287,6 @@ if st.session_state.get("logged_in", False):
                                                         }
                                                         supabase.table("gold_loans").insert(loan_payload).execute()
 
-                                                        # வரிசை அட்டவணையில் இந்த எண் பதியப்பட்டதை உறுதி செய்தல்
                                                         if num_val > 0:
                                                             commit_next_gl_number(clean_b_id, num_val)
 
@@ -8290,7 +8301,6 @@ if st.session_state.get("logged_in", False):
                                                         fd_meta = item.get("extra_meta_data", {}) or item
                                                         dep_amt = float(fd_meta.get("deposit_amount") or item.get("received_amount") or item.get("amount") or 0.0)
 
-                                                        # 🌟 டிராஃப்ட்டில் ஒதுக்கப்பட்ட FD கணக்கு எண் மீட்டெடுத்தல்:
                                                         final_fd_no = item.get("account_no") or fd_meta.get("account_no") or fd_meta.get("fd_account_no")
                                                         if not final_fd_no and "FD No:" in combined_remarks:
                                                             try:
@@ -8327,7 +8337,6 @@ if st.session_state.get("logged_in", False):
                                                         rd_meta = item.get("extra_meta_data", {}) or item
                                                         inst_amt = float(rd_meta.get("installment_amount") or item.get("received_amount") or item.get("amount") or 0.0)
 
-                                                        # 🌟 டிராஃப்ட்டில் ஒதுக்கப்பட்ட RD கணக்கு எண் மீட்டெடுத்தல்:
                                                         final_rd_no = item.get("account_no") or rd_meta.get("account_no") or rd_meta.get("rd_account_no")
                                                         if not final_rd_no and "RD No:" in combined_remarks:
                                                             try:
@@ -8378,7 +8387,7 @@ if st.session_state.get("logged_in", False):
                                                         }
                                                         supabase.table("gold_sales").insert(sale_payload).execute()
                                                     except Exception as sl_err:
-                                                        st.error(f"⚠️ gold_sales அட்டவணையில் சேமிப்பதில் பிழை: {sl_err}")
+                                                        st.error(f"⚠️ gold_sales சேமிப்பதில் பிழை: {sl_err}")
 
                                                 # -------------------------------------------------------------
                                                 # E. பழைய நகை கொள்முதல்
@@ -8397,13 +8406,42 @@ if st.session_state.get("logged_in", False):
                                                         }
                                                         supabase.table("gold_purchases").insert(purchase_payload).execute()
                                                     except Exception as gp_err:
-                                                        st.error(f"⚠️ gold_purchases அட்டவணையில் சேமிப்பதில் பிழை: {gp_err}")
+                                                        st.error(f"⚠️ gold_purchases சேமிப்பதில் பிழை: {gp_err}")
 
                                                 # -------------------------------------------------------------
-                                                # F. பொது பரிவர்த்தனைகள் அட்டவணை (Transactions Table)
+                                                # F. RD தவணை அட்டவணை புதுப்பித்தல் (RD Due Installments)
                                                 # -------------------------------------------------------------
-                                                try:
-                                                    # கடன் / RD / FD எண்களை remarks-ல் சேர்த்து லாக் செய்தல்
+                                                if any(k in t_type for k in ["RD", "ஆர்டி", "Installment"]):
+                                                    try:
+                                                        rd_acc_no = item.get("account_no") or item.get("rd_account_no") or ""
+                                                        if not rd_acc_no and "RD No:" in combined_remarks:
+                                                            try:
+                                                                rd_acc_no = combined_remarks.split("RD No:")[1].split("|")[0].strip()
+                                                            except Exception:
+                                                                rd_acc_no = ""
+                                                        if rd_acc_no:
+                                                            supabase.table("recurring_deposits").update({
+                                                                "total_received_amount": float(r_amt)
+                                                            }).eq("rd_account_no", rd_acc_no).execute()
+                                                    except Exception:
+                                                        pass
+
+                                            # =========================================================================
+                                            # 🌟 3. transactions அட்டவணையில் நிலையை மாற்றுதல் / பதிவு செய்தல்
+                                            # =========================================================================
+                                            if is_existing_draft:
+                                                # 🌟 டிராஃப்ட்டில் ஏற்கனவே உள்ள வரிகளை Approved என மாற்றுதல்:
+                                                supabase.table("transactions").update({
+                                                    "status": "Approved"
+                                                }).eq("visit_id", new_visit_id).execute()
+                                            else:
+                                                # நேரடி வருகை எனில் புதிய வரிகளை இன்சர்ட் செய்தல்:
+                                                for item in st.session_state.transactions_cart:
+                                                    p_amt = float(item.get("paid_amount", 0.0) or 0.0)
+                                                    r_amt = float(item.get("received_amount", 0.0) or item.get("amount", 0.0) or 0.0)
+                                                    final_amt = r_amt if r_amt > 0 else (p_amt if p_amt > 0 else float(item.get("amount", 0.0) or 0.0))
+                                                    combined_remarks = item.get("remarks") or ""
+
                                                     if item.get("loan_no") and "GL:" not in combined_remarks:
                                                         combined_remarks = f"GL: {item.get('loan_no')} | {combined_remarks}".strip(" |")
                                                     elif item.get("account_no") and "A/C:" not in combined_remarks:
@@ -8413,13 +8451,13 @@ if st.session_state.get("logged_in", False):
                                                         ref_str = f"Bank: {bank_name} | Ref: {bank_ref_no}" if bank_ref_no else f"Bank: {bank_name}"
                                                         combined_remarks = f"{combined_remarks} | {ref_str}".strip(" |")
 
-                                                    general_txn = {
+                                                    gen_txn = {
                                                         "visit_id": new_visit_id,
                                                         "branch_id": clean_b_id,
                                                         "customer_id": c_id,
                                                         "customer_name": c_name,
                                                         "mobile": c_mob_final,
-                                                        "transaction_type": t_type,
+                                                        "transaction_type": item.get("transaction_type"),
                                                         "staff_name": s_name,
                                                         "amount": final_amt,
                                                         "paid_amount": p_amt,
@@ -8431,23 +8469,23 @@ if st.session_state.get("logged_in", False):
                                                         "payment_mode": pm_label,
                                                         "status": "Approved"
                                                     }
-                                                    supabase.table("transactions").insert(general_txn).execute()
-                                                except Exception as txn_err:
-                                                    st.error(f"⚠️ transactions அட்டவணையில் சேமிப்பதில் பிழை: {txn_err}")
+                                                    supabase.table("transactions").insert(gen_txn).execute()
 
-                                            # செஷன் மாறிகளை அழித்தல்
+                                            # =========================================================================
+                                            # 🌟 4. முடித்தல், பலூன் மற்றும் மறுஏற்றம் (Reset & Balloons)
+                                            # =========================================================================
                                             st.session_state.transactions_cart = []
                                             st.session_state.current_visit = None
                                             st.session_state.otp_cleared = False
                                             st.session_state.otp_verified = False
                                             st.session_state.otp_already_sent = False
                                             st.session_state.generated_otp = None
-                                            
+
                                             st.balloons()
                                             st.success(f"🎉 வருகை {current_v_no} வெற்றிகரமாக நிறைவுபெற்றது!")
                                             
                                             import time
-                                            time.sleep(2.5)  # பலூன்கள் பறந்து முடியும் வரை 2.5 நொடிகள் காத்திருப்பு
+                                            time.sleep(2.5)  # பலூன்கள் திரையில் பறந்து முடியும் வரை காத்திருப்பு
                                             st.rerun()
 
                                     except Exception as save_err:
