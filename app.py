@@ -9155,25 +9155,31 @@ if st.session_state.get("logged_in", False):
                             try:
                                 denom_payload = {
                                     "500": c_500, "200": c_200, "100": c_100, 
-                                    "50": c_50, "20": c_20, "10": c_10, "5": c_5, "coins": c_coins
+                                    "50": c_50, "20": c_20, "10": c_10, "5": c_5, "coins": c_coins,
+                                    "actual_counted": actual_counted_cash,
+                                    "calculated_closing": calc_closing,
+                                    "difference": diff_amount
                                 }
 
+                                # closing_remarks-ல் வித்தியாசத் தொகையையும் சேர்த்துக் குறித்தல்
+                                diff_note = f" [இருப்பு வித்தியாசம்: ₹{diff_amount:,.2f}]" if diff_amount != 0 else " [கணக்கு சரிபார்க்கப்பட்டது]"
+                                final_remarks = (close_remarks.strip() if close_remarks else "Day Closed Successfully") + diff_note
+
+                                # 🌟 டேட்டாபேஸில் உள்ள அசல் நெடுவரிசைகளுக்கு ஏற்ப அமைக்கப்பட்ட payload:
                                 summary_payload = {
                                     "branch_id": cur_b_id,
                                     "summary_date": report_date_str,
                                     "opening_balance": op_balance,
                                     "total_cash_in": tot_cash_in,
                                     "total_cash_out": tot_cash_out,
-                                    "closing_balance": calc_closing,
-                                    "actual_closing": actual_counted_cash,
-                                    "difference_amount": diff_amount,
+                                    "closing_balance": actual_counted_cash,  # 👈 எண்ணப்பட்ட இறுதி கையிருப்பு
                                     "total_bank_in": tot_bank_in,
                                     "total_bank_out": tot_bank_out,
                                     "denomination_details": denom_payload,
-                                    "is_closed": True,  # 👈 நாள் முழுமையாகப் பூட்டப்பட்டது!
+                                    "is_closed": True,  # 👈 இந்நாள் முழுமையாகப் பூட்டப்பட்டது
                                     "closed_at": str(datetime.now()),
                                     "closed_by": st.session_state.get("username", "Staff"),
-                                    "closing_remarks": close_remarks.strip() if close_remarks else "Day Closed Successfully"
+                                    "closing_remarks": final_remarks
                                 }
 
                                 supabase.table("branch_daily_cash_summary").upsert(
