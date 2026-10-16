@@ -9533,6 +9533,77 @@ if st.session_state.get("logged_in", False):
                 st.markdown("---")
 
                 # 5. செலவுப் பதிவு படிவம்
+                # -------------------------------------------------------------
+                # 💸 கிளை செலவுப் பதிவு - வணிகத் தேதித் தேர்வு & தொடர் நாள் வரலாற்றுப் பூட்டுச் சோதனை
+                # -------------------------------------------------------------
+                # 1. கிளையின் எண்ணைப் பெறுதல்
+                raw_b_id = st.session_state.get("branch_id")
+                try:
+                    clean_b_id = int(raw_b_id) if raw_b_id not in (None, "", "null") else 2
+                except (ValueError, TypeError):
+                    clean_b_id = 2
+
+                # 📅 வணிகத் தேதித் தேர்வு
+                ex_d1, ex_d2 = st.columns(2)
+                with ex_d1:
+                    sel_exp_date = st.date_input(
+                        "📅 செலவு செய்யப்பட்ட வணிகத் தேதி (Business Date) *:",
+                        value=date.today(),
+                        max_value=date.today(),
+                        key="branch_exp_date_picker"
+                    )
+                    sel_exp_date_str = str(sel_exp_date)
+
+                # 🔒 இந்தக் கிளையில் கடைசியாகப் பூட்டப்பட்ட அதிகபட்ச தேதியைக் கண்டறிதல்
+                last_closed_exp = (
+                    supabase.table("branch_daily_cash_summary")
+                    .select("summary_date, closing_balance, closed_by")
+                    .in_("branch_id", [clean_b_id, str(clean_b_id)])
+                    .eq("is_closed", True)
+                    .order("summary_date", desc=True)
+                    .limit(1)
+                    .execute()
+                    .data or []
+                )
+
+                exp_day_locked = False
+                exp_lock_reason = ""
+
+                if last_closed_exp:
+                    latest_c_rec = last_closed_exp[0]
+                    max_c_date_str = str(latest_c_rec.get("summary_date"))
+
+                    # ஊழியர் தேர்ந்தெடுத்த தேதி, பூட்டப்பட்ட தேதி அல்லது அதற்கு முந்தைய தேதியாக இருந்தால் தடுத்தல்:
+                    if sel_exp_date_str <= max_c_date_str:
+                        exp_day_locked = True
+                        c_staff = latest_c_rec.get("closed_by") or "நிர்வாகம்"
+                        c_amt = float(latest_c_rec.get("closing_balance") or 0.0)
+                        exp_lock_reason = (
+                            f"இக்கிளையில் **{max_c_date_str}** வரையிலான கணக்குகள் ஏற்கனவே "
+                            f"**{c_staff}** என்பவரால் உறுதிசெய்யப்பட்டுப் பூட்டப்பட்டுவிட்டது (கல்லா இருப்பு: ₹{c_amt:,.2f})."
+                        )
+
+                with ex_d2:
+                    if exp_day_locked:
+                        st.error(f"🔒 **{sel_exp_date_str} தேதிக்கான கணக்கு ஏற்கனவே பூட்டப்பட்டுவிட்டது!**")
+                    elif sel_exp_date < date.today():
+                        st.warning(f"⚠️ முந்தைய நாள் விடுபட்ட செலவாகப் பதியப்படுகிறது: **{sel_exp_date_str}**")
+                    else:
+                        st.info(f"✅ இன்றைய வணிகத் தேதி: **{sel_exp_date_str}**")
+
+                # 🚫 பூட்டப்பட்ட தேதியைத் தேர்வு செய்தால் படிவத்தை முழுமையாக முடக்குதல்:
+                if exp_day_locked:
+                    st.error(
+                        f"### 🚫 செலவுப் பதிவு அனுமதிக்கப்படாது!\n\n"
+                        f"{exp_lock_reason}\n\n"
+                        f"👉 **பாதுகாப்பு விதி:** ஒரு தேதி பூட்டப்பட்டுவிட்டால், அந்தத் தேதியிலோ அல்லது அதற்கு முந்தைய தேதிகளிலோ "
+                        f"(எ.கா: **{sel_exp_date_str}**) புதிய செலவுப் பதிவுகளை மேற்கொள்ள முடியாது!\n\n"
+                        f"தயவுசெய்து மேலே உள்ள காலண்டரில் **பூட்டப்படாத நடப்பு வணிகத் தேதியைத் தேர்வு செய்யவும்**."
+                    )
+                    st.stop()  # 👈 பூட்டப்பட்ட நாளாக இருந்தால் கீழே உள்ள படிவம் இயங்காது!
+
+                st.markdown("---")
+
                 with st.form("branch_expense_flow_form", clear_on_submit=True):
                     st.markdown("##### 🔄 புதிய செலவுப் பதிவு (Submit for Operations Approval)")
                     ex_c1, ex_c2, ex_c3 = st.columns(3)
@@ -9629,8 +9700,8 @@ if st.session_state.get("logged_in", False):
                         if is_tally and actual_exp_amount > 0 and exp_ref.strip() and exp_desc.strip():
                             try:
                                 supabase.table("branch_expenses").insert({
-                                    "branch_id": st.session_state.branch_id,
-                                    "expense_date": str(date.today()),
+                                    "branch_id": clean_b_id,
+                                    "expense_date": sel_exp_date_str,  # 👈 காலண்டரில் தேர்வு செய்யப்பட்ட வணிகத் தேதி
                                     "expense_head": exp_head,
                                     "amount": float(actual_exp_amount),
                                     "voucher_no": exp_ref.strip(),
@@ -9644,7 +9715,7 @@ if st.session_state.get("logged_in", False):
                                     "status": "Pending_Approval",
                                 }).execute()
 
-                                st.success(f"✅ ₹{actual_exp_amount:,.2f} செலவுப் பதிவு ஆப்பரேஷன்ஸ் ஒப்புதலுக்கு அனுப்பப்பட்டது!")
+                                st.success(f"✅ ₹{actual_exp_amount:,.2f} செலவுப் பதிவு ({sel_exp_date_str}) ஆப்பரேஷன்ஸ் ஒப்புதலுக்கு அனுப்பப்பட்டது!")
                                 st.rerun()
                             except Exception as e:
                                 st.error(f"பிழை: {e}")
@@ -9705,7 +9776,7 @@ if st.session_state.get("logged_in", False):
                     st.dataframe(
                         pd.DataFrame([
                             {
-                                "தேதி": f.get("created_at", "-")[:10] if f.get("created_at") else "-",
+                                "தேதி": f.get("transfer_date") or (f.get("created_at", "-")[:10] if f.get("created_at") else "-"),
                                 "பரிமாற்ற வகை": f.get("transfer_type", "-"),
                                 "தொகை (₹)": f"₹{float(f.get('amount', 0)):,.2f}",
                                 "நிலை (Status)": (
