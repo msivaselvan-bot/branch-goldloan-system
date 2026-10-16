@@ -7993,6 +7993,7 @@ if st.session_state.get("logged_in", False):
                             st.session_state.current_declaration = None
                             st.session_state.declaration_gl_no = None
                             st.rerun()
+
             # ---------------------------------------------------------------------
             # படி 3: பணம் மற்றும் OTP சரிபார்ப்பு (CASH_OTP)
             # ---------------------------------------------------------------------
@@ -8034,12 +8035,37 @@ if st.session_state.get("logged_in", False):
                 )
                 st.info(f"**{hdr_text}** (வாடிக்கையாளர்: {visit.get('customer_name')})")
 
+                # =====================================================================
+                # 💳 இறுதிப் பணப் பட்டுவாடா & தீர்வுப் பகுதி (Split: Cash + Multi-Bank)
+                # =====================================================================
+                # 🌟 நமது நிறுவனத்தின் 4 வங்கிக் கணக்குகளை எடுத்தல்
+                bank_rows = (
+                    supabase.table("company_bank_accounts")
+                    .select("id, bank_name, display_name, current_balance")
+                    .eq("is_active", True)
+                    .execute()
+                    .data or []
+                )
+                bank_options = (
+                    {b["display_name"]: b["id"] for b in bank_rows}
+                    if bank_rows
+                    else {"Primary Corporate Bank A/C": 1}
+                )
+
+                bank_portion = 0.0
+                cash_portion = 0.0
+                sel_company_bank_id = None
+                sel_company_bank_name = ""
+                bank_ref_no = ""
+                bank_proof_url = None
+                is_bank_details_ready = True
+
                 with st.container(border=True):
                     st.markdown("#### 💳 பணம் செலுத்தும் / பெறும் வழிகள் (Payment Split)")
                     pm_c1, pm_c2 = st.columns([1.5, 2])
                     with pm_c1:
-                        pay_option = st.selectbox(
-                            "பரிமாற்ற வகை *:",
+                        settle_mode = st.selectbox(
+                            "பணத் தீர்வு முறை (Settlement Mode) *:",
                             [
                                 "முழுவதும் ரொக்கம் (100% Cash)",
                                 "முழுவதும் வங்கி / UPI (100% Online)",
@@ -8050,111 +8076,132 @@ if st.session_state.get("logged_in", False):
                         )
 
                     with pm_c2:
-                        if pay_option == "முழுவதும் ரொக்கம் (100% Cash)":
-                            cash_portion = total_needed_abs
+                        if settle_mode == "முழுவதும் ரொக்கம் (100% Cash)":
+                            cash_portion = float(total_needed_abs)
                             bank_portion = 0.0
-                        elif pay_option == "முழுவதும் வங்கி / UPI (100% Online)":
+                        elif settle_mode == "முழுவதும் வங்கி / UPI (100% Online)":
                             cash_portion = 0.0
-                            bank_portion = total_needed_abs
+                            bank_portion = float(total_needed_abs)
                         else:
                             cash_portion = st.number_input(
-                                "ரொக்கப் பகுதி (₹) *:",
+                                "கல்லா ரொக்கப் பகுதி (₹) *:",
                                 min_value=0.0,
                                 max_value=float(total_needed_abs),
                                 step=500.0,
                                 disabled=otp_already_sent,
                                 key="cash_portion_input",
                             )
-                            bank_portion = total_needed_abs - cash_portion
+                            bank_portion = float(total_needed_abs) - cash_portion
 
                     m_col1, m_col2 = st.columns(2)
-                    m_col1.metric("கல்லா நிகர ரொக்கம்", f"₹{cash_portion:,.2f}")
-                    m_col2.metric("வங்கி வழியே கணக்கீடு", f"₹{bank_portion:,.2f}")
+                    m_col1.metric("💵 கல்லா நிகர ரொக்கம்", f"₹{cash_portion:,.2f}")
+                    m_col2.metric("🏦 வங்கி வழியே கணக்கீடு", f"₹{bank_portion:,.2f}")
 
                     # =========================================================================
-                    # 🌟 வங்கி வரவு விவரங்கள் (வாடிக்கையாளர் நமக்குத் தரும் போது - 3 புலங்கள் மட்டும்)
+                    # 🌟 வங்கி பரிவர்த்தனை உள்ள போது (bank_portion > 0)
                     # =========================================================================
-                    bank_name = ""
-                    bank_ref_no = ""
-                    bank_proof_url = None
-                    is_bank_details_ready = True
-
-                    # நிலை 1: வாடிக்கையாளர் நமக்கு பணம் செலுத்தினால் (Pay-IN)
-                    if net_target <= 0 and bank_portion > 0:
+                    if bank_portion > 0:
                         st.markdown("---")
-                        st.markdown("##### 🏛️ வாடிக்கையாளர் செலுத்திய வங்கி வரவு விவரங்கள்")
-                        st.caption("வாடிக்கையாளர் பணம் செலுத்திய வங்கி மற்றும் UTR எண்ணை உள்ளிட்டு ஸ்கிரீன்ஷாட்டை இணைக்கவும் (ஆப்பரேஷன்ஸ் சரிபார்ப்பிற்கு செல்லும்).")
                         
-                        bk_col1, bk_col2 = st.columns(2)
-                        with bk_col1:
-                            bank_name = st.selectbox(
-                                "பணம் வரவு வைக்கப்பட்ட வங்கி *:",
-                                ["HDFC Bank", "Kotak Mahindra Bank", "Indian Overseas Bank", "SBI", "Canara Bank", "Axis Bank", "ICICI Bank", "Google Pay / PhonePe UPI", "இதர வங்கிகள்"],
+                        # ---------------------------------------------------------------------
+                        # நிலை 1: வாடிக்கையாளர் நமக்கு பணம் செலுத்தினால் (Pay-IN: Release, Interest, etc.)
+                        # ---------------------------------------------------------------------
+                        if net_target <= 0:
+                            st.markdown("##### 🏛️ வாடிக்கையாளர் செலுத்திய வங்கி வரவு விவரங்கள்")
+                            st.caption("வாடிக்கையாளர் செலுத்திய நமது நிறுவனத்தின் குறிப்பிட்ட வங்கி, UTR எண் மற்றும் ரசீதை இணைக்கவும்.")
+
+                            bk_col1, bk_col2 = st.columns(2)
+                            with bk_col1:
+                                sel_company_bank_name = st.selectbox(
+                                    "பணம் வந்து சேர்ந்த நமது வங்கி (Received Bank A/C) *:",
+                                    options=list(bank_options.keys()),
+                                    disabled=otp_already_sent,
+                                    key="in_comp_bank_name_sel"
+                                )
+                                sel_company_bank_id = bank_options[sel_company_bank_name]
+                            with bk_col2:
+                                bank_ref_no = st.text_input(
+                                    "பரிவர்த்தனை எண் (UTR / Ref No) *:",
+                                    placeholder="எ.கா: 4289XXXXXXXX",
+                                    max_chars=35,
+                                    disabled=otp_already_sent,
+                                    key="in_bank_ref_input"
+                                )
+
+                            up_file = st.file_uploader(
+                                "📎 பணம் செலுத்திய ரசீது / Screenshot *:",
+                                type=["jpg", "jpeg", "png", "pdf"],
                                 disabled=otp_already_sent,
-                                key="in_bank_name_sel"
+                                key="in_bank_slip_upload"
                             )
-                        with bk_col2:
-                            bank_ref_no = st.text_input(
-                                "பரிவர்த்தனை எண் (UTR / Ref No) *:",
-                                placeholder="எ.கா: 4289XXXXXXXX",
-                                max_chars=35,
-                                disabled=otp_already_sent,
-                                key="in_bank_ref_input"
-                            )
+                            
+                            if up_file:
+                                try:
+                                    file_ext = up_file.name.split(".")[-1]
+                                    file_path = f"bank_slips/{visit.get('customer_id')}_{int(datetime.now().timestamp())}.{file_ext}"
+                                    supabase.storage.from_("branch_documents").upload(file_path, up_file.getvalue())
+                                    bank_proof_url = supabase.storage.from_("branch_documents").get_public_url(file_path)
+                                    st.success("✅ ரசீது வெற்றிகரமாக இணைக்கப்பட்டது!")
+                                except Exception:
+                                    file_path = f"bank_slips/{visit.get('customer_id')}_{int(datetime.now().timestamp())}.{file_ext}"
+                                    bank_proof_url = supabase.storage.from_("branch_documents").get_public_url(file_path)
 
-                        up_file = st.file_uploader(
-                            "📎 பணம் செலுத்திய ரசீது / Screenshot *:",
-                            type=["jpg", "jpeg", "png", "pdf"],
-                            disabled=otp_already_sent,
-                            key="in_bank_slip_upload"
-                        )
-                        
-                        if up_file:
-                            try:
-                                file_ext = up_file.name.split(".")[-1]
-                                file_path = f"bank_slips/{visit.get('customer_id')}_{int(datetime.now().timestamp())}.{file_ext}"
-                                supabase.storage.from_("branch_documents").upload(file_path, up_file.getvalue())
-                                bank_proof_url = supabase.storage.from_("branch_documents").get_public_url(file_path)
-                                st.success("✅ ரசீது வெற்றிகரமாக இணைக்கப்பட்டது!")
-                            except Exception:
-                                file_path = f"bank_slips/{visit.get('customer_id')}_{int(datetime.now().timestamp())}.{file_ext}"
-                                bank_proof_url = supabase.storage.from_("branch_documents").get_public_url(file_path)
+                            if not bank_ref_no.strip() or not bank_proof_url:
+                                st.warning("⚠️ வங்கி வரவுக்கான UTR எண் மற்றும் ரசீது அட்டாச்மென்ட் இரண்டும் கட்டாயம் தேவை!")
+                                is_bank_details_ready = False
+                            else:
+                                is_bank_details_ready = True
 
-                        if not bank_ref_no.strip() or not bank_proof_url:
-                            st.warning("⚠️ வங்கி வரவுக்கான UTR எண் மற்றும் ரசீது அட்டாச்மென்ட் இரண்டும் கட்டாயம் தேவை!")
-                            is_bank_details_ready = False
+                        # ---------------------------------------------------------------------
+                        # நிலை 2: நாம் வாடிக்கையாளருக்கு கடன்/பட்டுவாடா செய்யும் போது (Pay-OUT: Pledge, RD/FD Closure)
+                        # ---------------------------------------------------------------------
                         else:
-                            is_bank_details_ready = True
+                            st.markdown("##### 🏦 பட்டுவாடா செய்யும் நமது வங்கி & வாடிக்கையாளர் கணக்கு விவரங்கள்")
+                            
+                            # 🌟 1. பணம் அனுப்பும் நமது நிறுவன வங்கிக் கணக்குத் தேர்வு
+                            b_out_c1, b_out_c2 = st.columns(2)
+                            with b_out_c1:
+                                sel_company_bank_name = st.selectbox(
+                                    "பணம் அனுப்பும் நமது வங்கி (Paid From Bank A/C) *:",
+                                    options=list(bank_options.keys()),
+                                    disabled=otp_already_sent,
+                                    key="out_comp_bank_name_sel"
+                                )
+                                sel_company_bank_id = bank_options[sel_company_bank_name]
+                            with b_out_c2:
+                                bank_ref_no = st.text_input(
+                                    "தலைமையக NEFT/RTGS UTR எண் (இருப்பின் உள்ளிடவும்):",
+                                    placeholder="எ.கா: UTR...",
+                                    disabled=otp_already_sent,
+                                    key="out_bank_ref_input"
+                                )
 
-                    # நிலை 2: நாம் வாடிக்கையாளருக்கு கடன்/பட்டுவாடா செய்யும்போது (Pay-OUT - வாடிக்கையாளர் வங்கி விவரங்கள்)
-                    elif net_target > 0 and bank_portion > 0:
-                        st.markdown("---")
-                        st.markdown("##### 🏦 வாடிக்கையாளர் வங்கி விவரங்கள் (தலைமையகம் பணம் அனுப்ப)")
-                        b_col1, b_col2, b_col3 = st.columns(3)
-                        with b_col1:
-                            b_holder = st.text_input("கணக்கு உரிமையாளர் பெயர் *:", value=visit.get("customer_name", ""), disabled=otp_already_sent, key="b_holder_in")
-                            b_acc = st.text_input("வங்கி கணக்கு எண் (A/C No) *:", disabled=otp_already_sent, key="b_acc_in")
-                        with b_col2:
-                            bank_name = st.text_input("வங்கி பெயர் *:", placeholder="SBI / HDFC", disabled=otp_already_sent, key="b_name_in")
-                            b_ifsc = st.text_input("IFSC கோடு *:", placeholder="SBIN0001234", disabled=otp_already_sent, key="b_ifsc_in").upper().strip()
-                        with b_col3:
-                            b_branch = st.text_input("கிளை (Branch) *:", placeholder="நாகர்கோவில்", disabled=otp_already_sent, key="b_branch_in")
-                            b_phone = st.text_input("மொபைல் எண்:", value=visit.get("mobile", ""), disabled=otp_already_sent, key="b_phone_in")
+                            st.caption("வாடிக்கையாளரின் சேமிப்புக் கணக்கு விவரங்கள் (தலைமையகம் பணம் அனுப்ப):")
+                            b_col1, b_col2, b_col3 = st.columns(3)
+                            with b_col1:
+                                b_holder = st.text_input("வாடிக்கையாளர் கணக்கு பெயர் *:", value=visit.get("customer_name", ""), disabled=otp_already_sent, key="b_holder_in")
+                                b_acc = st.text_input("வாடிக்கையாளர் A/C எண் *:", disabled=otp_already_sent, key="b_acc_in")
+                            with b_col2:
+                                cust_bank_name = st.text_input("வாடிக்கையாளர் வங்கிப் பெயர் *:", placeholder="SBI / HDFC", disabled=otp_already_sent, key="b_name_in")
+                                b_ifsc = st.text_input("IFSC கோடு *:", placeholder="SBIN0001234", disabled=otp_already_sent, key="b_ifsc_in").upper().strip()
+                            with b_col3:
+                                b_branch = st.text_input("வங்கி கிளை (Branch) *:", placeholder="நாகர்கோவில்", disabled=otp_already_sent, key="b_branch_in")
+                                b_phone = st.text_input("வாடிக்கையாளர் மொபைல்:", value=visit.get("mobile", ""), disabled=otp_already_sent, key="b_phone_in")
 
-                        doc_c1, doc_c2 = st.columns(2)
-                        with doc_c1:
-                            passbook_file = st.file_uploader("1. பாஸ்புக் / செக் இலை நகல் *", type=["jpg", "jpeg", "png", "pdf"], disabled=otp_already_sent, key="passbook_file_up")
-                        with doc_c2:
-                            consent_file = st.file_uploader("2. வாடிக்கையாளர் ஒப்புதல் ஆவணம் *", type=["jpg", "jpeg", "png", "pdf"], disabled=otp_already_sent, key="consent_file_up")
+                            doc_c1, doc_c2 = st.columns(2)
+                            with doc_c1:
+                                passbook_file = st.file_uploader("1. பாஸ்புக் / செக் இலை நகல் *", type=["jpg", "jpeg", "png", "pdf"], disabled=otp_already_sent, key="passbook_file_up")
+                            with doc_c2:
+                                consent_file = st.file_uploader("2. வாடிக்கையாளர் ஒப்புதல் ஆவணம் *", type=["jpg", "jpeg", "png", "pdf"], disabled=otp_already_sent, key="consent_file_up")
 
-                        if not all([b_holder.strip(), b_acc.strip(), bank_name.strip(), b_ifsc.strip(), b_branch.strip()]):
-                            st.warning("⚠️ அனைத்து வங்கி விவரங்களையும் முழுமையாக உள்ளிடவும்!")
-                            is_bank_details_ready = False
-                        elif not passbook_file or not consent_file:
-                            st.warning("⚠️ பாஸ்புக் மற்றும் ஒப்புதல் ஆவணம் இரண்டையும் பதிவேற்ற வேண்டும்!")
-                            is_bank_details_ready = False
-                        else:
-                            is_bank_details_ready = True
+                            if not all([b_holder.strip(), b_acc.strip(), cust_bank_name.strip(), b_ifsc.strip(), b_branch.strip()]):
+                                st.warning("⚠️ வாடிக்கையாளரின் அனைத்து வங்கி விவரங்களையும் முழுமையாக உள்ளிடவும்!")
+                                is_bank_details_ready = False
+                            elif not passbook_file or not consent_file:
+                                st.warning("⚠️ பாஸ்புக் மற்றும் ஒப்புதல் ஆவணம் இரண்டையும் பதிவேற்ற வேண்டும்!")
+                                is_bank_details_ready = False
+                            else:
+                                is_bank_details_ready = True
 
                     st.markdown("---")
 
