@@ -6853,50 +6853,58 @@ if st.session_state.get("logged_in", False):
                 # கிளை ஐடி (Nagercoil id = 2)
                 raw_b_id = st.session_state.get("branch_id")
                 try:
-                    active_branch_id = int(raw_b_id) if raw_b_id not in (None, "", "null") else 2
+                    clean_b_id = int(raw_b_id) if raw_b_id not in (None, "", "null") else 2
                 except Exception:
-                    active_branch_id = 2
+                    clean_b_id = 2
 
-                # 🔒 Supabase-ல் branch_id = 2 மற்றும் branch_id = '2' ஆகிய இரண்டிற்கும் பொருந்தும் வகையில் தேடுதல்:
-                check_day_closed = (
+                # 🔒 1. இந்தக் கிளையில் கடைசியாகப் பூட்டப்பட்ட அதிகபட்ச தேதியைக் கண்டறிதல் (Latest Closed Date)
+                last_closed_query = (
                     supabase.table("branch_daily_cash_summary")
-                    .select("*")
-                    .in_("branch_id", [active_branch_id, str(active_branch_id)])
-                    .eq("summary_date", visit_date_str)
+                    .select("summary_date, closing_balance, closed_by")
+                    .in_("branch_id", [clean_b_id, str(clean_b_id)])
+                    .eq("is_closed", True)
+                    .order("summary_date", desc=True)
+                    .limit(1)
                     .execute()
                     .data or []
                 )
 
                 day_is_locked = False
-                lock_row = {}
+                lock_reason = ""
+                latest_closed_str = ""
 
-                if check_day_closed:
-                    lock_row = check_day_closed[0]
-                    # is_closed மதிப்பானது True, 'true', 'TRUE', 't' அல்லது 1 என இருந்தாலும் பூட்டப்பட்டதாக எடுத்துக்கொள்ளும்:
-                    val_closed = lock_row.get("is_closed")
-                    if val_closed is True or str(val_closed).lower() in ["true", "t", "1"]:
+                if last_closed_query:
+                    latest_closed_rec = last_closed_query[0]
+                    latest_closed_str = str(latest_closed_rec.get("summary_date"))
+                    
+                    # ஊழியர் தேர்வு செய்த தேதி, கடைசியாகப் பூட்டிய தேதி அல்லது அதற்கு முந்தைய தேதியாக இருந்தால் தடுத்தல்:
+                    if visit_date_str <= latest_closed_str:
                         day_is_locked = True
+                        c_staff = latest_closed_rec.get("closed_by") or "நிர்வாகம்"
+                        c_amt = float(latest_closed_rec.get("closing_balance") or 0.0)
+                        lock_reason = (
+                            f"இக்கிளையில் **{latest_closed_str}** வரையிலான கணக்குகள் ஏற்கனவே "
+                            f"**{c_staff}** என்பவரால் உறுதிசெய்யப்பட்டுப் பூட்டப்பட்டுவிட்டது (கல்லா இருப்பு: ₹{c_amt:,.2f})."
+                        )
 
                 with v_col2:
                     if day_is_locked:
-                        st.error(f"🔒 **{visit_date_str} தேதிக்கான கணக்கு ஏற்கனவே பூட்டப்பட்டுவிட்டது!**")
+                        st.error(f"🔒 **{visit_date_str} தேதிக்கான கணக்கு முடக்கப்பட்டுள்ளது!**")
                     elif visit_date < date.today():
                         st.warning(f"⚠️ முந்தைய நாள் விடுபட்ட பதிவாகக் குறிக்கப்படுகிறது: **{visit_date_str}**")
                     else:
                         st.info(f"✅ இன்றைய வணிகத் தேதி: **{visit_date_str}**")
 
-                # 🚫 பூட்டப்பட்ட தேதியைத் தேர்வு செய்தால் படிவம் கீழே திறக்கவே கூடாது:
+                # 🚫 பூட்டப்பட்ட அல்லது அதற்கு முந்தைய பழைய தேதியைத் தேர்வு செய்தால் படிவத்தை முழுமையாக முடக்குதல்:
                 if day_is_locked:
-                    c_staff = lock_row.get("closed_by") or "நிர்வாகம்"
-                    c_amt = float(lock_row.get("closing_balance") or 0.0)
                     st.error(
-                        f"### 🚫 வணிகப் பதிவுகள் தற்காலிகமாக முடக்கப்பட்டுள்ளன!\n\n"
-                        f"நீங்கள் தேர்வு செய்துள்ள **{visit_date_str}** தேதிக்கான கல்லா இறுதி இருப்பு (₹{c_amt:,.2f}) ஏற்கனவே "
-                        f"**{c_staff}** என்பவரால் உறுதிசெய்யப்பட்டுப் பூட்டப்பட்டுவிட்டது.\n\n"
-                        f"👉 பூட்டப்பட்ட நாளில் புதிய வாடிக்கையாளர் வருகையையோ அல்லது கடன்/பரிவர்த்தனைப் பதிவுகளையோ செய்ய முடியாது!\n\n"
-                        f"தயவுசெய்து மேலே உள்ள காலண்டரில் **பூட்டப்படாத நடப்பு தேதியைத் தேர்வு செய்யவும்**."
+                        f"### 🚫 வணிகப் பதிவுகள் அனுமதிக்கப்படாது!\n\n"
+                        f"{lock_reason}\n\n"
+                        f"👉 **பாதுகாப்பு விதி:** ஒரு தேதி பூட்டப்பட்டுவிட்டால், அந்தத் தேதியிலோ அல்லது அதற்கு முந்தைய எந்தவொரு பழைய தேதிகளிலோ "
+                        f"(எ.கா: **{visit_date_str}**) புதிய வாடிக்கையாளர் வருகையையோ அல்லது கடன்/பரிவர்த்தனைப் பதிவுகளையோ செய்ய இயலாது!\n\n"
+                        f"தயவுசெய்து மேலே உள்ள காலண்டரில் **பூட்டப்படாத நடப்பு வணிகத் தேதியைத் தேர்வு செய்யவும்**."
                     )
-                    st.stop()  # 👈 இங்கேயே தடுத்து நிறுத்தும்!
+                    st.stop()  # 👈 பூட்டப்பட்ட நாளாக இருந்தால் கீழே உள்ள வாடிக்கையாளர் தேடல், படிவம் எதுவும் திறக்காது!
 
                 st.markdown("---")
 
@@ -7272,34 +7280,56 @@ if st.session_state.get("logged_in", False):
             # ---------------------------------------------------------------------
             elif st.session_state.current_visit and st.session_state.current_visit.get("step") == "TRANSACTIONS":
                 visit = st.session_state.current_visit
-                active_b_date = visit.get("visit_date", str(date.today()))
+                active_b_date = str(visit.get("visit_date") or date.today())
 
-                # 🔒 2. செயலில் உள்ள டோக்கனின் தேதியும் ஏற்கனவே பூட்டப்பட்டுவிட்டதா எனச் சரிபார்த்தல்
-                check_active_date_locked = (
+                # கிளை ஐடி (Nagercoil id = 2)
+                raw_b_id = st.session_state.get("branch_id")
+                try:
+                    clean_b_id = int(raw_b_id) if raw_b_id not in (None, "", "null") else 2
+                except Exception:
+                    clean_b_id = 2
+
+                # 🔒 2. இக்கிளையில் கடைசியாகப் பூட்டப்பட்ட அதிகபட்ச தேதியைக் கண்டறிதல் (Latest Closed Date)
+                last_closed_chk = (
                     supabase.table("branch_daily_cash_summary")
-                    .select("is_closed, closed_by, closing_balance")
-                    .eq("branch_id", clean_b_id)
-                    .eq("summary_date", active_b_date)
+                    .select("summary_date, closing_balance, closed_by")
+                    .in_("branch_id", [clean_b_id, str(clean_b_id)])
+                    .eq("is_closed", True)
+                    .order("summary_date", desc=True)
+                    .limit(1)
                     .execute()
                     .data or []
                 )
 
-                if check_active_date_locked:
-                    lock_row_p2 = check_active_date_locked[0]
-                    if lock_row_p2.get("is_closed") is True or str(lock_row_p2.get("is_closed")).lower() == "true":
-                        closed_who = lock_row_p2.get("closed_by") or "நிர்வாகம்"
-                        c_amt_p2 = float(lock_row_p2.get("closing_balance") or 0.0)
-                        st.error(
-                            f"### 🚫 வணிகப் பதிவு முழுமையாக முடக்கப்பட்டுள்ளது!\n\n"
-                            f"இந்த டோக்கன் குறிக்கும் வணிகத் தேதி **{active_b_date}**-க்கான கல்லாக் கணக்கு (₹{c_amt_p2:,.2f}) ஏற்கனவே "
-                            f"**{closed_who}** என்பவரால் உறுதிசெய்யப்பட்டுப் பூட்டப்பட்டுவிட்டது!\n\n"
-                            "👉 பூட்டப்பட்ட தேதியில் புதிய நகைக் கடன், அடமானம் மீட்டல் அல்லது எந்தப் பரிவர்த்தனையையும் சேர்க்க முடியாது."
+                day_is_locked_p2 = False
+                lock_msg_p2 = ""
+
+                if last_closed_chk:
+                    latest_closed_rec_p2 = last_closed_chk[0]
+                    max_closed_date_str = str(latest_closed_rec_p2.get("summary_date"))
+
+                    # டோக்கனின் தேதி கடைசியாகப் பூட்டிய தேதி அல்லது அதற்கு முந்தைய தேதியாக இருந்தால் தடுத்தல்:
+                    if active_b_date <= max_closed_date_str:
+                        day_is_locked_p2 = True
+                        closed_who = latest_closed_rec_p2.get("closed_by") or "நிர்வாகம்"
+                        c_amt_p2 = float(latest_closed_rec_p2.get("closing_balance") or 0.0)
+                        lock_msg_p2 = (
+                            f"இக்கிளையில் **{max_closed_date_str}** வரையிலான கணக்குகள் ஏற்கனவே "
+                            f"**{closed_who}** என்பவரால் உறுதிசெய்யப்பட்டுப் பூட்டப்பட்டுவிட்டது (கல்லா இருப்பு: ₹{c_amt_p2:,.2f})."
                         )
-                        if st.button("✖ இந்தத் தவறான டோக்கனை ரத்து செய்க (Reset Token)", type="primary", key="btn_cancel_locked_tok"):
-                            st.session_state.current_visit = None
-                            st.session_state.transactions_cart = []
-                            st.rerun()
-                        st.stop()  # 👈 படி 2-ல் உள்ள எந்த படிவத்தையும் திறக்கவிடாமல் உடனடியாக நிறுத்தும்!
+
+                if day_is_locked_p2:
+                    st.error(
+                        f"### 🚫 வணிகப் பதிவு முழுமையாக முடக்கப்பட்டுள்ளது!\n\n"
+                        f"{lock_msg_p2}\n\n"
+                        f"இந்த டோக்கன் குறிக்கும் வணிகத் தேதி (**{active_b_date}**), ஏற்கனவே பூட்டப்பட்ட நாளுக்கு முந்தைய அல்லது சமமான நாளாகும்.\n\n"
+                        "👉 பூட்டப்பட்ட நாட்களுக்கான டோக்கனில் புதிய நகைக் கடன், அடமானம் மீட்டல் அல்லது எந்தவொரு பரிவர்த்தனையையும் சேர்க்க முடியாது!"
+                    )
+                    if st.button("✖ இந்தத் தவறான டோக்கனை ரத்து செய்க (Reset Token)", type="primary", key="btn_cancel_locked_tok"):
+                        st.session_state.current_visit = None
+                        st.session_state.transactions_cart = []
+                        st.rerun()
+                    st.stop()  # 👈 பூட்டப்பட்ட நாளாக இருந்தால் படி 2-ன் எந்தவொரு படிவமும் இயங்காது!
 
                 # 🌟 வாடிக்கையாளர் டோக்கன் விவர அட்டை & ரத்து செய்யும் பொத்தான்:
                 st.markdown(
