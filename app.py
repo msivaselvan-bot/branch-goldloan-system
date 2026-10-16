@@ -9360,7 +9360,7 @@ if st.session_state.get("logged_in", False):
                                     "closing_balance": actual_counted_cash,  # 👈 எண்ணப்பட்ட இறுதி கையிருப்பு
                                     "total_bank_in": tot_bank_in,
                                     "total_bank_out": tot_bank_out,
-                                    "denomination_details": denom_payload,
+                                    "closing_denominations": denom_payload,
                                     "is_closed": True,  # 👈 இந்நாள் முழுமையாகப் பூட்டப்பட்டது
                                     "closed_at": str(datetime.now()),
                                     "closed_by": st.session_state.get("username", "Staff"),
