@@ -6792,50 +6792,51 @@ if st.session_state.get("logged_in", False):
             # ---------------------------------------------------------------------
             raw_b_id = st.session_state.get("branch_id")
             try:
-                clean_b_id = int(raw_b_id)
+                clean_b_id = int(raw_b_id) if raw_b_id not in (None, "", "null") else 2
             except (ValueError, TypeError):
-                clean_b_id = 2  # Nagercoil branch id
+                clean_b_id = 2
 
             # முந்தைய நாட்களின் இறுதி இருப்பு பூட்டப்பட்டுள்ளதா எனச் சரிபார்த்தல்
             day_chk = check_branch_day_status(clean_b_id)
             if day_chk.get("status") == "BLOCKED_PENDING_CLOSE":
                 st.error(f"### 🚫 வணிகப் பதிவுகள் தற்காலிகமாக முடக்கப்பட்டுள்ளன!\n\n{day_chk.get('message')}")
                 st.warning(
-                    "👉 **கவனத்திற்கு:** முந்தைய நாளுக்கான இறுதி ரொக்க இருப்பை "
-                    "உறுதிசெய்து நாட்டைப் பூட்டாமல் புதிய பதிவுகளைச் செய்ய முடியாது.\n\n"
-                    "தயவுசெய்து **'💼 கிளை கல்லா'** -> **'📊 தினசரி கிளைக் கணக்கு ஏடு'** பகுதிக்குச் சென்று இந்நாளைப் பூட்டவும்."
+                    "👉 **கவனத்திற்கு:** தொடர் கணக்கு முறைமைப்படி, முந்தைய நாளுக்கான இறுதி ரொக்க இருப்பை "
+                    "உறுதிசெய்து நாட்டைப் பூட்டாமல் இன்றைய புதிய வருகைகளையோ அல்லது கடன்/RD/FD நடவடிக்கைகளையோ பதிவு செய்ய முடியாது.\n\n"
+                    "தயவுசெய்து இடதுபுற மெனுவில் **'💼 கிளை கல்லா'** -> **'📊 தினசரி கிளைக் கணக்கு ஏடு'** பகுதிக்குச் சென்று, "
+                    "கல்லாவில் உள்ள நோட்டுகளை எண்ணி இறுதி இருப்பை உறுதிசெய்து நாட்டைப் பூட்டவும்."
                 )
-                st.stop()
+                st.stop()  # 👈 முந்தைய நாள் கணக்கை முடிக்கும் வரை கீழே உள்ள எந்தப் பகுதியும் இயங்காது!
 
-            # பணியாளர் பட்டியல் எடுத்தல்
+            # ---------------------------------------------------------------------
+            # 2. பணியாளர் பட்டியல் எடுத்தல்
+            # ---------------------------------------------------------------------
             staff_res = supabase.table("users").select("name").eq("branch_id", clean_b_id).eq("is_active", True).execute()
             current_staff_list = ["Walk-in (நேரடி வருகை)"] + [s["name"] for s in staff_res.data] if staff_res.data else ["Walk-in (நேரடி வருகை)"]
-
-            # முந்தைய வருகை சேமிக்கப்பட்ட அட்டை
+            
+            # ---------------------------------------------------------------------
+            # 🎉 முந்தைய வருகை வெற்றிகரமாக முடிந்ததற்கான செய்திப் பலகை (Success Card)
+            # ---------------------------------------------------------------------
             if st.session_state.get("last_saved_visit"):
                 saved = st.session_state["last_saved_visit"]
                 st.success(
                     f"### 🎉 வருகை வெற்றிகரமாகச் சேமிக்கப்பட்டது!\n\n"
-                    f"**வருகை எண்:** `{saved['visit_no']}` | **வாடிக்கையாளர்:** `{saved['customer_name']}`"
+                    f"**வருகை எண்:** `{saved['visit_no']}` &nbsp;|&nbsp; "
+                    f"**வாடிக்கையாளர்:** `{saved['customer_name']}` &nbsp;|&nbsp; "
+                    f"**நடவடிக்கைகள்:** `{saved['txn_count']} எண்ணம்`\n\n"
+                    f"💰 **செலுத்திய தொகை:** ₹{saved['total_paid']:,.2f} &nbsp;|&nbsp; "
+                    f"💰 **பெற்ற தொகை:** ₹{saved['total_received']:,.2f}"
                 )
-                if st.button("✖ இந்த அறிவிப்பை மூடு", key="btn_close_succ_alert"):
+                st.balloons()
+                if st.button("✖ இந்த அறிவிப்பை மூடு (Close Alert)", key="btn_close_succ_alert"):
                     st.session_state["last_saved_visit"] = None
                     st.rerun()
                 st.markdown("---")
 
             # ---------------------------------------------------------------------
-            # 🌟 செஷன் கோளாறுகளைச் சரிசெய்தல் (Fail-Safe Reset)
+            # படி 1: வாடிக்கையாளர் வருகைப் பதிவு (Visit Token) & தற்காலிக வருகைகள்
             # ---------------------------------------------------------------------
-            # current_visit-ல் சரியான விவரங்கள் இல்லாவிட்டால் அதை None என மீட்டமைத்தல்:
-            cur_v = st.session_state.get("current_visit")
-            if cur_v and not cur_v.get("visit_no"):
-                st.session_state.current_visit = None
-                st.rerun()
-
-            # =========================================================================
-            # 🌟 படி 1: வாடிக்கையாளர் வருகைப் பதிவு (Visit Token) & தற்காலிக வருகைகள்
-            # =========================================================================
-            if st.session_state.get("current_visit") is None:
+            if st.session_state.current_visit is None:
                 st.subheader("படி 1: வாடிக்கையாளர் வருகைப் பதிவு (Visit Token)")
 
                 # 📅 வணிகத் தேதித் தேர்வு
@@ -6849,7 +6850,7 @@ if st.session_state.get("logged_in", False):
                     )
                     visit_date_str = str(visit_date)
 
-                # 🔒 இந்தத் தேதி ஏற்கனவே பூட்டப்பட்டுவிட்டதா எனச் சரிபார்த்தல் (Nagercoil b_id = 2)
+                # 🔒 1. தேர்ந்தெடுக்கப்பட்ட வணிகத் தேதி ஏற்கனவே பூட்டப்பட்டுவிட்டதா எனச் சரிபார்த்தல்
                 check_day_closed = (
                     supabase.table("branch_daily_cash_summary")
                     .select("is_closed, closed_by, closing_balance")
@@ -6860,94 +6861,35 @@ if st.session_state.get("logged_in", False):
                 )
 
                 day_is_locked = False
-                lock_row = {}
+                lock_details = {}
                 if check_day_closed:
-                    lock_row = check_day_closed[0]
-                    if lock_row.get("is_closed") is True or str(lock_row.get("is_closed")).lower() == "true":
+                    first_row = check_day_closed[0]
+                    if first_row.get("is_closed") is True or str(first_row.get("is_closed")).lower() == "true":
                         day_is_locked = True
+                        lock_details = first_row
 
                 with v_col2:
                     if day_is_locked:
                         st.error(f"🔒 **{visit_date_str} தேதிக்கான கணக்கு ஏற்கனவே பூட்டப்பட்டுவிட்டது!**")
                     elif visit_date < date.today():
-                        st.warning(f"⚠️ முந்தைய நாள் பதிவாகக் குறிக்கப்படுகிறது: **{visit_date_str}**")
+                        st.warning(f"⚠️ முந்தைய நாள் விடுபட்ட பதிவாகக் குறிக்கப்படுகிறது: **{visit_date_str}**")
                     else:
                         st.info(f"✅ இன்றைய வணிகத் தேதி: **{visit_date_str}**")
 
-                # 🚫 பூட்டப்பட்ட தேதியைத் தேர்வு செய்தால் படிவத்தை முழுமையாக முடக்குதல்
+                # 🚫 பூட்டப்பட்ட தேதியைத் தேர்வு செய்தால் படிவத்தை முழுமையாக நிறுத்துதல்
                 if day_is_locked:
-                    c_staff = lock_row.get("closed_by") or "நிர்வாகம்"
-                    c_amt = float(lock_row.get("closing_balance") or 0.0)
+                    c_staff = lock_details.get("closed_by") or "நிர்வாகம்"
+                    c_amt = float(lock_details.get("closing_balance") or 0.0)
                     st.error(
                         f"### 🚫 வணிகப் பதிவுகள் அனுமதிக்கப்படாது!\n\n"
                         f"**{visit_date_str}** தேதிக்கான கல்லா இறுதி இருப்பு (₹{c_amt:,.2f}) ஏற்கனவே "
                         f"**{c_staff}** என்பவரால் உறுதிசெய்யப்பட்டுப் பூட்டப்பட்டுவிட்டது.\n\n"
-                        f"👉 பூட்டப்பட்ட தேதியில் புதிய வாடிக்கையாளர் வருகையையோ அல்லது பிற பதிவுகளையோ செய்ய முடியாது.\n\n"
+                        f"👉 பூட்டப்பட்ட தேதியில் புதிய வாடிக்கையாளர் வருகையையோ அல்லது பிற பதிவுகளையோ செய்ய இயலாது.\n\n"
                         f"தயவுசெய்து மேலே உள்ள காலண்டரில் **பூட்டப்படாத நடப்பு வணிகத் தேதியைத் தேர்வு செய்யவும்**."
                     )
-                    st.stop()
+                    st.stop()  # 👈 எந்த ஒரு வாடிக்கையாளர் படிவத்தையும் திறக்கவிடாமல் உடனடியாக நிறுத்திவிடும்!
 
                 st.markdown("---")
-
-                v_type = st.radio(
-                    "வாடிக்கையாளர் வகை:",
-                    [
-                        "ஏற்கனவே உள்ள வாடிக்கையாளர் (Existing Customer)", 
-                        "புதிய வாடிக்கையாளர் பதிவு (New Customer)",
-                        "📑 தற்காலிக வருகைகள் (Draft Visits - Pending OTP)"
-                    ],
-                    horizontal=True,
-                    key="visit_v_type_radio"
-                )
-
-                # (இங்கு உங்கள் படி 1-ன் Existing, Draft, New Customer படிவங்கள் தொடரும்...)
-
-            # =========================================================================
-            # 🌟 படி 2: வாடிக்கையாளர் வருகை செயலில் இருக்கும் போது (TRANSACTIONS)
-            # =========================================================================
-            else:
-                visit = st.session_state.current_visit
-                active_b_date = visit.get("visit_date", str(date.today()))
-
-                # 🔒 செயலில் உள்ள டோக்கனின் தேதியும் பூட்டப்பட்டதா எனப் பார்த்தல்
-                check_active_date_locked = (
-                    supabase.table("branch_daily_cash_summary")
-                    .select("is_closed, closed_by, closing_balance")
-                    .eq("branch_id", clean_b_id)
-                    .eq("summary_date", active_b_date)
-                    .execute()
-                    .data or []
-                )
-
-                if check_active_date_locked:
-                    l_row = check_active_date_locked[0]
-                    if l_row.get("is_closed") is True or str(l_row.get("is_closed")).lower() == "true":
-                        st.error(
-                            f"### 🚫 வணிகப் பதிவு முடக்கப்பட்டுள்ளது!\n\n"
-                            f"இந்த டோக்கன் குறிக்கும் **{active_b_date}** தேதிக்கான கணக்கு ஏற்கனவே பூட்டப்பட்டுவிட்டது!"
-                        )
-                        if st.button("✖ இந்தத் தவறான டோக்கனை ரத்து செய்க (Reset Token)", type="primary"):
-                            st.session_state.current_visit = None
-                            st.session_state.transactions_cart = []
-                            st.rerun()
-                        st.stop()
-
-                # டோக்கன் தகவல் அட்டை
-                st.markdown(
-                    f"""
-                    <div style="background-color: #f0f2f6; border-left: 5px solid #723a91; padding: 12px; border-radius: 8px; margin-bottom: 15px;">
-                        <b>டோக்கன் எண்:</b> <code style="font-size: 16px;">{visit.get('visit_no')}</code> &nbsp;|&nbsp; 
-                        <b>வாடிக்கையாளர்:</b> {visit.get('customer_name')} ({visit.get('mobile')}) &nbsp;|&nbsp; 
-                        <b>வணிகத் தேதி:</b> <b style="color: #723a91;">{active_b_date}</b>
-                    </div>
-                    """, 
-                    unsafe_allow_html=True
-                )
-
-                if st.button("❌ இந்த டோக்கனை ரத்து செய்க (Cancel Token)", key="btn_cancel_current_token"):
-                    st.session_state.current_visit = None
-                    st.session_state.transactions_cart = []
-                    st.rerun()
 
                 v_type = st.radio(
                     "வாடிக்கையாளர் வகை:",
@@ -6983,7 +6925,6 @@ if st.session_state.get("logged_in", False):
                         selected_draft = draft_map[sel_draft_key]
                         d_vno = selected_draft["visit_no"]
 
-                        # 🌟 customers அட்டவணையில் இருந்து நேரடி பெயர் & மொபைல் எண் எடுத்தல்
                         cust_id = selected_draft.get("customer_id")
                         cust_name = selected_draft.get("customer_name") or "Customer"
                         draft_mobile = ""
@@ -7027,7 +6968,6 @@ if st.session_state.get("logged_in", False):
                         st.markdown("#### 📲 OTP சரிபார்த்து அழைப்புப் பிரிவிற்கு அனுப்புக")
                         dr_col1, dr_col2 = st.columns(2)
 
-                        # அட்மின் விலக்குக் கோரிக்கை நிலை
                         bp_check = (
                             supabase.table("otp_bypass_requests")
                             .select("*")
@@ -7140,7 +7080,7 @@ if st.session_state.get("logged_in", False):
                         )
                         if st.session_state.get("user_role") not in ["Admin", "Auditor", "Operations"]:
                             raw_b_id = st.session_state.get("branch_id")
-                            clean_b_id = int(raw_b_id) if raw_b_id not in (None, "", "null") else 1
+                            clean_b_id = int(raw_b_id) if raw_b_id not in (None, "", "null") else 2
                             cust_filter_query = cust_filter_query.eq("branch_id", clean_b_id)
 
                         matched_custs = cust_filter_query.or_(f"name.ilike.%{q}%,mobile.ilike.%{q}%,customer_code.ilike.%{q}%").limit(20).execute().data or []
@@ -7171,7 +7111,7 @@ if st.session_state.get("logged_in", False):
                                 with c_col3:
                                     if st.button("வருகையைத் தொடங்கு ➔", key=f"start_v_{selected_cust['id']}", type="primary", use_container_width=True):
                                         raw_b_id = st.session_state.get("branch_id")
-                                        clean_b_id = int(raw_b_id) if raw_b_id not in (None, "", "null") else 1
+                                        clean_b_id = int(raw_b_id) if raw_b_id not in (None, "", "null") else 2
                                         b_code = st.session_state.get("branch_code", st.session_state.get("branch", "BR")[:3]).upper()
                                         
                                         v_token = generate_branch_visit_no(clean_b_id, b_code)
@@ -7237,7 +7177,7 @@ if st.session_state.get("logged_in", False):
 
                                                     request_payload = {
                                                         "customer_id": selected_cust["id"],
-                                                        "branch_id": st.session_state.branch_id,
+                                                        "branch_id": clean_b_id,
                                                         "requested_by": st.session_state.username,
                                                         "updated_data": {
                                                             "name": req_name.strip(),
@@ -7298,12 +7238,22 @@ if st.session_state.get("logged_in", False):
 
                                 tcode = f"CUST-{datetime.now().strftime('%m%d%H%M%S')}"
                                 supabase.table("customers").insert({
-                                    "branch_id": st.session_state.branch_id, "customer_code": tcode,
-                                    "name": new_name.strip(), "guardian_name": new_guardian.strip(),
-                                    "dob": str(new_dob), "gender": new_gender, "mobile": new_mob1.strip(), "mobile2": new_mob2.strip(),
-                                    "address": new_address.strip(), "nominee_name": new_nominee.strip(), "nominee_relation": new_relation.strip(),
-                                    "photo_url": photo_url, "id_proof_url": id_doc_url, "address_proof_url": addr_doc_url,
-                                    "kyc_status": "Pending_KYC_Approval", "is_active": False
+                                    "branch_id": clean_b_id, 
+                                    "customer_code": tcode,
+                                    "name": new_name.strip(), 
+                                    "guardian_name": new_guardian.strip(),
+                                    "dob": str(new_dob), 
+                                    "gender": new_gender, 
+                                    "mobile": new_mob1.strip(), 
+                                    "mobile2": new_mob2.strip(),
+                                    "address": new_address.strip(), 
+                                    "nominee_name": new_nominee.strip(), 
+                                    "nominee_relation": new_relation.strip(),
+                                    "photo_url": photo_url, 
+                                    "id_proof_url": id_doc_url, 
+                                    "address_proof_url": addr_doc_url,
+                                    "kyc_status": "Pending_KYC_Approval", 
+                                    "is_active": False
                                 }).execute()
                                 st.success(f"✅ வாடிக்கையாளர் {new_name} பதிவு செய்யப்பட்டு ஒப்புதலுக்கு அனுப்பப்பட்டது!")
                                 st.rerun()
@@ -7314,6 +7264,33 @@ if st.session_state.get("logged_in", False):
             elif st.session_state.current_visit and st.session_state.current_visit.get("step") == "TRANSACTIONS":
                 visit = st.session_state.current_visit
                 active_b_date = visit.get("visit_date", str(date.today()))
+
+                # 🔒 2. செயலில் உள்ள டோக்கனின் தேதியும் ஏற்கனவே பூட்டப்பட்டுவிட்டதா எனச் சரிபார்த்தல்
+                check_active_date_locked = (
+                    supabase.table("branch_daily_cash_summary")
+                    .select("is_closed, closed_by, closing_balance")
+                    .eq("branch_id", clean_b_id)
+                    .eq("summary_date", active_b_date)
+                    .execute()
+                    .data or []
+                )
+
+                if check_active_date_locked:
+                    lock_row_p2 = check_active_date_locked[0]
+                    if lock_row_p2.get("is_closed") is True or str(lock_row_p2.get("is_closed")).lower() == "true":
+                        closed_who = lock_row_p2.get("closed_by") or "நிர்வாகம்"
+                        c_amt_p2 = float(lock_row_p2.get("closing_balance") or 0.0)
+                        st.error(
+                            f"### 🚫 வணிகப் பதிவு முழுமையாக முடக்கப்பட்டுள்ளது!\n\n"
+                            f"இந்த டோக்கன் குறிக்கும் வணிகத் தேதி **{active_b_date}**-க்கான கல்லாக் கணக்கு (₹{c_amt_p2:,.2f}) ஏற்கனவே "
+                            f"**{closed_who}** என்பவரால் உறுதிசெய்யப்பட்டுப் பூட்டப்பட்டுவிட்டது!\n\n"
+                            "👉 பூட்டப்பட்ட தேதியில் புதிய நகைக் கடன், அடமானம் மீட்டல் அல்லது எந்தப் பரிவர்த்தனையையும் சேர்க்க முடியாது."
+                        )
+                        if st.button("✖ இந்தத் தவறான டோக்கனை ரத்து செய்க (Reset Token)", type="primary", key="btn_cancel_locked_tok"):
+                            st.session_state.current_visit = None
+                            st.session_state.transactions_cart = []
+                            st.rerun()
+                        st.stop()  # 👈 படி 2-ல் உள்ள எந்த படிவத்தையும் திறக்கவிடாமல் உடனடியாக நிறுத்தும்!
 
                 # 🌟 வாடிக்கையாளர் டோக்கன் விவர அட்டை & ரத்து செய்யும் பொத்தான்:
                 st.markdown(
