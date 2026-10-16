@@ -1025,51 +1025,67 @@ def check_branch_day_status(branch_id: int):
     """
     கிளையின் முந்தைய நாட்கள் முறையாகப் பூட்டப்பட்டுள்ளதா என்பதையும், 
     தற்போது செயல்பட வேண்டிய வணிகத் தேதியையும் தீர்மானிக்கும்.
+    (summary_date நெடுவரிசையைப் பயன்படுத்தி சரிசெய்யப்பட்டது)
     """
     clean_b_id = int(branch_id)
     today = date.today()
 
-    # 1. இந்த கிளையின் பூட்டப்படாத (Pending Closure) பழைய பதிவுகளை எடுத்தல்
-    pending = (
-        supabase.table("branch_daily_cash_summary")
-        .select("*")
-        .eq("branch_id", clean_b_id)
-        .eq("is_closed", False)
-        .order("business_date", desc=False)
-        .limit(1)
-        .execute()
-        .data
-    )
+    try:
+        # 1. இந்த கிளையின் பூட்டப்படாத (Pending Closure) பழைய பதிவுகளை எடுத்தல்
+        pending = (
+            supabase.table("branch_daily_cash_summary")
+            .select("*")
+            .eq("branch_id", clean_b_id)
+            .eq("is_closed", False)
+            .lt("summary_date", str(today))
+            .order("summary_date", desc=False)
+            .limit(1)
+            .execute()
+            .data
+        )
 
-    if pending:
-        # பூட்டப்படாத பழைய நாள் நிலுவையில் உள்ளது!
+        if pending:
+            p_date = pending[0].get("summary_date")
+            return {
+                "status": "BLOCKED_PENDING_CLOSE",
+                "active_date": p_date,
+                "record": pending[0],
+                "message": f"⚠️ {p_date} தேதிக்கான கணக்கு இன்னும் இறுதி செய்யப்படவில்லை! அதை முடித்த பின்னரே தொடர முடியும்."
+            }
+
+        # 2. கடைசியாகப் பூட்டப்பட்ட நாளின் தகவலைப் பெறுதல்
+        last_closed = (
+            supabase.table("branch_daily_cash_summary")
+            .select("*")
+            .eq("branch_id", clean_b_id)
+            .eq("is_closed", True)
+            .order("summary_date", desc=True)
+            .limit(1)
+            .execute()
+            .data
+        )
+
+        prev_closing_cash = 0.0
+        if last_closed:
+            prev_closing_cash = float(
+                last_closed[0].get("actual_closing")
+                or last_closed[0].get("closing_balance", 0.0)
+                or 0.0
+            )
+
         return {
-            "status": "BLOCKED_PENDING_CLOSE",
-            "active_date": pending[0]["business_date"],
-            "record": pending[0],
-            "message": f"⚠️ {pending[0]['business_date']} தேதிக்கான கணக்கு இன்னும் இறுதி செய்யப்படவில்லை! அதை முடித்த பின்னரே தொடர முடியும்."
+            "status": "READY",
+            "active_date": str(today),
+            "opening_balance": prev_closing_cash,
+            "message": "இயல்பான நிலையில் உள்ளது."
         }
-
-    # 2. கடைசியாகப் பூட்டப்பட்ட நாளின் தகவலைப் பெறுதல்
-    last_closed = (
-        supabase.table("branch_daily_cash_summary")
-        .select("*")
-        .eq("branch_id", clean_b_id)
-        .eq("is_closed", True)
-        .order("business_date", desc=True)
-        .limit(1)
-        .execute()
-        .data
-    )
-
-    prev_closing_cash = float(last_closed[0]["actual_closing"]) if last_closed else 0.0
-
-    return {
-        "status": "READY",
-        "active_date": str(today),
-        "opening_balance": prev_closing_cash,
-        "message": "இயல்பான நிலையில் உள்ளது."
-    }
+    except Exception as e:
+        return {
+            "status": "READY",
+            "active_date": str(today),
+            "opening_balance": 0.0,
+            "message": f"Error: {e}"
+        }
 
 def get_branch_code_by_id(branch_id: int) -> str:
     """கிளை ஐடியிலிருந்து கிளை குறியீட்டைப் (Branch Code) பெறுதல்"""
