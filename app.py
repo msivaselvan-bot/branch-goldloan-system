@@ -8443,8 +8443,11 @@ if st.session_state.get("logged_in", False):
                                             st.session_state.otp_already_sent = False
                                             st.session_state.generated_otp = None
                                             
-                                            st.success(f"🎉 வருகை {current_v_no} வெற்றிகரமாக நிறைவுபெற்றது!")
                                             st.balloons()
+                                            st.success(f"🎉 வருகை {current_v_no} வெற்றிகரமாக நிறைவுபெற்றது!")
+                                            
+                                            import time
+                                            time.sleep(2.5)  # பலூன்கள் பறந்து முடியும் வரை 2.5 நொடிகள் காத்திருப்பு
                                             st.rerun()
 
                                     except Exception as save_err:
