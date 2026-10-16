@@ -7268,7 +7268,7 @@ if st.session_state.get("logged_in", False):
             # =========================================================================
             # 🌟 படி 2 & 3: வாடிக்கையாளர் வருகை செயலில் இருக்கும் போது (Active Visit)
             # =========================================================================
-            else:
+            elif:
                 visit = st.session_state.current_visit
                 active_b_date = visit.get("visit_date", str(date.today()))
                 
