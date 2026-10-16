@@ -6836,68 +6836,58 @@ if st.session_state.get("logged_in", False):
             # ---------------------------------------------------------------------
             # படி 1: வாடிக்கையாளர் வருகைப் பதிவு (Visit Token) & தற்காலிக வருகைகள்
             # ---------------------------------------------------------------------
-            if st.session_state.current_visit is None:
-                st.subheader("படி 1: வாடிக்கையாளர் வருகைப் பதிவு (Visit Token)")
+            elif st.session_state.current_visit and st.session_state.current_visit.get("step") == "TRANSACTIONS":
+                visit = st.session_state.current_visit
+                active_b_date = visit.get("visit_date", str(date.today()))
 
-                # 🌟 கிளையின் சரியான ID பெறுதல் (Nagercoil id = 2)
+                # 🌟 கிளையின் சரியான ID பெறுதல் (Nagercoil = 2)
                 raw_b_id = st.session_state.get("branch_id")
                 try:
                     active_branch_id = int(raw_b_id)
                 except (ValueError, TypeError):
-                    active_branch_id = 2  # Nagercoil branch id
+                    active_branch_id = 2
 
-                # 📅 வணிகத் தேதித் தேர்வு
-                v_col1, v_col2 = st.columns(2)
-                with v_col1:
-                    visit_date = st.date_input(
-                        "📅 வணிகத் தேதி (Business Date) *:", 
-                        value=date.today(), 
-                        max_value=date.today(), 
-                        key="counter_visit_date"
-                    )
-                    visit_date_str = str(visit_date)
-
-                # 🔒 தேர்ந்தெடுக்கப்பட்ட தேதி ஏற்கனவே பூட்டப்பட்டுவிட்டதா எனச் சரிபார்த்தல்
-                check_day_closed = (
+                # 🔒 இந்த டோக்கனின் தேதி பூட்டப்பட்டுவிட்டதா எனப் படி 2-லும் சரிபார்த்தல்
+                check_active_date_locked = (
                     supabase.table("branch_daily_cash_summary")
                     .select("is_closed, closed_by, closing_balance")
                     .eq("branch_id", active_branch_id)
-                    .eq("summary_date", visit_date_str)
+                    .eq("summary_date", active_b_date)
                     .execute()
                     .data or []
                 )
 
-                day_is_locked = False
-                lock_details = {}
-                if check_day_closed:
-                    first_row = check_day_closed[0]
-                    # is_closed True ஆக உள்ளதா எனப் பார்த்தல்
-                    if first_row.get("is_closed") is True or str(first_row.get("is_closed")).lower() == "true":
-                        day_is_locked = True
-                        lock_details = first_row
+                if check_active_date_locked:
+                    lock_row = check_active_date_locked[0]
+                    if lock_row.get("is_closed") is True or str(lock_row.get("is_closed")).lower() == "true":
+                        st.error(
+                            f"### 🚫 வணிகப் பதிவு முழுமையாக முடக்கப்பட்டுள்ளது!\n\n"
+                            f"இந்த டோக்கன் குறிக்கும் **{active_b_date}** தேதிக்கான கல்லாக் கணக்கு ஏற்கனவே "
+                            f"**{lock_row.get('closed_by', 'நிர்வாகம்')}** என்பவரால் பூட்டப்பட்டுவிட்டது!\n\n"
+                            "பூட்டப்பட்ட தேதியில் புதிய நகைக் கடன், அடமானம் மீட்டல் அல்லது எந்தப் பரிவர்த்தனையையும் சேர்க்க முடியாது."
+                        )
+                        if st.button("✖ இந்தத் தவறான டோக்கனை ரத்து செய்க (Cancel & Reset)", type="primary"):
+                            st.session_state.current_visit = None
+                            st.session_state.transactions_cart = []
+                            st.rerun()
+                        st.stop()  # 👈 படி 2-ல் உள்ள படிவங்கள், நகைக்கடன் பட்டன்கள் எதையும் இயங்க விடாது!
 
-                with v_col2:
-                    if day_is_locked:
-                        st.error(f"🔒 **{visit_date_str} தேதிக்கான கணக்கு ஏற்கனவே பூட்டப்பட்டுவிட்டது!**")
-                    elif visit_date < date.today():
-                        st.warning(f"⚠️ முந்தைய நாள் பதிவாகக் குறிக்கப்படுகிறது: **{visit_date_str}**")
-                    else:
-                        st.info(f"✅ இன்றைய வணிகத் தேதி: **{visit_date_str}**")
+                # டோக்கன் தகவல் அட்டை
+                st.markdown(
+                    f"""
+                    <div style="background-color: #f0f2f6; border-left: 5px solid #723a91; padding: 12px; border-radius: 8px; margin-bottom: 15px;">
+                        <b>டோக்கன் எண்:</b> <code style="font-size: 16px;">{visit.get('visit_no')}</code> &nbsp;|&nbsp; 
+                        <b>வாடிக்கையாளர்:</b> {visit.get('customer_name')} ({visit.get('mobile')}) &nbsp;|&nbsp; 
+                        <b>வணிகத் தேதி:</b> <b style="color: #723a91;">{active_b_date}</b>
+                    </div>
+                    """, 
+                    unsafe_allow_html=True
+                )
 
-                # 🚫 பூட்டப்பட்ட தேதியைத் தேர்வு செய்தால் படிவத்தை முழுமையாக நிறுத்துதல்
-                if day_is_locked:
-                    c_staff = lock_details.get("closed_by") or "நிர்வாகம்"
-                    c_amt = float(lock_details.get("closing_balance") or 0.0)
-                    st.error(
-                        f"### 🚫 வணிகப் பதிவுகள் அனுமதிக்கப்படாது!\n\n"
-                        f"**{visit_date_str}** தேதிக்கான கல்லா இறுதி இருப்பு (₹{c_amt:,.2f}) ஏற்கனவே "
-                        f"**{c_staff}** என்பவரால் உறுதிசெய்யப்பட்டுப் பூட்டப்பட்டுவிட்டது.\n\n"
-                        f"👉 பூட்டப்பட்ட தேதியில் புதிய வாடிக்கையாளர் வருகையையோ அல்லது பிற பதிவுகளையோ செய்ய இயலாது.\n\n"
-                        f"தயவுசெய்து மேலே உள்ள காலண்டரில் **பூட்டப்படாத நடப்பு வணிகத் தேதியைத் தேர்வு செய்யவும்**."
-                    )
-                    st.stop()  # 👈 எந்த ஒரு வாடிக்கையாளர் படிவத்தையும் திறக்கவிடாமல் உடனடியாக நிறுத்திவிடும்!
-
-                st.markdown("---")
+                if st.button("❌ இந்த டோக்கனை ரத்து செய்க (Cancel Token)", key="btn_cancel_current_token"):
+                    st.session_state.current_visit = None
+                    st.session_state.transactions_cart = []
+                    st.rerun()
 
                 v_type = st.radio(
                     "வாடிக்கையாளர் வகை:",
