@@ -11150,6 +11150,7 @@ if st.session_state.get("logged_in", False):
             # 🌟 2. நேரடி வங்கி இருப்புகள் பலகை (Live Multi-Bank Status Metrics)
             # -------------------------------------------------------------------------
             try:
+                # 1. வங்கிக் கணக்குகளை எடுத்தல்
                 current_banks = (
                     supabase.table("company_bank_accounts")
                     .select("*")
@@ -11158,6 +11159,32 @@ if st.session_state.get("logged_in", False):
                     .execute()
                     .data or []
                 )
+
+                # 🌟 2. பாஸ்புக் பரிவர்த்தனைகளின் அடிப்படையில் இருப்புகளைத் துல்லியமாக மறு கணக்கீடு செய்தல்:
+                for acc in current_banks:
+                    b_id = acc["id"]
+                    op_b = float(acc.get("opening_balance") or 0.0)
+                    
+                    # குறிப்பிட்ட வங்கிக் கணக்கிற்குரிய அனைத்து பாஸ்புக் வரவு/பற்றுகளையும் திரட்டுதல்
+                    tx_data = (
+                        supabase.table("bank_transactions")
+                        .select("txn_flow, amount")
+                        .eq("bank_account_id", b_id)
+                        .execute()
+                        .data or []
+                    )
+                    
+                    # IN எனில் கூட்டல் (+), OUT எனில் கழித்தல் (-)
+                    net_flow = sum(
+                        float(t.get("amount") or 0.0) if t.get("txn_flow") == "IN" 
+                        else -float(t.get("amount") or 0.0) 
+                        for t in tx_data
+                    )
+                    
+                    # 🌟 துல்லியமான உண்மையான இருப்பு (தொடக்க இருப்பு + பாஸ்புக் நிகரப் பரிமாற்றம்)
+                    real_calc_balance = op_b + net_flow
+                    acc["current_balance"] = real_calc_balance
+
             except Exception as e:
                 st.error(f"வங்கிக் கணக்கு விவரங்களைப் பெறுவதில் பிழை: {e}")
                 current_banks = []
