@@ -8442,11 +8442,26 @@ if st.session_state.get("logged_in", False):
                                                     b_code = st.session_state.get("branch_code", "BR")[:3].upper()
                                                     current_v_no = generate_branch_visit_no(clean_b_id, b_code)
 
+                                            # =========================================================================
+                                            # 🌟 டிராஃப்ட் அல்லது நேரடி வருகைக்கான நிலைகளைத் துல்லியமாக நிர்ணயித்தல்
+                                            # =========================================================================
                                             pm_label = "Cash" if bank_portion == 0 else ("Bank/UPI" if cash_portion == 0 else "Split")
-                                            visit_main_status = "Pending_Bank_Verification" if (net_target <= 0 and bank_portion > 0) else "Pending_Calling_Verification"
-                                            payout_status = "Pending_Transfer" if (net_target > 0 and bank_portion > 0) else None
+                                            
+                                            # 1. வங்கி வரவா அல்லது வங்கி பட்டுவாடாவா எனப் பிரித்தல்:
+                                            # net_target <= 0 மற்றும் bank_portion > 0 எனில் -> வாடிக்கையாளர் நமக்கு வங்கி மூலம் செலுத்தினார் (Inflow)
+                                            # net_target > 0 மற்றும் bank_portion > 0 எனில் -> நாம் வாடிக்கையாளருக்கு வங்கி மூலம் தர வேண்டும் (Payout)
+                                            if net_target <= 0 and bank_portion > 0:
+                                                visit_main_status = "Pending_Bank_Verification"  # 👈 வாடிக்கையாளர் வங்கி வரவு சரிபார்ப்பிற்குச் செல்லும்
+                                                payout_status = None
+                                            elif net_target > 0 and bank_portion > 0:
+                                                visit_main_status = "Pending_Calling_Verification"
+                                                payout_status = "Pending_Transfer"  # 👈 வாடிக்கையாளர் வங்கிப் பட்டுவாடா மேசைக்குச் செல்லும்
+                                            else:
+                                                # வங்கிப் பரிமாற்றம் இல்லை, வெறும் ரொக்கம் மட்டுமே எனில்
+                                                visit_main_status = "Pending_Calling_Verification"
+                                                payout_status = None
 
-                                            # பாஸ்புக் மற்றும் ஒப்புதல் ஆவண URL-கள்
+                                            # 2. வாடிக்கையாளர் ஆவண URL-கள்
                                             passbook_url = None
                                             consent_url = None
                                             if net_target > 0 and bank_portion > 0:
@@ -8474,7 +8489,7 @@ if st.session_state.get("logged_in", False):
                                                 "cash_amount": float(cash_portion),
                                                 "bank_amount": float(bank_portion),
                                                 "payment_mode": pm_label,
-                                                "bank_transfer_status": payout_status,
+                                                "bank_transfer_status": payout_status,     # 👈 Payout மேசைக்குத் தேவையானது
                                                 "bank_transfer_type": bank_transfer_type if 'bank_transfer_type' in locals() else "Customer",
                                                 "bank_reference_no": bank_ref_no.strip() if bank_ref_no else None,
                                                 "bank_acc_holder_name": b_holder if 'b_holder' in locals() else None,
@@ -8490,20 +8505,27 @@ if st.session_state.get("logged_in", False):
                                                     "net_change": total_cash_in - total_cash_out,
                                                 },
                                                 "otp_verified": True,
-                                                "status": visit_main_status
+                                                "status": visit_main_status                 # 👈 Inflow மேசைக்குத் தேவையானது
                                             }
 
+                                            # 🌟 3. ஏற்கனவே உள்ள டிராஃப்ட் எனில் UPDATE செய்தல்
                                             if is_existing_draft:
                                                 target_id = chk_draft.data[0]["id"]
                                                 supabase.table("customer_visits").update(visit_payload).eq("id", target_id).execute()
                                                 new_visit_id = target_id
+                                                
+                                                # டிராஃப்ட் செய்யப்பட்ட பரிவர்த்தனைகளின் நிலையை மாற்றுதல்:
+                                                # வங்கி வரவு சரிபார்ப்பில் இருந்தால் Pending, இல்லையெனில் Approved
+                                                txn_target_status = "Pending" if visit_main_status == "Pending_Bank_Verification" else "Approved"
+                                                supabase.table("transactions").update({
+                                                    "status": txn_target_status
+                                                }).eq("visit_id", new_visit_id).execute()
                                             else:
+                                                # புதிய வருகை எனில் INSERT செய்தல்
                                                 visit_payload["visit_no"] = current_v_no
                                                 visit_payload["customer_id"] = c_id
                                                 visit_payload["branch_id"] = clean_b_id
                                                 v_insert = supabase.table("customer_visits").insert(visit_payload).execute()
-                                                if not v_insert.data:
-                                                    raise Exception("customer_visits அட்டவணையில் பதிவைச் சேர்க்க முடியவில்லை!")
                                                 new_visit_id = v_insert.data[0]["id"]
 
                                             # =========================================================================
