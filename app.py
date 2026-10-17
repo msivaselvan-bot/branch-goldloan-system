@@ -8752,56 +8752,6 @@ if st.session_state.get("logged_in", False):
                                                     supabase.table("transactions").insert(gen_txn).execute()
 
                                             # =========================================================================
-                                            # 🌟 4. வங்கிப் பரிவர்த்தனை இருப்பைப் புதுப்பித்தல் (Bank Liquidity Update)
-                                            # =========================================================================
-                                            target_bank_id = sel_company_bank_id if 'sel_company_bank_id' in locals() and sel_company_bank_id else (sel_bank_id if 'sel_bank_id' in locals() else None)
-
-                                            if float(bank_portion) > 0 and target_bank_id:
-                                                try:
-                                                    b_acc_data = (
-                                                        supabase.table("company_bank_accounts")
-                                                        .select("current_balance, display_name")
-                                                        .eq("id", target_bank_id)
-                                                        .single()
-                                                        .execute()
-                                                        .data
-                                                    )
-                                                    current_b_bal = float(b_acc_data.get("current_balance") or 0.0) if b_acc_data else 0.0
-                                                    b_disp_name = b_acc_data.get("display_name", "Corporate Bank") if b_acc_data else "Corporate Bank"
-
-                                                    c_disp_name = c_name or visit.get("customer_name", "வாடிக்கையாளர்")
-                                                    c_token_no = current_v_no or visit.get("visit_no", "-")
-                                                    b_txn_date = str(visit.get("visit_date") or date.today())
-
-                                                    if net_target > 0:
-                                                        new_b_bal = current_b_bal - float(bank_portion)
-                                                        flow_direction = "OUT"
-                                                        rem_text = f"Customer Payout (கடன்/பட்டுவாடா): {c_disp_name} (Token: {c_token_no})"
-                                                    else:
-                                                        new_b_bal = current_b_bal + float(bank_portion)
-                                                        flow_direction = "IN"
-                                                        rem_text = f"Customer Collection (மீட்டல்/வரவு): {c_disp_name} (Token: {c_token_no})"
-
-                                                    supabase.table("company_bank_accounts").update({
-                                                        "current_balance": new_b_bal
-                                                    }).eq("id", target_bank_id).execute()
-
-                                                    supabase.table("bank_transactions").insert({
-                                                        "bank_account_id": target_bank_id,
-                                                        "branch_id": clean_b_id,
-                                                        "visit_id": new_visit_id,
-                                                        "txn_date": b_txn_date,
-                                                        "txn_flow": flow_direction,
-                                                        "amount": float(bank_portion),
-                                                        "reference_no": str(bank_ref_no or "").strip(),
-                                                        "remarks": rem_text,
-                                                        "created_by": st.session_state.get("username", "Staff")
-                                                    }).execute()
-
-                                                except Exception as b_err:
-                                                    st.error(f"⚠️ வங்கி இருப்பைப் புதுப்பிப்பதில் பிழை: {b_err}")
-
-                                            # =========================================================================
                                             # 🌟 5. முடித்தல், பலூன் மற்றும் மறுஏற்றம் (Reset & Balloons)
                                             # =========================================================================
                                             st.session_state.transactions_cart = []
