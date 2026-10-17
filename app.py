@@ -9265,7 +9265,7 @@ if st.session_state.get("logged_in", False):
                     t_time = str(v.get("created_at", "-"))[11:16]
                     v_no = v.get("visit_no", "-")
                     
-                    # வாடிக்கையாளர் பெயர் பெறுதல் (customers அட்டவணை அல்லது transactions-லிருந்து)
+                    # வாடிக்கையாளர் பெயர்
                     cust = (
                         cust_names_map.get(v.get("customer_id"))
                         or txns_by_visit.get(v["id"], {}).get("name")
@@ -9276,27 +9276,30 @@ if st.session_state.get("logged_in", False):
                     t_rec = float(v.get("total_received", 0.0) or 0.0)
                     t_paid = float(v.get("total_paid", 0.0) or 0.0)
 
-                    # உண்மையான ரொக்கம் மற்றும் வங்கிப் பிரிப்பு
+                    # கார்ட்டில் உள்ள உண்மையான ரொக்கம் மற்றும் வங்கிப் பிரிப்பு
                     c_portion = float(v.get("cash_amount", 0.0) or 0.0)
                     b_portion = float(v.get("bank_amount", 0.0) or 0.0)
 
                     act_list = txns_by_visit.get(v["id"], {}).get("types", [])
                     act_str = ", ".join(list(dict.fromkeys(act_list))) if act_list else "வணிக நடவடிக்கை"
 
+                    # 🌟 1. வரவு மற்றும் பற்று இரண்டையும் தனித்தனியாகக் காட்டுதல் (எதுவும் மறையாது)
+                    varavu_str = f"₹{t_rec:,.2f}" if t_rec > 0 else "-"
+                    patru_str = f"₹{t_paid:,.2f}" if t_paid > 0 else "-"
+
+                    # 🌟 2. கல்லா மொத்தக் கணக்கீடு (நிகர ரொக்கத்தின் அடிப்படையில் துல்லியமாக கூட்டுதல்)
+                    # நிறுவனம் கொடுத்தது (Pay-OUT) அதிகமாக இருந்தால்:
                     if t_paid > t_rec:
                         tot_cash_out += c_portion
                         tot_bank_out += b_portion
-                        c_display = f"₹{c_portion:,.2f}" if c_portion > 0 else "-"
-                        b_display = f"₹{b_portion:,.2f}" if b_portion > 0 else "-"
-                        varavu_str = "-"
-                        patru_str = f"₹{t_paid:,.2f}"
+                        c_display = f"(-) ₹{c_portion:,.2f}" if c_portion > 0 else "-"
+                        b_display = f"(-) ₹{b_portion:,.2f}" if b_portion > 0 else "-"
                     else:
+                        # நிறுவனம் பெற்றது (Pay-IN) அதிகமாக இருந்தால்:
                         tot_cash_in += c_portion
                         tot_bank_in += b_portion
-                        c_display = f"₹{c_portion:,.2f}" if c_portion > 0 else "-"
-                        b_display = f"₹{b_portion:,.2f}" if b_portion > 0 else "-"
-                        varavu_str = f"₹{t_rec:,.2f}"
-                        patru_str = "-"
+                        c_display = f"(+) ₹{c_portion:,.2f}" if c_portion > 0 else "-"
+                        b_display = f"(+) ₹{b_portion:,.2f}" if b_portion > 0 else "-"
 
                     unified_daybook_rows.append({
                         "நேரம்": t_time,
@@ -9304,10 +9307,10 @@ if st.session_state.get("logged_in", False):
                         "வகை": "வணிக வருகை",
                         "விவரம் / வாடிக்கையாளர்": cust,
                         "நடவடிக்கை": act_str,
-                        "வரவு (IN)": varavu_str,
-                        "பற்று (OUT)": patru_str,
-                        "ரொக்கம் (Cash)": c_display,
-                        "வங்கி (Bank)": b_display
+                        "வரவு (IN)": varavu_str,       # 👈 ₹40,554.00 தெளிவாகக் காட்டும்
+                        "பற்று (OUT)": patru_str,       # 👈 ₹28,927.00 தெளிவாகக் காட்டும்
+                        "ரொக்கம் (Cash)": c_display,   # 👈 (+) ₹6,000.00
+                        "வங்கி (Bank)": b_display      # 👈 (+) ₹5,627.00
                     })
 
                 # -------------------------------------------------------------------------
