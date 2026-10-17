@@ -9220,7 +9220,7 @@ if st.session_state.get("logged_in", False):
                 # -------------------------------------------------------------------------
                 day_visits = (
                     supabase.table("customer_visits")
-                    .select("id, created_at, visit_no, customer_name, total_paid, total_received, cash_amount, bank_amount, payment_mode, status")
+                    .select("id, created_at, visit_no, customer_id, total_paid, total_received, cash_amount, bank_amount, payment_mode, status")
                     .eq("branch_id", cur_b_id)
                     .gte("created_at", f"{report_date_str} 00:00:00")
                     .lte("created_at", f"{report_date_str} 23:59:59")
@@ -9231,13 +9231,23 @@ if st.session_state.get("logged_in", False):
                     .data or []
                 )
 
-                # அந்த வருகைகளுக்குரிய குறிப்பிட்ட நடவடிக்கைகளை (Transaction Types) எடுத்தல்
+                # வாடிக்கையாளர் ஐடிகளை எடுத்து பெயர்களைப் பெறுதல்
+                c_ids = list(set([v["customer_id"] for v in day_visits if v.get("customer_id")]))
+                cust_names_map = {}
+                if c_ids:
+                    try:
+                        c_data = supabase.table("customers").select("id, name").in_("id", c_ids).execute().data or []
+                        cust_names_map = {c["id"]: c.get("name", "வாடிக்கையாளர்") for c in c_data}
+                    except Exception:
+                        pass
+
+                # வருகைகளுக்குரிய குறிப்பிட்ட நடவடிக்கைகளை எடுத்தல்
                 v_ids = [v["id"] for v in day_visits]
                 txns_by_visit = {}
                 if v_ids:
                     all_txns = (
                         supabase.table("transactions")
-                        .select("visit_id, transaction_type, staff_name")
+                        .select("visit_id, transaction_type, staff_name, customer_name")
                         .in_("visit_id", v_ids)
                         .execute()
                         .data or []
@@ -9245,29 +9255,34 @@ if st.session_state.get("logged_in", False):
                     for tx in all_txns:
                         vid = tx["visit_id"]
                         if vid not in txns_by_visit:
-                            txns_by_visit[vid] = []
+                            txns_by_visit[vid] = {"types": [], "name": tx.get("customer_name")}
                         if tx.get("transaction_type"):
-                            txns_by_visit[vid].append(tx["transaction_type"])
+                            txns_by_visit[vid]["types"].append(tx["transaction_type"])
+                        if tx.get("customer_name"):
+                            txns_by_visit[vid]["name"] = tx["customer_name"]
 
                 for v in day_visits:
                     t_time = str(v.get("created_at", "-"))[11:16]
                     v_no = v.get("visit_no", "-")
-                    cust = v.get("customer_name", "-")
+                    
+                    # வாடிக்கையாளர் பெயர் பெறுதல் (customers அட்டவணை அல்லது transactions-லிருந்து)
+                    cust = (
+                        cust_names_map.get(v.get("customer_id"))
+                        or txns_by_visit.get(v["id"], {}).get("name")
+                        or "வாடிக்கையாளர்"
+                    )
                     
                     # கார்ட்டின் மொத்த வரவு மற்றும் பற்று
                     t_rec = float(v.get("total_received", 0.0) or 0.0)
                     t_paid = float(v.get("total_paid", 0.0) or 0.0)
 
-                    # கார்ட்டில் உள்ள உண்மையான ரொக்கம் மற்றும் வங்கிப் பிரிப்பு
+                    # உண்மையான ரொக்கம் மற்றும் வங்கிப் பிரிப்பு
                     c_portion = float(v.get("cash_amount", 0.0) or 0.0)
                     b_portion = float(v.get("bank_amount", 0.0) or 0.0)
 
-                    # நடவடிக்கைகள் பட்டியல்
-                    act_list = txns_by_visit.get(v["id"], [])
+                    act_list = txns_by_visit.get(v["id"], {}).get("types", [])
                     act_str = ", ".join(list(dict.fromkeys(act_list))) if act_list else "வணிக நடவடிக்கை"
 
-                    # நிகரத் தொகையின்படி வரவு/பற்று மற்றும் ரொக்கம்/வங்கி தீர்மானித்தல்
-                    # t_paid > t_rec எனில் நிறுவனம் வாடிக்கையாளருக்கு வழங்கியது (OUT)
                     if t_paid > t_rec:
                         tot_cash_out += c_portion
                         tot_bank_out += b_portion
