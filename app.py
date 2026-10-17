@@ -9205,19 +9205,22 @@ if st.session_state.get("logged_in", False):
                         if c_box_res:
                             op_balance = float(c_box_res[0].get("opening_balance", 0.0) or 0.0)
 
-                # 4. துல்லியமான வரவு-செலவு விவரங்கள் சேகரிப்பு
+                # =========================================================================
+                # 4. ஒருங்கிணைந்த தினசரி நாள் ஏடு தரவுகள் சேகரிப்பு (Cash + Bank Split Tracking)
+                # =========================================================================
                 tot_cash_in = 0.0
                 tot_cash_out = 0.0
                 tot_bank_in = 0.0
                 tot_bank_out = 0.0
 
-                cash_table_rows = []
-                bank_table_rows = []
+                unified_daybook_rows = []
 
-                # A. வணிகப் பரிவர்த்தனைகள் (Transactions Table)
-                day_txns = (
-                    supabase.table("transactions")
-                    .select("*")
+                # -------------------------------------------------------------------------
+                # A. வாடிக்கையாளர் வணிக வருகைகள் (Customer Visits & Split Settlements)
+                # -------------------------------------------------------------------------
+                day_visits = (
+                    supabase.table("customer_visits")
+                    .select("id, created_at, visit_no, customer_name, total_paid, total_received, cash_amount, bank_amount, payment_mode, status")
                     .eq("branch_id", cur_b_id)
                     .gte("created_at", f"{report_date_str} 00:00:00")
                     .lte("created_at", f"{report_date_str} 23:59:59")
@@ -9228,41 +9231,73 @@ if st.session_state.get("logged_in", False):
                     .data or []
                 )
 
-                for t in day_txns:
-                    pm = str(t.get("payment_mode", "Cash")).lower()
-                    rec = float(t.get("received_amount", 0.0) or 0.0)
-                    paid = float(t.get("paid_amount", 0.0) or 0.0)
-                    t_type = t.get("transaction_type", "-")
-                    t_time = str(t.get("created_at", "-"))[11:16]
-                    cust = t.get("customer_name", "-")
+                # அந்த வருகைகளுக்குரிய குறிப்பிட்ட நடவடிக்கைகளை (Transaction Types) எடுத்தல்
+                v_ids = [v["id"] for v in day_visits]
+                txns_by_visit = {}
+                if v_ids:
+                    all_txns = (
+                        supabase.table("transactions")
+                        .select("visit_id, transaction_type, staff_name")
+                        .in_("visit_id", v_ids)
+                        .execute()
+                        .data or []
+                    )
+                    for tx in all_txns:
+                        vid = tx["visit_id"]
+                        if vid not in txns_by_visit:
+                            txns_by_visit[vid] = []
+                        if tx.get("transaction_type"):
+                            txns_by_visit[vid].append(tx["transaction_type"])
 
-                    if "bank" not in pm and "online" not in pm and "upi" not in pm and "gpay" not in pm:
-                        tot_cash_in += rec
-                        tot_cash_out += paid
-                        cash_table_rows.append({
-                            "நேரம்": t_time,
-                            "வகை": "வணிக நடவடிக்கை",
-                            "விவரம் / வாடிக்கையாளர்": cust,
-                            "நடவடிக்கை": t_type,
-                            "வரவு (Cash IN)": f"₹{rec:,.2f}" if rec > 0 else "-",
-                            "பற்று (Cash OUT)": f"₹{paid:,.2f}" if paid > 0 else "-",
-                            "பணியாளர்": t.get("staff_name", "-")
-                        })
+                for v in day_visits:
+                    t_time = str(v.get("created_at", "-"))[11:16]
+                    v_no = v.get("visit_no", "-")
+                    cust = v.get("customer_name", "-")
+                    
+                    # கார்ட்டின் மொத்த வரவு மற்றும் பற்று
+                    t_rec = float(v.get("total_received", 0.0) or 0.0)
+                    t_paid = float(v.get("total_paid", 0.0) or 0.0)
+
+                    # கார்ட்டில் உள்ள உண்மையான ரொக்கம் மற்றும் வங்கிப் பிரிப்பு
+                    c_portion = float(v.get("cash_amount", 0.0) or 0.0)
+                    b_portion = float(v.get("bank_amount", 0.0) or 0.0)
+
+                    # நடவடிக்கைகள் பட்டியல்
+                    act_list = txns_by_visit.get(v["id"], [])
+                    act_str = ", ".join(list(dict.fromkeys(act_list))) if act_list else "வணிக நடவடிக்கை"
+
+                    # நிகரத் தொகையின்படி வரவு/பற்று மற்றும் ரொக்கம்/வங்கி தீர்மானித்தல்
+                    # t_paid > t_rec எனில் நிறுவனம் வாடிக்கையாளருக்கு வழங்கியது (OUT)
+                    if t_paid > t_rec:
+                        tot_cash_out += c_portion
+                        tot_bank_out += b_portion
+                        c_display = f"₹{c_portion:,.2f}" if c_portion > 0 else "-"
+                        b_display = f"₹{b_portion:,.2f}" if b_portion > 0 else "-"
+                        varavu_str = "-"
+                        patru_str = f"₹{t_paid:,.2f}"
                     else:
-                        tot_bank_in += rec
-                        tot_bank_out += paid
-                        bank_table_rows.append({
-                            "நேரம்": t_time,
-                            "வாடிக்கையாளர்": cust,
-                            "நடவடிக்கை": t_type,
-                            "வங்கி வரவு (IN)": f"₹{rec:,.2f}" if rec > 0 else "-",
-                            "வங்கி பற்று (OUT)": f"₹{paid:,.2f}" if paid > 0 else "-",
-                            "முறை": t.get("payment_mode", "-"),
-                            "UTR / Ref": t.get("bank_reference_no", "-"),
-                            "பணியாளர்": t.get("staff_name", "-")
-                        })
+                        tot_cash_in += c_portion
+                        tot_bank_in += b_portion
+                        c_display = f"₹{c_portion:,.2f}" if c_portion > 0 else "-"
+                        b_display = f"₹{b_portion:,.2f}" if b_portion > 0 else "-"
+                        varavu_str = f"₹{t_rec:,.2f}"
+                        patru_str = "-"
 
-                # B. கிளைச் செலவுகள் (Branch Expenses)
+                    unified_daybook_rows.append({
+                        "நேரம்": t_time,
+                        "வருகை எண்": v_no,
+                        "வகை": "வணிக வருகை",
+                        "விவரம் / வாடிக்கையாளர்": cust,
+                        "நடவடிக்கை": act_str,
+                        "வரவு (IN)": varavu_str,
+                        "பற்று (OUT)": patru_str,
+                        "ரொக்கம் (Cash)": c_display,
+                        "வங்கி (Bank)": b_display
+                    })
+
+                # -------------------------------------------------------------------------
+                # B. கிளைச் செலவுகள் (Branch Expenses - நேரடி ரொக்கப் பற்று)
+                # -------------------------------------------------------------------------
                 day_expenses = (
                     supabase.table("branch_expenses")
                     .select("*")
@@ -9276,17 +9311,21 @@ if st.session_state.get("logged_in", False):
                 for ex in day_expenses:
                     ex_amt = float(ex.get("amount", 0.0) or 0.0)
                     tot_cash_out += ex_amt
-                    cash_table_rows.append({
-                        "நேரம்": "-",
+                    unified_daybook_rows.append({
+                        "நேரம்": str(ex.get("created_at", "-"))[11:16] if ex.get("created_at") else "-",
+                        "வருகை எண்": "-",
                         "வகை": "கிளைச் செலவு",
-                        "விவரம் / வாடிக்கையாளர்": f"செலவு: {ex.get('expense_head')}",
+                        "விவரம் / வாடிக்கையாளர்": f"செலவு: {ex.get('expense_head', '-')}",
                         "நடவடிக்கை": ex.get("description", "-"),
-                        "வரவு (Cash IN)": "-",
-                        "பற்று (Cash OUT)": f"₹{ex_amt:,.2f}",
-                        "பணியாளர்": ex.get("created_by", "-")
+                        "வரவு (IN)": "-",
+                        "பற்று (OUT)": f"₹{ex_amt:,.2f}",
+                        "ரொக்கம் (Cash)": f"₹{ex_amt:,.2f}",
+                        "வங்கி (Bank)": "-"
                     })
 
-                # C. தலைமையக நிதிப் பரிமாற்றங்கள் (Approved Fund Transfers)
+                # -------------------------------------------------------------------------
+                # C. தலைமையக நிதிப் பரிமாற்றங்கள் (HQ Fund Transfers)
+                # -------------------------------------------------------------------------
                 day_funds = (
                     supabase.table("branch_fund_transfers")
                     .select("*")
@@ -9301,40 +9340,47 @@ if st.session_state.get("logged_in", False):
                 for f in day_funds:
                     f_amt = float(f.get("amount", 0.0) or 0.0)
                     f_type = str(f.get("transfer_type", "")).upper()
-                    
+                    f_time = str(f.get("created_at", "-"))[11:16]
+
                     if "HO_TO_BRANCH" in f_type:
                         tot_cash_in += f_amt
-                        cash_table_rows.append({
-                            "நேரம்": "-",
-                            "வகை": "HQ நிதி வரவு",
-                            "விவரம் / வாடிக்கையாளர்": "தலைமையக நிதி ஒதுக்கீடு",
-                            "நடவடிக்கை": "HO to Branch Transfer",
-                            "வரவு (Cash IN)": f"₹{f_amt:,.2f}",
-                            "பற்று (Cash OUT)": "-",
-                            "பணியாளர்": f.get("approved_by", "-")
+                        unified_daybook_rows.append({
+                            "நேரம்": f_time,
+                            "வருகை எண்": "-",
+                            "வகை": "HQ நிதி ஒதுக்கீடு",
+                            "விவரம் / வாடிக்கையாளர்": "தலைமையக நிதி வரவு",
+                            "நடவடிக்கை": "HO to Branch Cash Inflow",
+                            "வரவு (IN)": f"₹{f_amt:,.2f}",
+                            "பற்று (OUT)": "-",
+                            "ரொக்கம் (Cash)": f"₹{f_amt:,.2f}",
+                            "வங்கி (Bank)": "-"
                         })
                     elif "BRANCH_TO_HO" in f_type:
                         tot_cash_out += f_amt
-                        cash_table_rows.append({
-                            "நேரம்": "-",
-                            "வகை": "HQ நிதி பற்று",
+                        unified_daybook_rows.append({
+                            "நேரம்": f_time,
+                            "வருகை எண்": "-",
+                            "வகை": "HQ நிதி ஒப்படைப்பு",
                             "விவரம் / வாடிக்கையாளர்": "தலைமையகத்திற்கு அனுப்பியது",
-                            "நடவடிக்கை": "Branch to HO Remittance",
-                            "வரவு (Cash IN)": "-",
-                            "பற்று (Cash OUT)": f"₹{f_amt:,.2f}",
-                            "பணியாளர்": f.get("created_by", "-")
+                            "நடவடிக்கை": "Branch to HO Cash Remittance",
+                            "வரவு (IN)": "-",
+                            "பற்று (OUT)": f"₹{f_amt:,.2f}",
+                            "ரொக்கம் (Cash)": f"₹{f_amt:,.2f}",
+                            "வங்கி (Bank)": "-"
                         })
 
-                # கணினி இறுதி இருப்பு
+                # -------------------------------------------------------------------------
+                # 5. நிதி நிலை அளவீடுகள் (Metrics Dashboard)
+                # -------------------------------------------------------------------------
+                # கணினி ரொக்க இறுதி இருப்பு (கல்லா ரொக்கம் மட்டுமே கணக்கில் வரும்)
                 calc_closing = op_balance + tot_cash_in - tot_cash_out
 
-                # 5. முகப்பு நிதி அளவீடுகள் (Top Metric Cards)
                 st.markdown(f"#### 💼 {sel_b_name} | {sel_report_date.strftime('%d-%m-%Y')} நிதி நிலை")
                 m_c1, m_c2, m_c3, m_c4 = st.columns(4)
                 m_c1.metric("🌅 காலை தொடக்க இருப்பு", f"₹{op_balance:,.2f}")
-                m_c2.metric("📥 மொத்த ரொக்க வரவு (IN)", f"₹{tot_cash_in:,.2f}")
-                m_c3.metric("📤 மொத்த ரொக்கப் பற்று (OUT)", f"₹{tot_cash_out:,.2f}")
-                m_c4.metric("🌙 கணினி இறுதி இருப்பு", f"₹{calc_closing:,.2f}", delta=f"₹{tot_cash_in - tot_cash_out:,.2f} நிகர மாற்றம்")
+                m_c2.metric("📥 மொத்த ரொக்க வரவு (Cash IN)", f"₹{tot_cash_in:,.2f}")
+                m_c3.metric("📤 மொத்த ரொக்கப் பற்று (Cash OUT)", f"₹{tot_cash_out:,.2f}")
+                m_c4.metric("🌙 கணினி இறுதி இருப்பு", f"₹{calc_closing:,.2f}", delta=f"₹{tot_cash_in - tot_cash_out:,.2f} நிகர ரொக்க மாற்றம்")
 
                 b_c1, b_c2 = st.columns(2)
                 b_c1.info(f"🏛️ **அன்றைய மொத்த வங்கி வரவு (Bank IN):** ₹{tot_bank_in:,.2f}")
@@ -9342,29 +9388,24 @@ if st.session_state.get("logged_in", False):
 
                 st.markdown("---")
 
-                # 6. விரிவான பதிவேடுகள் (Ledger Tabs)
-                inner_tab_cash, inner_tab_bank = st.tabs(["💵 ரொக்கப் பதிவேடு (Cash Ledger)", "🏛️ வங்கி & UPI பதிவேடு (Bank Log)"])
+                # -------------------------------------------------------------------------
+                # 6. விரிவான ஒருங்கிணைந்த தினசரி நாள் ஏடு (Unified Day Book Table)
+                # -------------------------------------------------------------------------
+                st.markdown("##### 📖 ஒருங்கிணைந்த தினசரி நாள் ஏடு (Unified Day Book)")
                 
-                with inner_tab_cash:
-                    if cash_table_rows:
-                        st.dataframe(pd.DataFrame(cash_table_rows), use_container_width=True, hide_index=True)
-                        st.markdown(
-                            f"""
-                            <div style="background-color: #f8f9fa; border: 1.5px solid #d4af37; padding: 10px 14px; border-radius: 8px; margin-top: 10px; font-size: 14px;">
-                                <strong>கல்லா சமநிலை (Reconciliation):</strong> 
-                                தொடக்க இருப்பு: <b>₹{op_balance:,.2f}</b> + வரவு: <b>₹{tot_cash_in:,.2f}</b> - பற்று: <b>₹{tot_cash_out:,.2f}</b> = கணினி இறுதி இருப்பு: <b style="color: #0b8a36; font-size: 16px;">₹{calc_closing:,.2f}</b>
-                            </div>
-                            """, 
-                            unsafe_allow_html=True
-                        )
-                    else:
-                        st.info("அன்றைய நாளில் நேரடி ரொக்கப் பரிவர்த்தனைகள் எதுவும் இல்லை.")
-
-                with inner_tab_bank:
-                    if bank_table_rows:
-                        st.dataframe(pd.DataFrame(bank_table_rows), use_container_width=True, hide_index=True)
-                    else:
-                        st.info("அன்றைய நாளில் வங்கி / UPI பரிவர்த்தனைகள் எதுவும் இல்லை.")
+                if unified_daybook_rows:
+                    st.dataframe(pd.DataFrame(unified_daybook_rows), use_container_width=True, hide_index=True)
+                    st.markdown(
+                        f"""
+                        <div style="background-color: #f8f9fa; border: 1.5px solid #d4af37; padding: 10px 14px; border-radius: 8px; margin-top: 10px; font-size: 14px;">
+                            <strong>கல்லா சமநிலை (Cash Reconciliation):</strong> 
+                            தொடக்க இருப்பு: <b>₹{op_balance:,.2f}</b> + மொத்த ரொக்க வரவு: <b>₹{tot_cash_in:,.2f}</b> - மொத்த ரொக்கப் பற்று: <b>₹{tot_cash_out:,.2f}</b> = கணினி இறுதி ரொக்கம்: <b style="color: #0b8a36; font-size: 16px;">₹{calc_closing:,.2f}</b>
+                        </div>
+                        """, 
+                        unsafe_allow_html=True
+                    )
+                else:
+                    st.info("💡 தேர்ந்தெடுக்கப்பட்ட தேதியில் வணிக நடவடிக்கைகள் எதுவும் பதிவு செய்யப்படவில்லை.")
 
                 # =========================================================================
                 # 🌟 7. நாள் நிறைவு & ரூபாய் நோட்டுகளை எண்ணிப் பூட்டும் பகுதி (Day Close Lock)
