@@ -3464,10 +3464,11 @@ if st.session_state.get("logged_in", False):
                                     )
 
                                     # 🌟 நீங்கள் உள்ளிட்ட Maker Submission குறியீடு இங்கே இணைக்கப்பட்டுள்ளது:
+                                    # -------------------------------------------------------------
+                                    # அ. ரீபிளட்ஜ் செய்யும் போது (Maker Submission) - திருத்தப்பட்ட வடிவம்:
+                                    # -------------------------------------------------------------
                                     if st.form_submit_button("🏦 வங்கி லாக்கருக்கு அனுமதி கோரு"):
                                         if b_amt_in > 0:
-                                            net_credit = b_amt_in - b_charges_in
-
                                             chosen_bank_obj = None
                                             actual_bank_name = sel_bank_label
                                             for b in company_banks:
@@ -3476,7 +3477,7 @@ if st.session_state.get("logged_in", False):
                                                     actual_bank_name = b.get("bank_name")
                                                     break
 
-                                            # 1. gold_loans நிலையை இடைக்கால நிலைக்கு மாற்றுதல்
+                                            # 🌟 1. gold_loans நிலையை மட்டும் இடைக்கால நிலைக்கு மாற்றுதல் (பாஸ்புக் பதிவு இங்கே தேவையில்லை):
                                             supabase.table("gold_loans").update({
                                                 "packet_location": "RE_PLEDGE_PENDING_APPROVAL",
                                                 "repledge_bank": actual_bank_name,
@@ -3486,21 +3487,7 @@ if st.session_state.get("logged_in", False):
                                                 "packet_updated_at": datetime.now().isoformat()
                                             }).eq("id", vl["id"]).execute()
 
-                                            # 2. வங்கி பாஸ்புக் ஏட்டில் 'Pending' ஆகப் பதிவு செய்தல் (இருப்பு இன்னும் மாறாது)
-                                            # ✅ சரியான வரி (txn_flow என மாற்றப்பட்டது):
-                                            today_date = datetime.now().date().isoformat()
-                                            supabase.table("bank_transactions").insert({
-                                                "bank_account_id": chosen_bank_obj["id"] if chosen_bank_obj else None,
-                                                "txn_date": today_date,   # 👈 🌟 கட்டாயத் தேதி
-                                                "txn_flow": "IN",
-                                                "amount": net_credit,
-                                                "reference_no": b_loan_in.strip(),
-                                                "remarks": f"ரீபிளட்ஜ் வரவு: {vl['loan_no']} | வங்கி கடன் எண்: {b_loan_in} (அசல்: ₹{b_amt_in:,.2f} - பிடித்தம்: ₹{b_charges_in:,.2f})",
-                                                "created_by": st.session_state.get("username", "Staff"),
-                                                "created_at": datetime.now().isoformat()
-                                            }).execute()
-
-                                            st.info(f"⏳ {vl['loan_no']} ரீபிளட்ஜ் பதிவு செய்யப்பட்டது. மேலாளர் சரிபார்த்த பின் வங்கி இருப்பு மாறும்.")
+                                            st.info(f"⏳ {vl['loan_no']} ரீபிளட்ஜ் அனுமதிக்காக அனுப்பப்பட்டது. அட்மின் ஒப்புதல் அளித்த பின்னரே பாஸ்புக்கில் பதிவாகும்.")
                                             st.rerun()
                                         else:
                                             st.error("❌ கடன் தொகையை உள்ளிடவும்!")
@@ -3957,58 +3944,63 @@ if st.session_state.get("logged_in", False):
                             )
 
                             with c4:
-                                    # 🌟 அப்ரூவ் பட்டன் (Approve Button Action):
                                     if st.button("✅ சரிபார் (Approve)", key=f"sec_appr_gl_{gl_id}", type="primary", use_container_width=True):
                                         flow_dir = "IN" if is_credit else "OUT"
+                                        today_str = datetime.now().date().isoformat()
                                         
-                                        # 1. உங்கள் டேட்டாபேஸ் பத்திகளான txn_flow, reference_no, remarks-க்கு ஏற்ப பாஸ்புக்கில் பதிவு செய்தல்:
-                                        if matched_bank:
+                                        # 🛡️ இரட்டைப் பதிவு சரிபார்ப்பு (Duplicate Check)
+                                        chk_existing = (
+                                            supabase.table("bank_transactions")
+                                            .select("id")
+                                            .eq("reference_no", str(b_loan_no))
+                                            .eq("txn_date", today_str)
+                                            .eq("amount", t_amt)
+                                            .execute()
+                                            .data or []
+                                        )
+
+                                        bank_insert_success = False
+
+                                        # ஏற்கனவே பதிவு இல்லை என்றால் மட்டுமே புதிய பதிவைச் சேர்த்தல்
+                                        if not chk_existing and matched_bank:
                                             try:
-                                                today_date = datetime.now().date().isoformat()
-                                                supabase.table("bank_transactions").insert({
+                                                payload = {
                                                     "bank_account_id": matched_bank["id"],
-                                                    "txn_date": today_date,   # 👈 🌟 கட்டாயத் தேதி (NOT NULL தீர்வு)
-                                                    "txn_flow": flow_dir,     # IN அல்லது OUT
+                                                    "txn_date": today_str,
+                                                    "txn_flow": flow_dir,
                                                     "amount": t_amt,
-                                                    "reference_no": b_loan_no,
+                                                    "reference_no": str(b_loan_no),
                                                     "remarks": desc_label,
-                                                    "created_by": st.session_state.get("username", "Admin"),
-                                                    "created_at": datetime.now().isoformat()
-                                                }).execute()
+                                                    "created_by": st.session_state.get("username", "Admin")
+                                                }
+                                                if p_loan.get("branch_id"):
+                                                    payload["branch_id"] = p_loan.get("branch_id")
+
+                                                ins_res = supabase.table("bank_transactions").insert(payload).execute()
+                                                if ins_res.data:
+                                                    bank_insert_success = True
                                             except Exception as ins_err:
                                                 st.error(f"பாஸ்புக் பதிவில் பிழை: {ins_err}")
+                                        else:
+                                            bank_insert_success = True
 
+                                        # பாக்கெட்டின் இறுதி நிலையை மாற்றுதல்
+                                        if bank_insert_success:
+                                            target_loc = "IN_BANK_LOCKER" if is_credit else "AT_HQ_VAULT"
+                                            update_gl_payload = {
+                                                "packet_location": target_loc,
+                                                "packet_updated_at": datetime.now().isoformat()
+                                            }
+                                            if not is_credit:
+                                                update_gl_payload.update({
+                                                    "repledge_bank": None,
+                                                    "repledge_loan_no": None,
+                                                    "repledge_amount": 0.0
+                                                })
 
-                                        # 2. gold_loans-ல் பாக்கெட்டின் நிலையை இறுதி செய்தல்
-                                        target_loc = "IN_BANK_LOCKER" if is_credit else "AT_HQ_VAULT"
-                                        update_gl_payload = {
-                                            "packet_location": target_loc,
-                                            "packet_updated_at": datetime.now().isoformat()
-                                        }
-                                        if not is_credit:  # மீட்கப்பட்டால் ரீபிளட்ஜ் விவரங்களை மீட்டமைத்தல்
-                                            update_gl_payload.update({
-                                                "repledge_bank": None,
-                                                "repledge_loan_no": None,
-                                                "repledge_amount": 0.0
-                                            })
-
-                                        supabase.table("gold_loans").update(update_gl_payload).eq("id", gl_id).execute()
-
-                                        st.success(f"🎉 கடன் `{gl_no}` வெற்றிகரமாக அங்கீகரிக்கப்பட்டது! நிலை `{target_loc}` என மாற்றப்பட்டு, பாஸ்புக்கில் பதிவானது.")
-                                        st.rerun()
-
-                                    # நிராகரிக்கும் பட்டன் (வழக்கம் போல் தொடரும்)
-                                    if st.button("❌ நிராகரி (Reject)", key=f"sec_rej_gl_{gl_id}", type="secondary", use_container_width=True):
-                                        supabase.table("gold_loans").update({
-                                            "packet_location": "AT_HQ_VAULT",
-                                            "repledge_bank": None,
-                                            "repledge_loan_no": None,
-                                            "repledge_amount": 0.0,
-                                            "packet_updated_at": datetime.now().isoformat()
-                                        }).eq("id", gl_id).execute()
-
-                                        st.warning(f"⚠️ {gl_no} நிராகரிக்கப்பட்டு நகை மீண்டும் HQ பெட்டகத்திற்குத் திருப்பப்பட்டது.")
-                                        st.rerun()
+                                            supabase.table("gold_loans").update(update_gl_payload).eq("id", gl_id).execute()
+                                            st.success(f"🎉 கடன் `{gl_no}` வெற்றிகரமாக அங்கீகரிக்கப்பட்டது!")
+                                            st.rerun()
 
             # =====================================================================
             # தாவல் 2: தலைமையக & கிளை நிதிப் பரிமாற்றம் (Fund Transfers)
