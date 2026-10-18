@@ -6789,8 +6789,9 @@ if st.session_state.get("logged_in", False):
                     st.error(f"❌ கோப்பைப் பதிவேற்றுவதில் பிழை: {upload_err}")
 
         elif selected_section == "🛒 கவுண்ட்டர் வருகை & OTP":
+           
             # ---------------------------------------------------------------------
-            # 🌟 1. தொடர் நாள் பூட்டு சரிபார்ப்பு (Strict Gatekeeper Protection)
+            # 🌟 1. வாடிக்கையாளர் வருகைக்கான படிமுறைத் தணிக்கைக் கட்டுப்பாடு (Sequential Catch-up Logic)
             # ---------------------------------------------------------------------
             raw_b_id = st.session_state.get("branch_id")
             try:
@@ -6799,13 +6800,12 @@ if st.session_state.get("logged_in", False):
                 clean_b_id = 2
 
             today_date = date.today()
-            today_str = str(today_date)
 
-            # 1. கடைசி அதிகாரப்பூர்வமாகப் பூட்டப்பட்ட நாளின் தேதியைப் பெறுதல்
+            # கடைசியாக அதிகாரப்பூர்வமாகப் பூட்டப்பட்ட நாள்
             last_closed_rec = (
                 supabase.table("branch_daily_cash_summary")
-                .select("summary_date")
-                .eq("branch_id", clean_b_id)
+                .select("summary_date, closing_balance, closed_by")
+                .in_("branch_id", [clean_b_id, str(clean_b_id)])
                 .eq("is_closed", True)
                 .order("summary_date", desc=True)
                 .limit(1)
@@ -6813,54 +6813,69 @@ if st.session_state.get("logged_in", False):
                 .data or []
             )
 
-            # 2. பூட்டப்படாத நாள் ஏதேனும் உள்ளதா எனப் பரிசோதித்தல்:
-            pending_date = None
-
-            # முறை A: is_closed = False என நேரடியாக உள்ள நாட்கள்
-            unclosed_direct = (
-                supabase.table("branch_daily_cash_summary")
-                .select("summary_date")
-                .eq("branch_id", clean_b_id)
-                .lt("summary_date", today_str)
-                .eq("is_closed", False)
-                .order("summary_date", desc=False)
-                .limit(1)
-                .execute()
-                .data or []
-            )
-
-            if unclosed_direct:
-                pending_date = unclosed_direct[0]["summary_date"]
-            elif last_closed_rec:
-                # முறை B: கடைசியாகப் பூட்டப்பட்ட தேதிக்கும் இன்றைய தேதிக்கும் இடையே இடைவெளி உள்ளதா எனப் பார்த்தல்
+            if last_closed_rec:
                 last_closed_str = last_closed_rec[0]["summary_date"]
                 last_closed_dt = datetime.strptime(last_closed_str, "%Y-%m-%d").date()
-                expected_next_date = last_closed_dt + timedelta(days=1)
-                
-                # அடுத்த நாள் இன்றை விடக் குறைவாக இருந்தால் (அதாவது நேற்று வரை உள்ள நாட்கள் பூட்டப்படவில்லை எனில்)
-                if expected_next_date < today_date:
-                    pending_date = str(expected_next_date)
+                allowed_active_dt = last_closed_dt + timedelta(days=1)
             else:
-                # கணக்கே தொடங்கப்படாமல் இருந்தால் நேற்று நாளாக எடுத்துக் கொள்ளுதல்
-                yesterday_str = str(today_date - timedelta(days=1))
-                pending_date = yesterday_str
+                last_closed_dt = None
+                allowed_active_dt = today_date
 
-            # 🛑 பூட்டப்படாத நாள் இருந்தால் உடனடியாக முடக்குதல்:
-            if pending_date and pending_date < today_str:
-                try:
-                    dt_fmt = datetime.strptime(pending_date, "%Y-%m-%d").strftime("%d-%m-%Y")
-                except Exception:
-                    dt_fmt = pending_date
+            allowed_active_str = str(allowed_active_dt)
 
-                st.error("### 🚫 வணிகப் பதிவுகள் தற்காலிகமாக முடக்கப்பட்டுள்ளன!")
-                st.error(f"⚠️ **முந்தைய நாள் ({dt_fmt}) பூட்டப்படாமல் உள்ளது! உடனடியாகப் பூட்டவும்.**")
-                st.warning(
-                    f"👉 **கவனத்திற்கு:** தொடர் கணக்கு முறைமைப்படி, முந்தைய நாளான **{dt_fmt}** தேதிக்கான கல்லா இறுதி செய்யப்பட்டுப் பூட்டப்படவில்லை.\n\n"
-                    f"அன்றைய நாளுக்கான இறுதி ரொக்க இருப்பை உறுதிசெய்து நாட்டைப் பூட்டாமல் இன்றைய புதிய வருகைகளையோ அல்லது கடன்/மீட்டல் நடவடிக்கைகளையோ பதிவு செய்ய முடியாது.\n\n"
-                    f"தயவுசெய்து இடதுபுற மெனுவில் **'💼 கிளை கல்லா'** -> **'📊 தினசரி கிளைக் கணக்கு ஏடு'** பகுதிக்குச் சென்று, **{dt_fmt}** தேதியைத் தேர்ந்தெடுத்து, "
-                    f"கல்லாவில் உள்ள நோட்டுகளை எண்ணி இந்நாளைப் பூட்டிய பின்னர் இன்றைய (18-10-2026) பணிகளைத் தொடரவும்."
+            # வணிகத் தேதித் தேர்வு
+            c_d_col1, c_d_col2 = st.columns(2)
+            with c_d_col1:
+                default_v_date = allowed_active_dt if allowed_active_dt <= today_date else today_date
+                visit_business_date = st.date_input(
+                    "📅 வணிகத் தேதி (Business Date) *:",
+                    value=default_v_date,
+                    max_value=today_date,
+                    key="customer_visit_business_date"
                 )
-                st.stop()  # 🛑 18-10-2026-ல் எந்த நடவடிக்கையும் செய்ய விடாமல் தடுக்கிறது!
+                visit_date_str = str(visit_business_date)
+
+            # 🛑 படிமுறைத் தணிக்கைச் சோதனை
+            if last_closed_dt and visit_business_date <= last_closed_dt:
+                # ஏற்கனவே பூட்டப்பட்ட பழைய தேதி
+                c_staff = last_closed_rec[0].get("closed_by") or "நிர்வாகம்"
+                with c_d_col2:
+                    st.error(f"🔒 **{visit_date_str} தேதிக்கான கணக்கு ஏற்கனவே பூட்டப்பட்டுவிட்டது!**")
+
+                st.error(
+                    f"### 🚫 புதிய வாடிக்கையாளர் வருகை அனுமதிக்கப்படாது!\n\n"
+                    f"இக்கிளையில் **{last_closed_str}** வரையிலான கணக்குகள் ஏற்கனவே **{c_staff}** என்பவரால் உறுதிசெய்யப்பட்டுப் பூட்டப்பட்டுவிட்டது.\n\n"
+                    f"👉 ஏற்கனவே பூட்டப்பட்ட பழைய தேதிகளில் புதிய வருகைகளையோ அல்லது அடமானம்/மீட்டல் நடவடிக்கைகளையோ பதிவு செய்ய முடியாது. "
+                    f"அடுத்த அனுமதிக்கப்பட்ட தேதியான **{allowed_active_str}**-ஐத் தேர்வு செய்யவும்."
+                )
+                st.stop()
+
+            elif visit_business_date > allowed_active_dt:
+                # முந்தைய நாள் பூட்டப்படாமல் அடுத்த நாளைத் தேர்ந்தெடுத்தால் தடுத்தல்
+                try:
+                    allowed_fmt = allowed_active_dt.strftime("%d-%m-%Y")
+                except Exception:
+                    allowed_fmt = allowed_active_str
+
+                with c_d_col2:
+                    st.error(f"⚠️ **முந்தைய நாள் ({allowed_fmt}) பூட்டப்படவில்லை!**")
+
+                st.error(
+                    f"### 🚫 வணிகப் பதிவுகள் தற்காலிகமாக முடக்கப்பட்டுள்ளன!\n\n"
+                    f"⚠️ **முந்தைய நாளான {allowed_fmt} இன்னும் பூட்டப்படாமல் உள்ளது! உடனடியாகப் பூட்டவும்.**\n\n"
+                    f"👉 **தொடர் கணக்கு விதிமுறை:** முந்தைய நாளான **{allowed_fmt}** தேதியை முடிக்காமல், அதற்கு அடுத்த நாளான **{visit_date_str}**-ல் வாடிக்கையாளர் வருகைகளையோ கடன் நடவடிக்கைகளையோ தொடங்க அனுமதி இல்லை.\n\n"
+                    f"**செய்ய வேண்டியது:**\n"
+                    f"1. **{allowed_fmt}** தேதியில் விடுபட்ட வருகைகள் இருப்பின், மேலே உள்ள காலண்டரில் **{allowed_fmt}**-ஐத் தேர்வு செய்து அந்த நடவடிக்கைகளை முடித்துக்கொள்ளலாம்.\n"
+                    f"2. அல்லது இடதுபுற மெனுவில் **'💼 கிளை கல்லா'** -> **'📊 தினசரி கிளைக் கணக்கு ஏடு'** பகுதிக்குச் சென்று **{allowed_fmt}** தேதிக்கான கல்லா நோட்டுகளை எண்ணி இந்நாளைப் பூட்டிய பின்னர் இன்றைய பணிகளைத் தொடரவும்."
+                )
+                st.stop()
+
+            else:
+                with c_d_col2:
+                    if visit_business_date < today_date:
+                        st.warning(f"📝 முந்தைய நாளின் நிலுவை வருகைப் பதிவு (Catch-up Mode): **{visit_date_str}**")
+                    else:
+                        st.success(f"✅ இன்றைய நேரடி வணிகத் தேதி: **{visit_date_str}**")
             # ---------------------------------------------------------------------
             # 2. பணியாளர் பட்டியல் எடுத்தல்
             # ---------------------------------------------------------------------
@@ -9591,17 +9606,13 @@ if st.session_state.get("logged_in", False):
                 except (ValueError, TypeError):
                     clean_b_id = 1
 
-                # =========================================================================
-                # 🔒 கிளைச் செலவுகளுக்கான முந்தைய நாள் பூட்டுதல் சரிபார்ப்பு (Expense Gatekeeper)
-                # =========================================================================
                 today_date = date.today()
-                today_str = str(today_date)
 
-                # 1. கடைசி அதிகாரப்பூர்வமாகப் பூட்டப்பட்ட நாள்
+                # கடைசியாக அதிகாரப்பூர்வமாகப் பூட்டப்பட்ட நாள்
                 last_closed_rec = (
                     supabase.table("branch_daily_cash_summary")
-                    .select("summary_date")
-                    .eq("branch_id", clean_b_id)
+                    .select("summary_date, closing_balance, closed_by")
+                    .in_("branch_id", [clean_b_id, str(clean_b_id)])
                     .eq("is_closed", True)
                     .order("summary_date", desc=True)
                     .limit(1)
@@ -9609,49 +9620,72 @@ if st.session_state.get("logged_in", False):
                     .data or []
                 )
 
-                pending_expense_date = None
-
-                # 2. பூட்டப்படாத நாள் உள்ளதா எனப் பார்த்தல்
-                unclosed_direct = (
-                    supabase.table("branch_daily_cash_summary")
-                    .select("summary_date")
-                    .eq("branch_id", clean_b_id)
-                    .lt("summary_date", today_str)
-                    .eq("is_closed", False)
-                    .order("summary_date", desc=False)
-                    .limit(1)
-                    .execute()
-                    .data or []
-                )
-
-                if unclosed_direct:
-                    pending_expense_date = unclosed_direct[0]["summary_date"]
-                elif last_closed_rec:
-                    last_dt = datetime.strptime(last_closed_rec[0]["summary_date"], "%Y-%m-%d").date()
-                    if (last_dt + timedelta(days=1)) < today_date:
-                        pending_expense_date = str(last_dt + timedelta(days=1))
+                if last_closed_rec:
+                    last_closed_str = last_closed_rec[0]["summary_date"]
+                    last_closed_dt = datetime.strptime(last_closed_str, "%Y-%m-%d").date()
+                    allowed_active_dt = last_closed_dt + timedelta(days=1)
                 else:
-                    pending_expense_date = str(today_date - timedelta(days=1))
+                    last_closed_dt = None
+                    allowed_active_dt = today_date
 
-                # 🛑 முந்தைய நாள் பூட்டப்படவில்லை எனில் செலவுப் பதிவைத் தடுத்து நிறுத்துதல்:
-                if pending_expense_date and pending_expense_date < today_str:
-                    try:
-                        dt_fmt = datetime.strptime(pending_expense_date, "%Y-%m-%d").strftime("%d-%m-%Y")
-                    except Exception:
-                        dt_fmt = pending_expense_date
+                allowed_active_str = str(allowed_active_dt)
 
-                    st.error("### 🚫 கிளைச் செலவுப் பதிவுகள் தற்காலிகமாக முடக்கப்பட்டுள்ளன!")
-                    st.error(f"⚠️ **முந்தைய நாள் ({dt_fmt}) பூட்டப்படாமல் உள்ளது! உடனடியாகப் பூட்டவும்.**")
-                    st.warning(
-                        f"👉 **கவனத்திற்கு:** முந்தைய நாளான **{dt_fmt}** தேதிக்கான கல்லா இறுதி செய்யப்பட்டுப் பூட்டப்படவில்லை.\n\n"
-                        f"அன்றைய நாள் கணக்கை உறுதிசெய்து பூட்டாமல் இன்றைய புதிய கிளைச் செலவுகளைப் பதிவு செய்ய முடியாது.\n\n"
-                        f"தயவுசெய்து மேலே உள்ள **'📊 தினசரி கிளைக் கணக்கு ஏடு'** தாவலுக்குச் சென்று **{dt_fmt}** தேதியைத் தேர்ந்தெடுத்து, "
-                        f"கல்லா நோட்டுகளை எண்ணி இந்நாளைப் பூட்டிய பின்னர் செலவுப் பதிவுகளைத் தொடரவும்."
+                # செலவு வணிகத் தேதித் தேர்வு
+                ex_d_col1, ex_d_col2 = st.columns(2)
+                with ex_d_col1:
+                    default_ex_date = allowed_active_dt if allowed_active_dt <= today_date else today_date
+                    expense_business_date = st.date_input(
+                        "📅 செலவு வணிகத் தேதி (Expense Date) *:",
+                        value=default_ex_date,
+                        max_value=today_date,
+                        key="branch_expense_business_date"
                     )
-                    st.stop()  # 🛑 கல்லா நோட்டுகள் விவரமோ அல்லது செலவுப் படிவமோ கீழே காட்டப்படாது!
+                    expense_date_str = str(expense_business_date)
+
+                # 🛑 படிமுறைத் தணிக்கைச் சோதனை
+                if last_closed_dt and expense_business_date <= last_closed_dt:
+                    c_staff = last_closed_rec[0].get("closed_by") or "நிர்வாகம்"
+                    with ex_d_col2:
+                        st.error(f"🔒 **{expense_date_str} தேதிக்கான கணக்கு ஏற்கனவே பூட்டப்பட்டுவிட்டது!**")
+
+                    st.error(
+                        f"### 🚫 கிளைச் செலவுப் பதிவு அனுமதிக்கப்படாது!\n\n"
+                        f"இக்கிளையில் **{last_closed_str}** வரையிலான கணக்குகள் ஏற்கனவே **{c_staff}** என்பவரால் உறுதிசெய்யப்பட்டுப் பூட்டப்பட்டுவிட்டது.\n\n"
+                        f"👉 ஏற்கனவே பூட்டப்பட்ட பழைய தேதிகளில் புதிய செலவுகளைப் பதிவு செய்ய முடியாது. "
+                        f"அடுத்த அனுமதிக்கப்பட்ட தேதியான **{allowed_active_str}**-ஐத் தேர்வு செய்யவும்."
+                    )
+                    st.stop()
+
+                elif expense_business_date > allowed_active_dt:
+                    try:
+                        allowed_fmt = allowed_active_dt.strftime("%d-%m-%Y")
+                    except Exception:
+                        allowed_fmt = allowed_active_str
+
+                    with ex_d_col2:
+                        st.error(f"⚠️ **முந்தைய நாள் ({allowed_fmt}) பூட்டப்படவில்லை!**")
+
+                    st.error(
+                        f"### 🚫 செலவுப் பதிவு தற்காலிகமாக முடக்கப்பட்டுள்ளது!\n\n"
+                        f"⚠️ **முந்தைய நாளான {allowed_fmt} இன்னும் பூட்டப்படாமல் உள்ளது! உடனடியாகப் பூட்டவும்.**\n\n"
+                        f"👉 **தொடர் கணக்கு விதிமுறை:** முந்தைய நாளான **{allowed_fmt}** தேதியை முடிக்காமல், அதற்கு அடுத்த நாளான **{expense_date_str}**-ல் புதிய கிளைச் செலவுகளைப் பதிவு செய்ய அனுமதி இல்லை.\n\n"
+                        f"**செய்ய வேண்டியது:**\n"
+                        f"1. **{allowed_fmt}** தேதியில் நிகழ்ந்த விடுபட்ட செலவுகள் இருப்பின், மேலே உள்ள காலண்டரில் **{allowed_fmt}**-ஐத் தேர்வு செய்து பதிவு செய்து கொள்ளலாம்.\n"
+                        f"2. அல்லது மேலே உள்ள **'📊 தினசரி கிளைக் கணக்கு ஏடு'** தாவலுக்குச் சென்று **{allowed_fmt}** தேதிக்கான கல்லா நோட்டுகளை எண்ணி இந்நாளைப் பூட்டிய பின்னர் செலவுப் பதிவுகளைத் தொடரவும்."
+                    )
+                    st.stop()
+
+                else:
+                    with ex_d_col2:
+                        if expense_business_date < today_date:
+                            st.warning(f"📝 முந்தைய நாளின் விடுபட்ட செலவுப் பதிவு (Catch-up Mode): **{expense_date_str}**")
+                        else:
+                            st.success(f"✅ இன்றைய நேரடி வணிகத் தேதி: **{expense_date_str}**")
+
+                st.markdown("---")
 
                 # =========================================================================
-                # 1. கிளையின் நடப்பு கல்லா நோட்டுகளின் எண்ணிக்கை மற்றும் இருப்பு (பூட்டப்பட்டிருந்தால் மட்டும் இயங்கும்)
+                # 1. கிளையின் நடப்பு கல்லா நோட்டுகளின் எண்ணிக்கை மற்றும் இருப்பு (அனுமதி கிடைத்த பின்)
                 # =========================================================================
                 curr_b_drawer = get_current_branch_cash_drawer(clean_b_id)
                 total_drawer_cash = (
@@ -10040,17 +10074,13 @@ if st.session_state.get("logged_in", False):
             except (ValueError, TypeError):
                 clean_b_id = 2
 
-            today_date = date.today()
-            today_str = str(today_date)
-
             # =========================================================================
-            # 🔒 1. முந்தைய நாள் பூட்டப்படாததற்கான கண்டிப்பான தடுப்பு (Strict Gatekeeper)
+            # 🔒 1. கடைசியாகப் பூட்டப்பட்ட தேதியைக் கண்டறிதல்
             # =========================================================================
-            # கடைசி அதிகாரப்பூர்வமாகப் பூட்டப்பட்ட நாள்
             last_closed_rec = (
                 supabase.table("branch_daily_cash_summary")
-                .select("summary_date")
-                .eq("branch_id", clean_b_id)
+                .select("summary_date, closing_balance, closed_by")
+                .in_("branch_id", [clean_b_id, str(clean_b_id)])
                 .eq("is_closed", True)
                 .order("summary_date", desc=True)
                 .limit(1)
@@ -10058,97 +10088,82 @@ if st.session_state.get("logged_in", False):
                 .data or []
             )
 
-            pending_ho_date = None
-
-            # பூட்டப்படாத நாள் உள்ளதா எனப் பார்த்தல்
-            unclosed_direct = (
-                supabase.table("branch_daily_cash_summary")
-                .select("summary_date")
-                .eq("branch_id", clean_b_id)
-                .lt("summary_date", today_str)
-                .eq("is_closed", False)
-                .order("summary_date", desc=False)
-                .limit(1)
-                .execute()
-                .data or []
-            )
-
-            if unclosed_direct:
-                pending_ho_date = unclosed_direct[0]["summary_date"]
-            elif last_closed_rec:
-                last_dt = datetime.strptime(last_closed_rec[0]["summary_date"], "%Y-%m-%d").date()
-                if (last_dt + timedelta(days=1)) < today_date:
-                    pending_ho_date = str(last_dt + timedelta(days=1))
+            if last_closed_rec:
+                last_closed_str = last_closed_rec[0]["summary_date"]
+                last_closed_dt = datetime.strptime(last_closed_str, "%Y-%m-%d").date()
+                allowed_active_dt = last_closed_dt + timedelta(days=1)
             else:
-                pending_ho_date = str(today_date - timedelta(days=1))
+                # கணக்கு விவரம் ஏதும் இல்லாத புதிய கிளை எனில் இன்றைய தேதியை அனுமதித்தல்
+                last_closed_dt = None
+                allowed_active_dt = date.today()
 
-            # 🛑 முந்தைய நாள் பூட்டப்படவில்லை எனில் பணப் பரிமாற்றத்தை முழுமையாகத் தடுத்தல்:
-            if pending_ho_date and pending_ho_date < today_str:
-                try:
-                    dt_fmt = datetime.strptime(pending_ho_date, "%Y-%m-%d").strftime("%d-%m-%Y")
-                except Exception:
-                    dt_fmt = pending_ho_date
-
-                st.error("### 🚫 தலைமையக பணப் பரிமாற்றங்கள் தற்காலிகமாக முடக்கப்பட்டுள்ளன!")
-                st.error(f"⚠️ **முந்தைய நாள் ({dt_fmt}) பூட்டப்படாமல் உள்ளது! உடனடியாகப் பூட்டவும்.**")
-                st.warning(
-                    f"👉 **கவனத்திற்கு:** தொடர் கணக்கு முறைமைப்படி, முந்தைய நாளான **{dt_fmt}** தேதிக்கான கல்லா இறுதி செய்யப்பட்டுப் பூட்டப்படவில்லை.\n\n"
-                    f"அன்றைய நாள் கணக்கை உறுதிசெய்து பூட்டாமல் தலைமையகத்திற்குப் பணம் அனுப்புவதோ அல்லது தலைமையகத்திலிருந்து நிதி பெறுவதோ இயலாது.\n\n"
-                    f"தயவுசெய்து இடதுபுற மெனுவில் **'💼 கிளை கல்லா'** -> **'📊 தினசரி கிளைக் கணக்கு ஏடு'** பகுதிக்குச் சென்று **{dt_fmt}** தேதியைத் தேர்ந்தெடுத்து, "
-                    f"கல்லா நோட்டுகளை எண்ணி இந்நாளைப் பூட்டிய பின்னர் தலைமையக நிதிப் பரிமாற்றங்களைத் தொடரவும்."
-                )
-                st.stop()  # 🛑 தேதித் தேர்வு மற்றும் படிவம் எதையும் காட்டாமல் இங்கேயே நிறுத்துகிறது!
+            allowed_active_str = str(allowed_active_dt)
 
             # =========================================================================
-            # 🌟 2. வணிகத் தேதித் தேர்வு & கடந்த காலப் பூட்டுச் சோதனை (முந்தைய நாள் முடிந்திருந்தால் மட்டும்)
+            # 🌟 2. வணிகத் தேதித் தேர்வு
             # =========================================================================
             ho_d_col1, ho_d_col2 = st.columns(2)
             with ho_d_col1:
+                # தானாகவே பூட்டப்படாத அடுத்த அனுமதிக்கப்பட்ட தேதியை இயல்பு மதிப்பாக (default) வைத்தல்
+                default_pick_date = allowed_active_dt if allowed_active_dt <= date.today() else date.today()
                 ho_transfer_date = st.date_input(
                     "📅 பரிவர்த்தனை வணிகத் தேதி (Business Date) *:",
-                    value=date.today(),
+                    value=default_pick_date,
                     max_value=date.today(),
                     key="ho_fund_transfer_date"
                 )
                 ho_transfer_date_str = str(ho_transfer_date)
 
-            # ஏற்கனவே பூட்டப்பட்ட பழைய தேதியைத் தேர்ந்தெடுத்தால் தடுக்கும் சோதனை
-            ho_day_locked = False
-            ho_lock_reason = ""
-
-            if last_closed_rec:
-                latest_c_rec = last_closed_rec[0]
-                max_c_date_str = str(latest_c_rec.get("summary_date"))
-
-                if ho_transfer_date_str <= max_c_date_str:
-                    ho_day_locked = True
-                    c_amt = float(latest_c_rec.get("closing_balance") or 0.0)
-                    ho_lock_reason = (
-                        f"இக்கிளையில் **{max_c_date_str}** வரையிலான கணக்குகள் ஏற்கனவே "
-                        f"உறுதிசெய்யப்பட்டுப் பூட்டப்பட்டுவிட்டது (கல்லா இருப்பு: ₹{c_amt:,.2f})."
-                    )
-
-            with ho_d_col2:
-                if ho_day_locked:
+            # =========================================================================
+            # 🛑 3. கண்டிப்பான படிமுறைத் தணிக்கைச் சோதனை (Catch-up Sequence Validation)
+            # =========================================================================
+            if last_closed_dt and ho_transfer_date <= last_closed_dt:
+                # நிலை 1: ஏற்கனவே பூட்டப்பட்ட பழைய தேதியைத் தேர்வு செய்தால் தடுத்தல்
+                c_staff = last_closed_rec[0].get("closed_by") or "நிர்வாகம்"
+                c_amt = float(last_closed_rec[0].get("closing_balance") or 0.0)
+                with ho_d_col2:
                     st.error(f"🔒 **{ho_transfer_date_str} தேதிக்கான கணக்கு ஏற்கனவே பூட்டப்பட்டுவிட்டது!**")
-                elif ho_transfer_date < date.today():
-                    st.warning(f"⚠️ முந்தைய நாள் விடுபட்ட பரிமாற்றமாகப் பதியப்படுகிறது: **{ho_transfer_date_str}**")
-                else:
-                    st.info(f"✅ இன்றைய வணிகத் தேதி: **{ho_transfer_date_str}**")
 
-            if ho_day_locked:
                 st.error(
                     f"### 🚫 பணப் பரிமாற்றப் பதிவு அனுமதிக்கப்படாது!\n\n"
-                    f"{ho_lock_reason}\n\n"
-                    f"👉 பூட்டப்பட்ட தேதியில் புதிய HO நிதி வரவு/பற்றுப் பரிவர்த்தனைகளைப் பதிவு செய்ய முடியாது!\n\n"
-                    f"தயவுசெய்து மேலே உள்ள காலண்டரில் **பூட்டப்படாத நடப்பு வணிகத் தேதியைத் தேர்வு செய்யவும்**."
+                    f"இக்கிளையில் **{last_closed_str}** வரையிலான கணக்குகள் ஏற்கனவே **{c_staff}** என்பவரால் உறுதிசெய்யப்பட்டுப் பூட்டப்பட்டுவிட்டது (கல்லா இருப்பு: ₹{c_amt:,.2f}).\n\n"
+                    f"👉 ஏற்கனவே பூட்டப்பட்ட பழைய தேதிகளில் புதிய பரிவர்த்தனைகளைப் பதிவு செய்ய முடியாது. "
+                    f"அடுத்த அனுமதிக்கப்பட்ட தேதியான **{allowed_active_str}**-ஐத் தேர்வு செய்யவும்."
                 )
                 st.stop()
+
+            elif ho_transfer_date > allowed_active_dt:
+                # நிலை 2: பூட்டிய நாளுக்கு அடுத்த நாளை விடுத்து, அதற்கு அடுத்த நாளைத் தேர்வு செய்தால் தடுத்தல்
+                try:
+                    allowed_fmt = allowed_active_dt.strftime("%d-%m-%Y")
+                except Exception:
+                    allowed_fmt = allowed_active_str
+
+                with ho_d_col2:
+                    st.error(f"⚠️ **முந்தைய நாள் ({allowed_fmt}) பூட்டப்படவில்லை!**")
+
+                st.error(
+                    f"### 🚫 பணப் பரிமாற்றப் பதிவு அனுமதிக்கப்படாது!\n\n"
+                    f"⚠️ **முந்தைய நாளான {allowed_fmt} இன்னும் பூட்டப்படாமல் உள்ளது!**\n\n"
+                    f"👉 **தொடர் கணக்கு விதி:** முந்தைய நாளான **{allowed_fmt}** தேதியை முடிக்காமல், அதற்கு அடுத்த நாளான **{ho_transfer_date_str}**-ல் நடவடிக்கைகளைப் பதிவு செய்ய அனுமதி இல்லை.\n\n"
+                    f"**செய்ய வேண்டியது:**\n"
+                    f"1. **{allowed_fmt}** தேதியில் பரிவர்த்தனைகள் ஏதேனும் நிலுவையில் இருந்தால், மேலே உள்ள காலண்டரில் **{allowed_fmt}**-ஐத் தேர்வு செய்து அந்தப் பரிவர்த்தனைகளைப் பதியலாம்.\n"
+                    f"2. அல்லது இடதுபுறம் **'📊 தினசரி கிளைக் கணக்கு ஏடு'** பகுதிக்குச் சென்று **{allowed_fmt}** தேதிக்கான கணக்கை உறுதிசெய்து பூட்டிய பின்னர் இந்நாளைத் தொடரவும்."
+                )
+                st.stop()
+
+            else:
+                # நிலை 3: பூட்டிய நாளுக்கு அடுத்த நாள் (allowed_active_dt) தேர்வு செய்யப்பட்டுள்ளது - முழு அனுமதி!
+                with ho_d_col2:
+                    if ho_transfer_date < date.today():
+                        st.warning(f"📝 முந்தைய நாளின் நிலுவைப் பரிவர்த்தனைப் பதிவு (Catch-up Mode): **{ho_transfer_date_str}**")
+                    else:
+                        st.success(f"✅ இன்றைய நேரடி வணிகத் தேதி: **{ho_transfer_date_str}**")
 
             st.markdown("---")
 
             # =========================================================================
-            # 3. தற்போதைய நேரடி கல்லா கையிருப்பு விவரங்கள்
+            # 4. தற்போதைய நேரடி கல்லா கையிருப்பு விவரங்கள் (அனுமதி கிடைத்த பின் இயங்கும்)
             # =========================================================================
             curr_b_drawer = get_current_branch_cash_drawer(clean_b_id)
 
