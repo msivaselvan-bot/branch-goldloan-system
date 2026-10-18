@@ -6789,7 +6789,7 @@ if st.session_state.get("logged_in", False):
                     st.error(f"❌ கோப்பைப் பதிவேற்றுவதில் பிழை: {upload_err}")
 
         elif selected_section == "🛒 கவுண்ட்டர் வருகை & OTP":
-           
+
             # ---------------------------------------------------------------------
             # 🌟 1. வாடிக்கையாளர் வருகைக்கான படிமுறைத் தணிக்கைக் கட்டுப்பாடு (Sequential Catch-up Logic)
             # ---------------------------------------------------------------------
@@ -6823,7 +6823,7 @@ if st.session_state.get("logged_in", False):
 
             allowed_active_str = str(allowed_active_dt)
 
-            # வணிகத் தேதித் தேர்வு
+            # 🌟 ஒற்றை அதிகாரப்பூர்வ வணிகத் தேதித் தேர்வு
             c_d_col1, c_d_col2 = st.columns(2)
             with c_d_col1:
                 default_v_date = allowed_active_dt if allowed_active_dt <= today_date else today_date
@@ -6834,6 +6834,7 @@ if st.session_state.get("logged_in", False):
                     key="customer_visit_business_date"
                 )
                 visit_date_str = str(visit_business_date)
+                visit_date = visit_business_date  # கீழே உள்ள படிவங்களுக்குப் பயன்படும்
 
             # 🛑 படிமுறைத் தணிக்கைச் சோதனை
             if last_closed_dt and visit_business_date <= last_closed_dt:
@@ -6876,6 +6877,7 @@ if st.session_state.get("logged_in", False):
                         st.warning(f"📝 முந்தைய நாளின் நிலுவை வருகைப் பதிவு (Catch-up Mode): **{visit_date_str}**")
                     else:
                         st.success(f"✅ இன்றைய நேரடி வணிகத் தேதி: **{visit_date_str}**")
+
             # ---------------------------------------------------------------------
             # 2. பணியாளர் பட்டியல் எடுத்தல்
             # ---------------------------------------------------------------------
@@ -6906,81 +6908,16 @@ if st.session_state.get("logged_in", False):
             # ---------------------------------------------------------------------
             if st.session_state.current_visit is None:
                 st.subheader("படி 1: வாடிக்கையாளர் வருகைப் பதிவு (Visit Token)")
-
-                # 📅 வணிகத் தேதித் தேர்வு
-                v_col1, v_col2 = st.columns(2)
-                with v_col1:
-                    visit_date = st.date_input(
-                        "📅 வணிகத் தேதி (Business Date) *:", 
-                        value=date.today(), 
-                        max_value=date.today(), 
-                        key="counter_visit_date"
-                    )
-                    visit_date_str = str(visit_date)
-
-                # கிளை ஐடி (Nagercoil id = 2)
-                raw_b_id = st.session_state.get("branch_id")
-                try:
-                    clean_b_id = int(raw_b_id) if raw_b_id not in (None, "", "null") else 2
-                except Exception:
-                    clean_b_id = 2
-
-                # 🔒 1. இந்தக் கிளையில் கடைசியாகப் பூட்டப்பட்ட அதிகபட்ச தேதியைக் கண்டறிதல் (Latest Closed Date)
-                last_closed_query = (
-                    supabase.table("branch_daily_cash_summary")
-                    .select("summary_date, closing_balance, closed_by")
-                    .in_("branch_id", [clean_b_id, str(clean_b_id)])
-                    .eq("is_closed", True)
-                    .order("summary_date", desc=True)
-                    .limit(1)
-                    .execute()
-                    .data or []
-                )
-
-                day_is_locked = False
-                lock_reason = ""
-                latest_closed_str = ""
-
-                if last_closed_query:
-                    latest_closed_rec = last_closed_query[0]
-                    latest_closed_str = str(latest_closed_rec.get("summary_date"))
-                    
-                    # ஊழியர் தேர்வு செய்த தேதி, கடைசியாகப் பூட்டிய தேதி அல்லது அதற்கு முந்தைய தேதியாக இருந்தால் தடுத்தல்:
-                    if visit_date_str <= latest_closed_str:
-                        day_is_locked = True
-                        c_staff = latest_closed_rec.get("closed_by") or "நிர்வாகம்"
-                        c_amt = float(latest_closed_rec.get("closing_balance") or 0.0)
-                        lock_reason = (
-                            f"இக்கிளையில் **{latest_closed_str}** வரையிலான கணக்குகள் ஏற்கனவே "
-                            f"**{c_staff}** என்பவரால் உறுதிசெய்யப்பட்டுப் பூட்டப்பட்டுவிட்டது (கல்லா இருப்பு: ₹{c_amt:,.2f})."
-                        )
-
-                with v_col2:
-                    if day_is_locked:
-                        st.error(f"🔒 **{visit_date_str} தேதிக்கான கணக்கு முடக்கப்பட்டுள்ளது!**")
-                    elif visit_date < date.today():
-                        st.warning(f"⚠️ முந்தைய நாள் விடுபட்ட பதிவாகக் குறிக்கப்படுகிறது: **{visit_date_str}**")
-                    else:
-                        st.info(f"✅ இன்றைய வணிகத் தேதி: **{visit_date_str}**")
-
-                # 🚫 பூட்டப்பட்ட அல்லது அதற்கு முந்தைய பழைய தேதியைத் தேர்வு செய்தால் படிவத்தை முழுமையாக முடக்குதல்:
-                if day_is_locked:
-                    st.error(
-                        f"### 🚫 வணிகப் பதிவுகள் அனுமதிக்கப்படாது!\n\n"
-                        f"{lock_reason}\n\n"
-                        f"👉 **பாதுகாப்பு விதி:** ஒரு தேதி பூட்டப்பட்டுவிட்டால், அந்தத் தேதியிலோ அல்லது அதற்கு முந்தைய எந்தவொரு பழைய தேதிகளிலோ "
-                        f"(எ.கா: **{visit_date_str}**) புதிய வாடிக்கையாளர் வருகையையோ அல்லது கடன்/பரிவர்த்தனைப் பதிவுகளையோ செய்ய இயலாது!\n\n"
-                        f"தயவுசெய்து மேலே உள்ள காலண்டரில் **பூட்டப்படாத நடப்பு வணிகத் தேதியைத் தேர்வு செய்யவும்**."
-                    )
-                    st.stop()  # 👈 பூட்டப்பட்ட நாளாக இருந்தால் கீழே உள்ள வாடிக்கையாளர் தேடல், படிவம் எதுவும் திறக்காது!
-
+                
+                # 🌟 இரட்டை தேதிக் கட்டம் நீக்கப்பட்டு, மேலே தேர்ந்தெடுக்கப்பட்ட தேதியே உறுதியாகக் காட்டப்படுகிறது
+                st.info(f"📌 **பதிவு செய்யப்படும் வணிகத் தேதி:** `{visit_date_str}`")
                 st.markdown("---")
 
                 v_type = st.radio(
                     "வாடிக்கையாளர் வகை:",
                     [
                         "ஏற்கனவே உள்ள வாடிக்கையாளர் (Existing Customer)", 
-                        "புதிய வாடிக்கையாளர் பதிவு (New Customer)",
+                        "புதிய வாடிக்கையாளர் பதிவு (New Customer)", 
                         "📑 தற்காலிக வருகைகள் (Draft Visits - Pending OTP)"
                     ],
                     horizontal=True,
