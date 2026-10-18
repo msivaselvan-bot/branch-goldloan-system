@@ -9437,60 +9437,74 @@ if st.session_state.get("logged_in", False):
                         rc1, rc2 = st.columns(2)
                         rc1.markdown(f"### எண்ணப்பட்ட உண்மைத் தொகை: **₹{actual_counted_cash:,.2f}**")
                         
-                        if diff_amount == 0:
-                            rc2.success("✅ கணினி இருப்புடன் 100% சரியாகப் பொருந்துகிறது!")
+                        # 🌟 நிலை மற்றும் எச்சரிக்கை அறிவிப்புகள்:
+                        if diff_amount == 0 and actual_counted_cash == calc_closing:
+                            rc2.success("✅ கணினி இருப்புடன் 100% சரியாகப் பொருந்துகிறது! நாள் கணக்கைப் பூட்டலாம்.")
                         elif diff_amount > 0:
-                            rc2.warning(f"⚠️ கல்லா மிகை இருப்பு (Surplus): +₹{diff_amount:,.2f}")
+                            rc2.error(f"❌ கல்லா மிகை இருப்பு (Surplus): +₹{diff_amount:,.2f} | கணக்கு பொருந்தவில்லை!")
                         else:
-                            rc2.error(f"❌ கல்லா குறைவு இருப்பு (Shortage): -₹{abs(diff_amount):,.2f}")
+                            rc2.error(f"❌ கல்லா குறைவு இருப்பு (Shortage): -₹{abs(diff_amount):,.2f} | கணக்கு பொருந்தவில்லை!")
 
-                        close_remarks = st.text_area("நாள் நிறைவுக் குறிப்பு (Closing Remarks):", placeholder="எ.கா: கணக்குகள் தணிக்கை செய்யப்பட்டு கல்லா சரியாகப் பூட்டப்பட்டது.")
+                        if diff_amount != 0:
+                            st.warning(f"⚠️ **கவனத்திற்கு:** கணினி இருப்பு: `₹{calc_closing:,.2f}` | நீங்கள் எண்ணிய தொகை: `₹{actual_counted_cash:,.2f}`. இருப்பு 100% சரியாகப் பொருந்தும் வரை இந்நாளைப் பூட்ட அனுமதி இல்லை. தயவுசெய்து ரூபாய் நோட்டுகளை மீண்டும் சரிபார்த்து சரியான எண்ணிக்கையை உள்ளிடவும்.")
+
+                        close_remarks = st.text_area(
+                            "நாள் நிறைவுக் குறிப்பு (Closing Remarks):",
+                            placeholder="எ.கா: கணக்குகள் தணிக்கை செய்யப்பட்டு கல்லா சரியாகப் பூட்டப்பட்டது."
+                        )
                         
                         btn_confirm_day_close = st.form_submit_button("🔒 கணக்கை உறுதிசெய்து இந்நாளைப் பூட்டுக (Confirm & Lock Day)", type="primary", use_container_width=True)
 
                         if btn_confirm_day_close:
-                            try:
-                                denom_payload = {
-                                    "500": c_500, "200": c_200, "100": c_100, 
-                                    "50": c_50, "20": c_20, "10": c_10, "5": c_5, "coins": c_coins,
-                                    "actual_counted": actual_counted_cash,
-                                    "calculated_closing": calc_closing,
-                                    "difference": diff_amount
-                                }
+                            # 🛑 100% கண்டிப்பான கணக்குப் பொருத்தம் சோதனை (Zero-Tolerance Validation):
+                            if diff_amount != 0 or actual_counted_cash != calc_closing:
+                                if diff_amount > 0:
+                                    st.error(f"🚫 **சேமிக்க முடியாது:** கல்லாவில் மிகை இருப்பு (+₹{diff_amount:,.2f}) உள்ளது! கணினி இருப்புடன் (`₹{calc_closing:,.2f}`) 100% சரியாகப் பொருந்தினால் மட்டுமே கணக்கை முடிக்க முடியும்.")
+                                else:
+                                    st.error(f"🚫 **சேமிக்க முடியாது:** கல்லாவில் பற்றாக்குறை இருப்பு (-₹{abs(diff_amount):,.2f}) உள்ளது! சரியான தொகையினை எண்ணி உள்ளிட்டு கணக்கு பொருந்தினால் மட்டுமே சேமிக்க இயலும்.")
+                            elif actual_counted_cash == 0 and calc_closing > 0:
+                                st.error("🚫 தயவுசெய்து கல்லாவில் உள்ள நோட்டுகளை எண்ணி விவரங்களை உள்ளிடவும். இருப்பு பூஜ்ஜியமாக இருக்க முடியாது!")
+                            else:
+                                # 🌟 100% சரியான கணக்கு மட்டுமே இங்கே வரும்:
+                                try:
+                                    denom_payload = {
+                                        "500": c_500, "200": c_200, "100": c_100, 
+                                        "50": c_50, "20": c_20, "10": c_10, "5": c_5, "coins": c_coins,
+                                        "actual_counted": actual_counted_cash,
+                                        "calculated_closing": calc_closing,
+                                        "difference": 0.0
+                                    }
 
-                                # closing_remarks-ல் வித்தியாசத் தொகையையும் சேர்த்துக் குறித்தல்
-                                diff_note = f" [இருப்பு வித்தியாசம்: ₹{diff_amount:,.2f}]" if diff_amount != 0 else " [கணக்கு சரிபார்க்கப்பட்டது]"
-                                final_remarks = (close_remarks.strip() if close_remarks else "Day Closed Successfully") + diff_note
+                                    final_remarks = (close_remarks.strip() if close_remarks else "Day Closed Successfully (100% Reconciled)") + " [கணக்கு 100% சரிபார்க்கப்பட்டது]"
 
-                                # 🌟 டேட்டாபேஸில் உள்ள அசல் நெடுவரிசைகளுக்கு ஏற்ப அமைக்கப்பட்ட payload:
-                                summary_payload = {
-                                    "branch_id": cur_b_id,
-                                    "summary_date": report_date_str,
-                                    "opening_balance": op_balance,
-                                    "total_cash_in": tot_cash_in,
-                                    "total_cash_out": tot_cash_out,
-                                    "closing_balance": actual_counted_cash,  # 👈 எண்ணப்பட்ட இறுதி கையிருப்பு
-                                    "total_bank_in": tot_bank_in,
-                                    "total_bank_out": tot_bank_out,
-                                    "closing_denominations": denom_payload,
-                                    "is_closed": True,  # 👈 இந்நாள் முழுமையாகப் பூட்டப்பட்டது
-                                    "closed_at": str(datetime.now()),
-                                    "closed_by": st.session_state.get("username", "Staff"),
-                                    "closing_remarks": final_remarks
-                                }
+                                    summary_payload = {
+                                        "branch_id": cur_b_id,
+                                        "summary_date": report_date_str,
+                                        "opening_balance": op_balance,
+                                        "total_cash_in": tot_cash_in,
+                                        "total_cash_out": tot_cash_out,
+                                        "closing_balance": actual_counted_cash,
+                                        "total_bank_in": tot_bank_in,
+                                        "total_bank_out": tot_bank_out,
+                                        "closing_denominations": denom_payload,
+                                        "is_closed": True,
+                                        "closed_at": str(datetime.now()),
+                                        "closed_by": st.session_state.get("username", "Staff"),
+                                        "closing_remarks": final_remarks
+                                    }
 
-                                supabase.table("branch_daily_cash_summary").upsert(
-                                    summary_payload, on_conflict="branch_id, summary_date"
-                                ).execute()
+                                    supabase.table("branch_daily_cash_summary").upsert(
+                                        summary_payload, on_conflict="branch_id, summary_date"
+                                    ).execute()
 
-                                st.success(f"🎉 {sel_report_date.strftime('%d-%m-%Y')} தேதிக்கான தினசரி கல்லா வெற்றிகரமாகப் பூட்டப்பட்டது!")
-                                st.balloons()
-                                import time
-                                time.sleep(2)
-                                st.rerun()
+                                    st.success(f"🎉 {sel_report_date.strftime('%d-%m-%Y')} தேதிக்கான தினசரி கல்லா 100% துல்லியமாகப் பூட்டப்பட்டது!")
+                                    st.balloons()
+                                    import time
+                                    time.sleep(2)
+                                    st.rerun()
 
-                            except Exception as close_err:
-                                st.error(f"❌ கணக்கை முடிப்பதில் பிழை: {close_err}")
+                                except Exception as close_err:
+                                    st.error(f"❌ கணக்கை முடிப்பதில் பிழை: {close_err}")
 
             # =========================================================================
             # டேப் 2: 💸 கிளை செலவு & கல்லா மேலாண்மை (உங்கள் அசல் கோடு அப்படியே)
