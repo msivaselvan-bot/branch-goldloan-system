@@ -3381,7 +3381,7 @@ if st.session_state.get("logged_in", False):
 
         
             # -------------------------------------------------------------------------
-            # 🏦 டேப் 2: வங்கி லாக்கர் மறு-அடமானம் & தானியங்கி வங்கிக் கணக்கு வரவு/செலவு
+            # 🏦 டேப் 2: வங்கி லாக்கர் மறு-அடமானம் & அனுமதி மேலாண்மை (Maker Submission)
             # -------------------------------------------------------------------------
             with p_tab2:
                 st.markdown("##### 🏦 வங்கி லாக்கர் மறு-அடமானம் & நிதி மேலாண்மை (Re-Pledge)")
@@ -3389,7 +3389,6 @@ if st.session_state.get("logged_in", False):
                 # 🌟 1. ஏற்கனவே உள்ள நிறுவன வங்கிக் கணக்குகளைப் பெறுதல் (Selectbox-க்கு)
                 company_banks = []
                 try:
-                    # உங்கள் டேட்டாபேஸில் உள்ள வங்கி அட்டவணை (company_bank_accounts அல்லது bank_accounts)
                     bank_res = supabase.table("company_bank_accounts").select("*").execute()
                     company_banks = bank_res.data or []
                 except Exception:
@@ -3399,14 +3398,13 @@ if st.session_state.get("logged_in", False):
                     except Exception:
                         company_banks = []
 
-                # வங்கிகளின் பெயர்ப் பட்டியல் தயாரித்தல்
+                # வங்கிகளின் பெயர்ப் பட்டியல் தயாரித்தல் (Syntax Error சரிசெய்யப்பட்டது)
                 if company_banks:
                     bank_options = [
-                        f"{b.get('bank_name')} - {b.get('account_number', '')[-4:]} (இருப்பு: ₹{float(b.get('current_balance', 0) or 0):,.2f})"
+                        f"{b.get('bank_name')} - {str(b.get('account_number', ''))[-4:]} (இருப்பு: ₹{float(b.get('current_balance', 0) or 0):,.2f})"
                         for b in company_banks
                     ]
                 else:
-                    # அட்டவணை இல்லாவிடில் ஸ்டாண்டர்ட் வங்கிகள் (Fallback)
                     bank_options = ["HDFC Bank", "Kotak Mahindra Bank", "Indian Overseas Bank", "State Bank of India", "KVB"]
 
                 vault_loans = [p for p in all_loan_pkts if p.get("packet_location") == "AT_HQ_VAULT"]
@@ -3414,7 +3412,7 @@ if st.session_state.get("logged_in", False):
                 col_bk1, col_bk2 = st.columns(2)
 
                 # =============================================================
-                # அ. HQ பெட்டகத்தில் உள்ள கடன்கள் (லாக்கருக்கு அனுப்ப + வங்கியில் பணம் கூட)
+                # அ. HQ பெட்டகத்தில் உள்ள கடன்கள் (ரீபிளட்ஜ் அனுமதி கோருதல்)
                 # =============================================================
                 with col_bk1:
                     st.write("🏢 **HQ பெட்டகத்தில் உள்ள கடன்கள் (லாக்கருக்கு அனுப்ப):**")
@@ -3443,7 +3441,6 @@ if st.session_state.get("logged_in", False):
                                 f"🪙 {vl['loan_no']} | {b_map_name.get(vl['branch_id'], '-')} | {vl['gross_weight']}g"
                             ):
                                 with st.form(key=f"tmgmt_repldge_{vl['id']}"):
-                                    # 👈 🌟 1. இணைக்கப்பட்ட வங்கிகள் Selectbox ஆக வருகிறது
                                     sel_bank_label = st.selectbox(
                                         "வங்கி / நிதி நிறுவனம் தேர்ந்தெடுக்கவும்:",
                                         bank_options,
@@ -3465,9 +3462,11 @@ if st.session_state.get("logged_in", False):
                                         step=100.0,
                                     )
 
-                                    if st.form_submit_button("🏦 வங்கி லாக்கருக்கு மாற்று"):
+                                    # 🌟 நீங்கள் உள்ளிட்ட Maker Submission குறியீடு இங்கே இணைக்கப்பட்டுள்ளது:
+                                    if st.form_submit_button("🏦 வங்கி லாக்கருக்கு அனுமதி கோரு"):
                                         if b_amt_in > 0:
-                                            # தேர்ந்தெடுக்கப்பட்ட வங்கியின் அசல் பெயர் மற்றும் ID கண்டறிதல்
+                                            net_credit = b_amt_in - b_charges_in
+
                                             chosen_bank_obj = None
                                             actual_bank_name = sel_bank_label
                                             for b in company_banks:
@@ -3476,55 +3475,36 @@ if st.session_state.get("logged_in", False):
                                                     actual_bank_name = b.get("bank_name")
                                                     break
 
-                                            # 1. gold_loans அட்டவணையைப் புதுப்பித்தல் (பழைய செயல் மாறாமல்)
-                                            supabase.table("gold_loans").update(
-                                                {
-                                                    "packet_location": "IN_BANK_LOCKER",
-                                                    "repledge_bank": actual_bank_name,
-                                                    "repledge_loan_no": b_loan_in.strip(),
-                                                    "repledge_amount": b_amt_in,
-                                                    "repledge_charges": b_charges_in,
-                                                    "packet_updated_at": datetime.now().isoformat(),
-                                                }
-                                            ).eq("id", vl["id"]).execute()
+                                            # 1. gold_loans நிலையை இடைக்கால நிலைக்கு மாற்றுதல்
+                                            supabase.table("gold_loans").update({
+                                                "packet_location": "RE_PLEDGE_PENDING_APPROVAL",
+                                                "repledge_bank": actual_bank_name,
+                                                "repledge_loan_no": b_loan_in.strip(),
+                                                "repledge_amount": b_amt_in,
+                                                "repledge_charges": b_charges_in,
+                                                "packet_updated_at": datetime.now().isoformat()
+                                            }).eq("id", vl["id"]).execute()
 
-                                            # 🌟 2. வங்கிக் கணக்கில் பணம் அதிகரித்தல் (Net Inflow = கடன் தொகை - பிடித்தம்)
-                                            net_credit = b_amt_in - b_charges_in
-                                            if chosen_bank_obj and net_credit > 0:
-                                                new_bank_bal = float(chosen_bank_obj.get("current_balance", 0) or 0) + net_credit
-                                                
-                                                # வங்கி இருப்பைப் புதுப்பித்தல்
-                                                bank_tbl = "company_bank_accounts" if "company_bank_accounts" in locals() else "bank_accounts"
-                                                try:
-                                                    supabase.table("company_bank_accounts").update({"current_balance": new_bank_bal}).eq("id", chosen_bank_obj["id"]).execute()
-                                                except Exception:
-                                                    try:
-                                                        supabase.table("bank_accounts").update({"current_balance": new_bank_bal}).eq("id", chosen_bank_obj["id"]).execute()
-                                                    except Exception:
-                                                        pass
+                                            # 2. வங்கி பாஸ்புக் ஏட்டில் 'Pending' ஆகப் பதிவு செய்தல் (இருப்பு இன்னும் மாறாது)
+                                            supabase.table("bank_transactions").insert({
+                                                "bank_account_id": chosen_bank_obj["id"] if chosen_bank_obj else None,
+                                                "transaction_type": "வரவு (IN)",
+                                                "category": "Re-Pledge Inflow",
+                                                "amount": net_credit,
+                                                "gl_no": vl["loan_no"],
+                                                "description": f"ரீபிளட்ஜ் வரவு: {vl['loan_no']} | வங்கி கடன் எண்: {b_loan_in} (அசல்: ₹{b_amt_in:,.2f} - பிடித்தம்: ₹{b_charges_in:,.2f})",
+                                                "status": "Pending_Approval",
+                                                "created_by": st.session_state.get("username", "Staff"),
+                                                "created_at": datetime.now().isoformat()
+                                            }).execute()
 
-                                                # வங்கிப் பரிவர்த்தனைப் பதிவேடு (Bank Transaction Ledger)
-                                                try:
-                                                    supabase.table("bank_transactions").insert({
-                                                        "bank_account_id": chosen_bank_obj["id"],
-                                                        "transaction_type": "Credit",
-                                                        "amount": net_credit,
-                                                        "description": f"Re-Pledge Loan Inflow: {vl['loan_no']} (Bank Ref: {b_loan_in})",
-                                                        "balance_after": new_bank_bal,
-                                                        "created_at": datetime.now().isoformat()
-                                                    }).execute()
-                                                except Exception:
-                                                    pass
-
-                                            st.success(
-                                                f"✅ {vl['loan_no']} லாக்கருக்கு மாற்றப்பட்டது! {actual_bank_name} கணக்கில் ₹{net_credit:,.2f} வரவு வைக்கப்பட்டது."
-                                            )
+                                            st.info(f"⏳ {vl['loan_no']} ரீபிளட்ஜ் பதிவு செய்யப்பட்டது. மேலாளர் சரிபார்த்த பின் வங்கி இருப்பு மாறும்.")
                                             st.rerun()
                                         else:
                                             st.error("❌ கடன் தொகையை உள்ளிடவும்!")
 
                 # =============================================================
-                # ஆ. வங்கி லாக்கரில் உள்ள பாக்கெட்கள் (மீட்கும் போது வங்கியிலிருந்து பணம் குறைய)
+                # ஆ. வங்கி லாக்கரில் உள்ள பாக்கெட்கள் (மீட்பு அனுமதி கோருதல்)
                 # =============================================================
                 with col_bk2:
                     st.write("🏦 **வங்கி லாக்கரில் உள்ள பாக்கெட்கள் (HQ-க்கு திருப்ப):**")
@@ -3566,7 +3546,6 @@ if st.session_state.get("logged_in", False):
                                         step=100.0,
                                     )
 
-                                    # பணம் கழிக்கப்பட வேண்டிய வங்கியைத் தேர்ந்தெடுத்தல்
                                     default_b_name = rpk.get("repledge_bank", "")
                                     matched_idx = 0
                                     for idx, b_opt in enumerate(bank_options):
@@ -3581,57 +3560,37 @@ if st.session_state.get("logged_in", False):
                                         key=f"deb_bank_{rpk['id']}"
                                     )
 
-                                    if st.form_submit_button("🏢 வட்டி + அசல் செலுத்தி HQ பெட்டகத்திற்கு திருப்பு"):
+                                    # 🌟 மீட்புக்கும் நேரடியாக வங்கி இருப்பு கழியாமல் அனுமதி கோரும் முறை:
+                                    if st.form_submit_button("🏢 வட்டி + அசல் செலுத்தி மீட்க அனுமதி கோரு"):
                                         total_payout = rep_amt + int_paid_in
 
-                                        # 1. gold_loans அட்டவணையைப் புதுப்பித்தல் (பழைய செயல் மாறாமல்)
-                                        supabase.table("gold_loans").update(
-                                            {
-                                                "packet_location": "AT_HQ_VAULT",
-                                                "repledge_bank": None,
-                                                "repledge_loan_no": None,
-                                                "repledge_amount": 0.0,
-                                                "repledge_interest_paid": int_paid_in,
-                                                "packet_updated_at": datetime.now().isoformat(),
-                                            }
-                                        ).eq("id", rpk["id"]).execute()
-
-                                        # 🌟 2. குறிப்பிட்ட வங்கிக் கணக்கில் பணம் குறைதல் (Total Outflow = அசல் + வட்டி)
                                         chosen_debit_obj = None
                                         for b in company_banks:
                                             if b.get("bank_name") in sel_debit_bank:
                                                 chosen_debit_obj = b
                                                 break
 
-                                        if chosen_debit_obj and total_payout > 0:
-                                            cur_bal = float(chosen_debit_obj.get("current_balance", 0) or 0)
-                                            new_bank_bal = cur_bal - total_payout
+                                        # 1. gold_loans இடைக்கால நிலை
+                                        supabase.table("gold_loans").update({
+                                            "packet_location": "RE_PLEDGE_RELEASE_PENDING_APPROVAL",
+                                            "repledge_interest_paid": int_paid_in,
+                                            "packet_updated_at": datetime.now().isoformat(),
+                                        }).eq("id", rpk["id"]).execute()
 
-                                            # வங்கி இருப்பைக் குறைத்தல்
-                                            try:
-                                                supabase.table("company_bank_accounts").update({"current_balance": new_bank_bal}).eq("id", chosen_debit_obj["id"]).execute()
-                                            except Exception:
-                                                try:
-                                                    supabase.table("bank_accounts").update({"current_balance": new_bank_bal}).eq("id", chosen_debit_obj["id"]).execute()
-                                                except Exception:
-                                                    pass
+                                        # 2. பாஸ்புக் ஏட்டில் பற்று 'Pending' பதிவு
+                                        supabase.table("bank_transactions").insert({
+                                            "bank_account_id": chosen_debit_obj["id"] if chosen_debit_obj else None,
+                                            "transaction_type": "பற்று (OUT)",
+                                            "category": "Re-Pledge Redemption Payout",
+                                            "amount": total_payout,
+                                            "gl_no": rpk["loan_no"],
+                                            "description": f"ரீபிளட்ஜ் மீட்பு பற்று: {rpk['loan_no']} (அசல்: ₹{rep_amt:,.2f} + வட்டி: ₹{int_paid_in:,.2f})",
+                                            "status": "Pending_Approval",
+                                            "created_by": st.session_state.get("username", "Staff"),
+                                            "created_at": datetime.now().isoformat()
+                                        }).execute()
 
-                                            # பற்றுப் பதிவு (Debit Ledger)
-                                            try:
-                                                supabase.table("bank_transactions").insert({
-                                                    "bank_account_id": chosen_debit_obj["id"],
-                                                    "transaction_type": "Debit",
-                                                    "amount": total_payout,
-                                                    "description": f"Re-Pledge Redemption Payout: {rpk['loan_no']} (Principal: ₹{rep_amt:,.2f} + Int: ₹{int_paid_in:,.2f})",
-                                                    "balance_after": new_bank_bal,
-                                                    "created_at": datetime.now().isoformat()
-                                                }).execute()
-                                            except Exception:
-                                                pass
-
-                                        st.success(
-                                            f"✅ {rpk['loan_no']} மீட்கப்பட்டு HQ பெட்டகத்திற்கு மாற்றப்பட்டது! கணக்கிலிருந்து ₹{total_payout:,.2f} பற்று வைக்கப்பட்டது."
-                                        )
+                                        st.info(f"⏳ {rpk['loan_no']} மீட்புப் பதிவு மேலாளர் அப்ரூவலுக்கு அனுப்பப்பட்டது. உறுதிசெய்த பின் வங்கி இருப்பு குறையும்.")
                                         st.rerun()
             # -------------------------------------------------------------------------
             # டேப் 3: கிளைகளின் மீட்புக் கோரிக்கைகள் & திருப்பி அனுப்பும் அனுமதி மேலாண்மை
@@ -3900,6 +3859,106 @@ if st.session_state.get("logged_in", False):
                     ]
 
                 st.dataframe(df_pkt_all, use_container_width=True)
+        
+        # =========================================================================
+        # 🛡️ பிரிவு: ரீபிளட்ஜ் & வங்கி நிதி ஒப்புதல் (Maker-Checker Approval Desk)
+        # =========================================================================
+        elif selected_section == "🛡️ ரீபிளட்ஜ் & வங்கி நிதி ஒப்புதல்":
+            st.subheader("🛡️ ரீபிளட்ஜ் & வங்கி பரிவர்த்தனை சரிபார்ப்பு மேசை")
+            st.caption(
+                "பணியாளர்கள் உள்ளிட்ட ரீபிளட்ஜ் வரவு மற்றும் மீட்பு பற்றுத் தொகைகளைச் சரிபார்த்து ஒப்புதல் அளிக்கும் பிரத்யேகப் பகுதி."
+            )
+
+            user_role = st.session_state.get("role", "Staff")
+            is_admin_or_manager = any(r in user_role for r in ["Admin", "Manager", "Head", "MD", "Owner"])
+
+            if not is_admin_or_manager:
+                st.error("⛔ இந்தப் பக்கத்தை அணுக உங்களுக்கு அனுமதி இல்லை. நிர்வாகியைத் தொடர்பு கொள்ளவும்.")
+            else:
+                # நிலுவையில் உள்ள பதிவுகளை எடுத்தல்
+                try:
+                    pending_txns = (
+                        supabase.table("bank_transactions")
+                        .select("*, company_bank_accounts(*)")
+                        .eq("status", "Pending_Approval")
+                        .order("id", desc=True)
+                        .execute()
+                        .data or []
+                    )
+                except Exception as b_err:
+                    st.error(f"அங்கீகாரப் பதிவுகளை எடுப்பதில் பிழை: {b_err}")
+                    pending_txns = []
+
+                if not pending_txns:
+                    st.success("✅ தற்போது சரிபார்க்க வேண்டிய ரீபிளட்ஜ் / மீட்புக் கோரிக்கைகள் ஏதுமில்லை. அனைத்தும் சரிபார்க்கப்பட்டுவிட்டன!")
+                else:
+                    st.info(f"📋 அங்கீகாரத்திற்காகக் காத்திருக்கும் பரிவர்த்தனைகள் எண்ணிக்கை: **{len(pending_txns)}**")
+                    
+                    for p_tx in pending_txns:
+                        b_info = p_tx.get("company_bank_accounts") or {}
+                        bank_title = f"{b_info.get('bank_name', 'Bank')} ({str(b_info.get('account_number', ''))[-4:]})"
+                        cur_bal = float(b_info.get("current_balance", 0) or 0)
+                        t_amt = float(p_tx.get("amount", 0) or 0)
+                        is_credit = ("வரவு" in str(p_tx.get("transaction_type", "")) or "Credit" in str(p_tx.get("transaction_type", "")))
+
+                        with st.container():
+                            c1, c2, c3, c4 = st.columns([2, 4, 2, 2])
+                            c1.warning(f"🏷️ **கடன் எண்: {p_tx.get('gl_no', '-')}**\nஉள்ளிட்டவர்: `{p_tx.get('created_by', 'Staff')}`")
+                            c2.write(f"**{p_tx.get('description')}**\n🏦 வங்கி: **{bank_title}** | நடப்பு இருப்பு: ₹{cur_bal:,.2f}")
+                            c3.metric(
+                                "பரிவர்த்தனைத் தொகை",
+                                f"₹{t_amt:,.2f}",
+                                delta="+வரவு (Inflow)" if is_credit else "-பற்று (Outflow)",
+                                delta_color="normal" if is_credit else "inverse"
+                            )
+
+                            with c4:
+                                # 1. அப்ரூவ் பொத்தான்
+                                if st.button("✅ சரிபார் (Approve)", key=f"sec_appr_{p_tx['id']}", type="primary"):
+                                    new_bal = (cur_bal + t_amt) if is_credit else (cur_bal - t_amt)
+
+                                    # அ. வங்கி நடப்பு இருப்பைப் புதுப்பித்தல்
+                                    supabase.table("company_bank_accounts").update({
+                                        "current_balance": new_bal
+                                    }).eq("id", p_tx["bank_account_id"]).execute()
+
+                                    # ஆ. பரிவர்த்தனையை Approved ஆக்குதல்
+                                    supabase.table("bank_transactions").update({
+                                        "status": "Approved",
+                                        "balance_after": new_bal,
+                                        "verified_by": st.session_state.get("username", "Admin"),
+                                        "verified_at": datetime.now().isoformat()
+                                    }).eq("id", p_tx["id"]).execute()
+
+                                    # இ. நகைப் பாக்கெட்டின் நிலையை மாற்றுதல்
+                                    if is_credit:
+                                        supabase.table("gold_loans").update({
+                                            "packet_location": "IN_BANK_LOCKER"
+                                        }).eq("loan_no", p_tx.get("gl_no")).execute()
+                                    else:
+                                        supabase.table("gold_loans").update({
+                                            "packet_location": "AT_HQ_VAULT"
+                                        }).eq("loan_no", p_tx.get("gl_no")).execute()
+
+                                    st.success(f"🎉 அங்கீகரிக்கப்பட்டது! {bank_title} புதிய இருப்பு: ₹{new_bal:,.2f}")
+                                    st.rerun()
+
+                                # 2. நிராகரிக்கும் பொத்தான்
+                                if st.button("❌ நிராகரி (Reject)", key=f"sec_rej_{p_tx['id']}"):
+                                    supabase.table("bank_transactions").update({
+                                        "status": "Rejected",
+                                        "verified_by": st.session_state.get("username", "Admin"),
+                                        "verified_at": datetime.now().isoformat()
+                                    }).eq("id", p_tx["id"]).execute()
+
+                                    # நிராகரித்தால் நகையை மீண்டும் HQ பெட்டகத்திற்கே மாற்றுதல்
+                                    supabase.table("gold_loans").update({
+                                        "packet_location": "AT_HQ_VAULT"
+                                    }).eq("loan_no", p_tx.get("gl_no")).execute()
+
+                                    st.warning("⚠️ பரிவர்த்தனை நிராகரிக்கப்பட்டது; நகை மீண்டும் HQ பெட்டகத்திற்குத் திருப்பப்பட்டது.")
+                                    st.rerun()
+                            st.divider()
 
         elif selected_section == "🏢 கிளைகள்":
             st.subheader("➕ புதிய கிளை சேர்த்தல்")
@@ -4091,6 +4150,7 @@ if st.session_state.get("logged_in", False):
                             "🏢 நேரடி கல்லா & தினசரி வணிகம்",
                             "🪙 தினசரி தங்க/வெள்ளி விலை நிர்ணயம்",
                             "📦 பாக்கெட் & லாக்கர் மேலாண்மை",
+                            "🛡️ ரீபிளட்ஜ் & வங்கி நிதி ஒப்புதல்",
                             "🏢 கிளைகள்",
                             "👥 பணியாளர்கள்",
                             "📋 ஸ்கீம்கள் மேலாண்மை (Pledge, FD, RD)",
