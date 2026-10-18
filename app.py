@@ -11861,26 +11861,21 @@ if st.session_state.get("logged_in", False):
                     b_id = acc["id"]
                     op_b = float(acc.get("opening_balance") or 0.0)
                     
-                    # குறிப்பிட்ட வங்கிக் கணக்கிற்குரிய அனைத்து பாஸ்புக் வரவு/பற்றுகளையும் திரட்டுதல்
+                    # transaction_type நீக்கப்பட்டு txn_flow, amount மட்டும் வினவப்படுகிறது
                     tx_data = (
                         supabase.table("bank_transactions")
-                        .select("txn_flow, amount, transaction_type")
+                        .select("txn_flow, amount")
                         .eq("bank_account_id", b_id)
                         .execute()
                         .data or []
                     )
                     
-                    # IN / வரவு எனில் கூட்டல் (+), OUT / பற்று எனில் கழித்தல் (-)
-                    net_flow = 0.0
-                    for t in tx_data:
-                        amt_val = float(t.get("amount") or 0.0)
-                        flow = str(t.get("txn_flow") or "").upper()
-                        t_type = str(t.get("transaction_type") or "")
-                        
-                        if flow == "IN" or "வரவு" in t_type or "CREDIT" in t_type.upper():
-                            net_flow += amt_val
-                        elif flow == "OUT" or "பற்று" in t_type or "DEBIT" in t_type.upper():
-                            net_flow -= amt_val
+                    # IN எனில் கூட்டல் (+), OUT எனில் கழித்தல் (-)
+                    net_flow = sum(
+                        float(t.get("amount") or 0.0) if str(t.get("txn_flow", "")).upper() == "IN" 
+                        else -float(t.get("amount") or 0.0) 
+                        for t in tx_data
+                    )
 
                     # 🌟 துல்லியமான உண்மையான இருப்பு (தொடக்க இருப்பு + பாஸ்புக் நிகரப் பரிமாற்றம்)
                     real_calc_balance = op_b + net_flow
@@ -12022,19 +12017,15 @@ if st.session_state.get("logged_in", False):
                         table_rows = []
                         for tx in bank_txns:
                             flow = str(tx.get("txn_flow") or "").upper()
-                            t_type_str = str(tx.get("transaction_type") or "")
                             
-                            # வரவு அல்லது பற்று நிர்ணயம்
-                            if flow == "IN" or "வரவு" in t_type_str or "CREDIT" in t_type_str.upper():
-                                flow_label = "📥 வரவு (IN)"
-                            else:
-                                flow_label = "📤 பட்டுவாடா (OUT)"
+                            # txn_flow அடிப்படையில் வரவு அல்லது பட்டுவாடா நிர்ணயம்
+                            flow_label = "📥 வரவு (IN)" if flow == "IN" else "📤 பட்டுவாடா (OUT)"
 
                             # கிளைப் பெயர் (ரீபிளட்ஜ் எனில் Head Office / HQ)
                             branch_val = tx.get("branch_id")
                             branch_display = b_name_map.get(branch_val, "Head Office (HQ)" if not branch_val else f"கிளை #{branch_val}")
 
-                            # குறிப்பு எண் (reference_no அல்லது gl_no)
+                            # குறிப்பு எண் (reference_no)
                             ref_display = tx.get("reference_no") or tx.get("ref_no") or tx.get("gl_no") or "-"
 
                             table_rows.append({
@@ -12043,8 +12034,8 @@ if st.session_state.get("logged_in", False):
                                 "பரிவர்த்தனை வகை": flow_label,
                                 "தொகை (₹)": f"₹{float(tx.get('amount', 0.0)):,.2f}",
                                 "UTR / Ref எண்": ref_display,
-                                "விளக்கம் / குறிப்பு": tx.get("remarks") or tx.get("description") or "-",
-                                "பதிவு செய்தவர்": tx.get("verified_by") or tx.get("created_by") or tx.get("staff_name") or "Admin"
+                                "விளக்கம் / குறிப்பு": tx.get("remarks") or "-",
+                                "பதிவு செய்தவர்": tx.get("created_by") or "Admin"
                             })
 
                         df_txns = pd.DataFrame(table_rows)
