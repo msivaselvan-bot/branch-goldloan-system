@@ -3490,10 +3490,9 @@ if st.session_state.get("logged_in", False):
                                             supabase.table("bank_transactions").insert({
                                                 "bank_account_id": chosen_bank_obj["id"] if chosen_bank_obj else None,
                                                 "transaction_type": "வரவு (IN)",
-                                                "category": "Re-Pledge Inflow",
                                                 "amount": net_credit,
                                                 "gl_no": vl["loan_no"],
-                                                "description": f"ரீபிளட்ஜ் வரவு: {vl['loan_no']} | வங்கி கடன் எண்: {b_loan_in} (அசல்: ₹{b_amt_in:,.2f} - பிடித்தம்: ₹{b_charges_in:,.2f})",
+                                                "description": f"[Re-Pledge Inflow] ரீபிளட்ஜ் வரவு: {vl['loan_no']} | வங்கி கடன் எண்: {b_loan_in} (அசல்: ₹{b_amt_in:,.2f} - பிடித்தம்: ₹{b_charges_in:,.2f})",
                                                 "status": "Pending_Approval",
                                                 "created_by": st.session_state.get("username", "Staff"),
                                                 "created_at": datetime.now().isoformat()
@@ -3582,10 +3581,9 @@ if st.session_state.get("logged_in", False):
                                         supabase.table("bank_transactions").insert({
                                             "bank_account_id": chosen_debit_obj["id"] if chosen_debit_obj else None,
                                             "transaction_type": "பற்று (OUT)",
-                                            "category": "Re-Pledge Redemption Payout",
                                             "amount": total_payout,
                                             "gl_no": rpk["loan_no"],
-                                            "description": f"ரீபிளட்ஜ் மீட்பு பற்று: {rpk['loan_no']} (அசல்: ₹{rep_amt:,.2f} + வட்டி: ₹{int_paid_in:,.2f})",
+                                            "description": f"[Re-Pledge Redemption] ரீபிளட்ஜ் மீட்பு பற்று: {rpk['loan_no']} (அசல்: ₹{rep_amt:,.2f} + வட்டி: ₹{int_paid_in:,.2f})",
                                             "status": "Pending_Approval",
                                             "created_by": st.session_state.get("username", "Staff"),
                                             "created_at": datetime.now().isoformat()
@@ -3861,9 +3859,7 @@ if st.session_state.get("logged_in", False):
 
                 st.dataframe(df_pkt_all, use_container_width=True)
         
-        # =========================================================================
-        # 🛡️ பிரிவு: ரீபிளட்ஜ் & வங்கி நிதி ஒப்புதல் (Maker-Checker Approval Desk)
-        # =========================================================================
+    
         # =========================================================================
         # 🛡️ பிரிவு: ரீபிளட்ஜ் & வங்கி நிதி ஒப்புதல் (ஒருங்கிணைந்த நிதி ஒப்புதல் மேசை)
         # =========================================================================
