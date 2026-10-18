@@ -6798,10 +6798,26 @@ if st.session_state.get("logged_in", False):
             except (ValueError, TypeError):
                 clean_b_id = 2
 
-            today_str = str(date.today())
+            today_date = date.today()
+            today_str = str(today_date)
 
-            # முந்தைய நாட்களில் பூட்டப்படாத (is_closed = False) நாட்கள் உள்ளதா என நேரடி சரிபார்ப்பு
-            pending_day_check = (
+            # 1. கடைசி அதிகாரப்பூர்வமாகப் பூட்டப்பட்ட நாளின் தேதியைப் பெறுதல்
+            last_closed_rec = (
+                supabase.table("branch_daily_cash_summary")
+                .select("summary_date")
+                .eq("branch_id", clean_b_id)
+                .eq("is_closed", True)
+                .order("summary_date", desc=True)
+                .limit(1)
+                .execute()
+                .data or []
+            )
+
+            # 2. பூட்டப்படாத நாள் ஏதேனும் உள்ளதா எனப் பரிசோதித்தல்:
+            pending_date = None
+
+            # முறை A: is_closed = False என நேரடியாக உள்ள நாட்கள்
+            unclosed_direct = (
                 supabase.table("branch_daily_cash_summary")
                 .select("summary_date")
                 .eq("branch_id", clean_b_id)
@@ -6813,23 +6829,38 @@ if st.session_state.get("logged_in", False):
                 .data or []
             )
 
-            if pending_day_check:
-                unclosed_dt = pending_day_check[0]["summary_date"]
+            if unclosed_direct:
+                pending_date = unclosed_direct[0]["summary_date"]
+            elif last_closed_rec:
+                # முறை B: கடைசியாகப் பூட்டப்பட்ட தேதிக்கும் இன்றைய தேதிக்கும் இடையே இடைவெளி உள்ளதா எனப் பார்த்தல்
+                last_closed_str = last_closed_rec[0]["summary_date"]
+                last_closed_dt = datetime.strptime(last_closed_str, "%Y-%m-%d").date()
+                expected_next_date = last_closed_dt + timedelta(days=1)
+                
+                # அடுத்த நாள் இன்றை விடக் குறைவாக இருந்தால் (அதாவது நேற்று வரை உள்ள நாட்கள் பூட்டப்படவில்லை எனில்)
+                if expected_next_date < today_date:
+                    pending_date = str(expected_next_date)
+            else:
+                # கணக்கே தொடங்கப்படாமல் இருந்தால் நேற்று நாளாக எடுத்துக் கொள்ளுதல்
+                yesterday_str = str(today_date - timedelta(days=1))
+                pending_date = yesterday_str
+
+            # 🛑 பூட்டப்படாத நாள் இருந்தால் உடனடியாக முடக்குதல்:
+            if pending_date and pending_date < today_str:
                 try:
-                    dt_fmt = datetime.strptime(unclosed_dt, "%Y-%m-%d").strftime("%d-%m-%Y")
+                    dt_fmt = datetime.strptime(pending_date, "%Y-%m-%d").strftime("%d-%m-%Y")
                 except Exception:
-                    dt_fmt = unclosed_dt
+                    dt_fmt = pending_date
 
                 st.error("### 🚫 வணிகப் பதிவுகள் தற்காலிகமாக முடக்கப்பட்டுள்ளன!")
                 st.error(f"⚠️ **முந்தைய நாள் ({dt_fmt}) பூட்டப்படாமல் உள்ளது! உடனடியாகப் பூட்டவும்.**")
                 st.warning(
                     f"👉 **கவனத்திற்கு:** தொடர் கணக்கு முறைமைப்படி, முந்தைய நாளான **{dt_fmt}** தேதிக்கான கல்லா இறுதி செய்யப்பட்டுப் பூட்டப்படவில்லை.\n\n"
-                    f"அன்றைய நாளுக்கான இறுதி ரொக்க இருப்பை உறுதிசெய்து நாட்டைப் பூட்டாமல் இன்றைய புதிய வருகைகளையோ அல்லது கடன்/RD/FD நடவடிக்கைகளையோ பதிவு செய்ய முடியாது.\n\n"
+                    f"அன்றைய நாளுக்கான இறுதி ரொக்க இருப்பை உறுதிசெய்து நாட்டைப் பூட்டாமல் இன்றைய புதிய வருகைகளையோ அல்லது கடன்/மீட்டல் நடவடிக்கைகளையோ பதிவு செய்ய முடியாது.\n\n"
                     f"தயவுசெய்து இடதுபுற மெனுவில் **'💼 கிளை கல்லா'** -> **'📊 தினசரி கிளைக் கணக்கு ஏடு'** பகுதிக்குச் சென்று, **{dt_fmt}** தேதியைத் தேர்ந்தெடுத்து, "
-                    f"கல்லாவில் உள்ள நோட்டுகளை எண்ணி இந்நாளைப் பூட்டிய பின்னர் இன்றைய பணிகளைத் தொடரவும்."
+                    f"கல்லாவில் உள்ள நோட்டுகளை எண்ணி இந்நாளைப் பூட்டிய பின்னர் இன்றைய (18-10-2026) பணிகளைத் தொடரவும்."
                 )
-                st.stop()  # 🛑 முந்தைய நாள் கணக்கை முடிக்கும் வரை கீழே உள்ள எந்தப் புதிய நடவடிக்கைகளும் இயங்காது!
-
+                st.stop()  # 🛑 18-10-2026-ல் எந்த நடவடிக்கையும் செய்ய விடாமல் தடுக்கிறது!
             # ---------------------------------------------------------------------
             # 2. பணியாளர் பட்டியல் எடுத்தல்
             # ---------------------------------------------------------------------
