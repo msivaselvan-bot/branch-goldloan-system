@@ -1493,9 +1493,12 @@ def get_current_branch_cash_drawer(branch_id):
         # 2. வாடிக்கையாளர் வருகைகளின் வரவு / செலவு நோட்டுகள் (Customer Visits)
         # =========================================================================
         # ✅ ஆப்பரேஷன்ஸ் ஒப்புதல் பெற்ற வருகைகளை மட்டுமே கணக்கிடுதல் (Pending_Calling_Verification இதில் வராது)
+       # =========================================================================
+        # 🌟 2. வாடிக்கையாளர் வருகை (Customer Visits)
+        # =========================================================================
         visits_query = (
             supabase.table("customer_visits")
-            .select("denomination_details, created_at, status")
+            .select("denomination_details, visit_date, created_at, status")
             .eq("branch_id", clean_b_id)
             .in_(
                 "status",
@@ -1507,8 +1510,10 @@ def get_current_branch_cash_drawer(branch_id):
                 ],
             )
         )
+        
+        # கடைசியாகக் கணக்குத் தொடங்கிய தேதியிலிருந்து (last_op_date) வணிகத் தேதி கொண்டு வடிகட்டுதல்:
         if last_op_date:
-            visits_query = visits_query.gte("created_at", f"{last_op_date}T00:00:00")
+            visits_query = visits_query.gte("visit_date", str(last_op_date))
 
         visits_res = visits_query.execute()
         if visits_res.data:
@@ -1537,17 +1542,18 @@ def get_current_branch_cash_drawer(branch_id):
                         stock[k] -= val_out
 
         # =========================================================================
-        # 3. தலைமையகம் மற்றும் கிளை இடையேயான பணப் பரிமாற்றம் (Fund Transfers)
+        # 🌟 3. தலைமையகம் மற்றும் கிளை இடையேயான பணப் பரிமாற்றம் (Fund Transfers)
         # =========================================================================
         fund_query = (
             supabase.table("branch_fund_transfers")
-            .select("transfer_type, denomination_details, payment_mode, status")
+            .select("transfer_type, denomination_details, payment_mode, status, transfer_date")  # 👈 transfer_date சேர்க்கப்பட்டது
             .eq("branch_id", clean_b_id)
             .eq("payment_mode", "Cash")
             .neq("status", "Rejected")
         )
         if last_op_date:
-            fund_query = fund_query.gte("created_at", f"{last_op_date}T00:00:00")
+            # 🌟 created_at-க்கு பதிலாக transfer_date கொண்டு வடிகட்டுதல்
+            fund_query = fund_query.gte("transfer_date", str(last_op_date))
 
         fund_res = fund_query.execute()
         if fund_res.data:
@@ -1574,16 +1580,17 @@ def get_current_branch_cash_drawer(branch_id):
                         stock[k] -= qty
 
         # =========================================================================
-        # 4. கிளைச் செலவுகள் (Branch Expenses)
+        # 🌟 4. கிளைச் செலவுகள் (Branch Expenses)
         # =========================================================================
         exp_query = (
             supabase.table("branch_expenses")
-            .select("denomination_details, status")
+            .select("denomination_details, status, expense_date")  # 👈 expense_date சேர்க்கப்பட்டது
             .eq("branch_id", clean_b_id)
             .neq("status", "Rejected")
         )
         if last_op_date:
-            exp_query = exp_query.gte("created_at", f"{last_op_date}T00:00:00")
+            # 🌟 created_at-க்கு பதிலாக expense_date கொண்டு வடிகட்டுதல்
+            exp_query = exp_query.gte("expense_date", str(last_op_date))
 
         exp_res = exp_query.execute()
         if exp_res.data:
@@ -8428,6 +8435,9 @@ if st.session_state.get("logged_in", False):
                                         with st.spinner("டேட்டாபேஸில் விவரங்கள் புதுப்பிக்கப்படுகின்றன..."):
                                             current_v_no = visit.get("visit_no")
 
+                                            # 🌟 0. தேர்ந்தெடுக்கப்பட்ட வணிகத் தேதியை உறுதிசெய்தல் (Catch-up Mode Fix - 17-10-2026)
+                                            effective_v_date = str(visit.get("visit_date") or visit_business_date)
+
                                             # 🌟 1. ஏற்கனவே டிராஃப்ட்டில் உள்ள வருகையா எனப் பார்த்தல்:
                                             chk_draft = (
                                                 supabase.table("customer_visits")
@@ -8438,32 +8448,30 @@ if st.session_state.get("logged_in", False):
                                             )
                                             is_existing_draft = bool(chk_draft.data)
 
-                                            # புதிய நேரடி வருகைக்கான எண் மோதலைத் தவிர்த்தல்:
+                                            # 🌟 2. புதிய நேரடி வருகைக்கான எண் மோதலைத் தவிர்த்தல் (வணிகத் தேதியுடன்):
                                             if not is_existing_draft:
                                                 chk_exist = supabase.table("customer_visits").select("id").eq("visit_no", current_v_no).execute()
                                                 if chk_exist.data:
                                                     b_code = st.session_state.get("branch_code", "BR")[:3].upper()
-                                                    current_v_no = generate_branch_visit_no(clean_b_id, b_code)
+                                                    try:
+                                                        current_v_no = generate_branch_visit_no(clean_b_id, b_code, target_date=effective_v_date)
+                                                    except TypeError:
+                                                        current_v_no = generate_branch_visit_no(clean_b_id, b_code)
 
                                             # =========================================================================
-                                            # 🌟 டிராஃப்ட் அல்லது நேரடி வருகைக்கான நிலைகளைத் துல்லியமாக நிர்ணயித்தல்
+                                            # 🌟 3. நிலைகள் மற்றும் கட்டண முறைகளை நிர்ணயித்தல்
                                             # =========================================================================
                                             pm_label = "Cash" if bank_portion == 0 else ("Bank/UPI" if cash_portion == 0 else "Split")
                                             
-                                            # 1. வங்கி வரவா அல்லது வங்கி பட்டுவாடாவா எனப் பிரித்தல்:
-                                            # net_target <= 0 மற்றும் bank_portion > 0 எனில் -> வாடிக்கையாளர் நமக்கு வங்கி மூலம் செலுத்தினார் (Inflow)
-                                            # net_target > 0 மற்றும் bank_portion > 0 எனில் -> நாம் வாடிக்கையாளருக்கு வங்கி மூலம் தர வேண்டும் (Payout)
                                             if net_target <= 0 and bank_portion > 0:
-                                                visit_main_status = "Pending_Bank_Verification"  # 👈 வாடிக்கையாளர் வங்கி வரவு சரிபார்ப்பிற்குச் செல்லும்
-                                                payout_status = None
+                                                visit_main_status = "Pending_Bank_Verification"  # வாடிக்கையாளர் வங்கி வரவு சரிபார்ப்பிற்கு
+                                                payout_status = "Not_Applicable"
                                             elif net_target > 0 and bank_portion > 0:
                                                 visit_main_status = "Pending_Calling_Verification"
-                                                payout_status = "Pending_Transfer"  # 👈 வாடிக்கையாளர் வங்கிப் பட்டுவாடா மேசைக்குச் செல்லும்
+                                                payout_status = "Pending_Transfer"              # வாடிக்கையாளர் வங்கிப் பட்டுவாடா மேசைக்கு
                                             else:
-                                                # வங்கிப் பரிமாற்றம் இல்லை, வெறும் ரொக்கம் மட்டுமே எனில்
                                                 visit_main_status = "Pending_Calling_Verification"
-                                                payout_status = None
-
+                                                payout_status = "Not_Applicable"
                                             # 2. வாடிக்கையாளர் ஆவண URL-கள்
                                             passbook_url = None
                                             consent_url = None
@@ -8486,6 +8494,7 @@ if st.session_state.get("logged_in", False):
                                                         pass
 
                                             visit_payload = {
+                                                "visit_date": str(visit.get("visit_date") or visit_business_date),
                                                 "total_paid": float(visit.get("total_paid", 0.0) or 0.0),
                                                 "total_received": float(visit.get("total_received", 0.0) or 0.0),
                                                 "net_cash_amount": float(cash_portion),
@@ -8514,20 +8523,32 @@ if st.session_state.get("logged_in", False):
                                             # 🌟 3. ஏற்கனவே உள்ள டிராஃப்ட் எனில் UPDATE செய்தல்
                                             if is_existing_draft:
                                                 target_id = chk_draft.data[0]["id"]
+                                                
+                                                # 🌟 visit_date விடுபடாமல் உறுதிசெய்தல்
+                                                effective_txn_date = str(visit.get("visit_date") or visit_business_date)
+                                                visit_payload["visit_date"] = effective_txn_date
+                                                
                                                 supabase.table("customer_visits").update(visit_payload).eq("id", target_id).execute()
                                                 new_visit_id = target_id
                                                 
-                                                # டிராஃப்ட் செய்யப்பட்ட பரிவர்த்தனைகளின் நிலையை மாற்றுதல்:
+                                                # டிராஃப்ட் செய்யப்பட்ட பரிவர்த்தனைகளின் நிலையை மற்றும் தேதியை மாற்றுதல்:
                                                 # வங்கி வரவு சரிபார்ப்பில் இருந்தால் Pending, இல்லையெனில் Approved
                                                 txn_target_status = "Pending" if visit_main_status == "Pending_Bank_Verification" else "Approved"
+                                                
                                                 supabase.table("transactions").update({
-                                                    "status": txn_target_status
+                                                    "status": txn_target_status,
+                                                    "txn_date": effective_txn_date  # 👈 🌟 இங்கும் தேர்ந்தெடுக்கப்பட்ட வணிகத் தேதி (17-10-2026) புதுப்பிக்கப்படுகிறது!
                                                 }).eq("visit_id", new_visit_id).execute()
+
                                             else:
                                                 # புதிய வருகை எனில் INSERT செய்தல்
+                                                effective_txn_date = str(visit.get("visit_date") or visit_business_date)
+                                                
                                                 visit_payload["visit_no"] = current_v_no
                                                 visit_payload["customer_id"] = c_id
                                                 visit_payload["branch_id"] = clean_b_id
+                                                visit_payload["visit_date"] = effective_txn_date  # 👈 🌟 புதிய வருகைக்கும் வணிகத் தேதி நேரடியாக அமைகிறது
+                                                
                                                 v_insert = supabase.table("customer_visits").insert(visit_payload).execute()
                                                 new_visit_id = v_insert.data[0]["id"]
 
@@ -8712,10 +8733,16 @@ if st.session_state.get("logged_in", False):
                                             # =========================================================================
                                             # 🌟 3. transactions அட்டவணையில் நிலையை மாற்றுதல் / பதிவு செய்தல்
                                             # =========================================================================
+                                            # 🌟 வணிகத் தேதியை உறுதிசெய்தல் (17-10-2026)
+                                            effective_txn_date = str(visit.get("visit_date") or visit_business_date)
+
                                             if is_existing_draft:
+                                                # 🌟 டிராஃப்ட் எனில் ஸ்டேட்டஸுடன் சேர்த்து வணிகத் தேதியையும் (txn_date) புதுப்பித்தல்:
                                                 supabase.table("transactions").update({
-                                                    "status": "Approved"
+                                                    "status": "Approved",
+                                                    "txn_date": effective_txn_date  # 👈 சேர்க்கப்பட்டது
                                                 }).eq("visit_id", new_visit_id).execute()
+
                                             else:
                                                 for item in st.session_state.transactions_cart:
                                                     t_type = str(item.get("transaction_type", ""))
@@ -8764,6 +8791,7 @@ if st.session_state.get("logged_in", False):
                                                         "mobile": c_mob_final,
                                                         "transaction_type": item.get("transaction_type"),
                                                         "staff_name": s_name,
+                                                        "txn_date": effective_txn_date,  # 👈 🌟 மிக முக்கியமான திருத்தம் (17-10-2026 எனப் பதிவாகும்!)
                                                         "amount": final_amt,
                                                         "paid_amount": p_amt,
                                                         "received_amount": r_amt,
@@ -8799,52 +8827,6 @@ if st.session_state.get("logged_in", False):
                         # =========================================================================
                         # விருப்பம் 2: தற்காலிகச் சேமிப்பு (Save as Draft - எண்களை அப்படியே லாக் செய்தல்)
                         # =========================================================================
-                        with act_col2:
-                            if st.button("💾 தற்காலிகமாகச் சேமி (Save as Draft - OTP Pending)", type="secondary", use_container_width=True, key="btn_save_draft_otp_pending"):
-                                if not is_ready:
-                                    st.error("❌ நோட்டுகள் / வங்கி கணக்கீடு சரியாகப் பொருந்த வேண்டும்!")
-                                elif not st.session_state.get("transactions_cart"):
-                                    st.error("❌ கார்ட்டில் நடவடிக்கைகள் எதுவும் இல்லை!")
-                                else:
-                                    try:
-                                        with st.spinner("விவரங்கள் மாற்ற முடியாதவாறு பூட்டிச் சேமிக்கப்படுகின்றன..."):
-                                            current_v_no = visit.get("visit_no")
-                                            chk_exist = supabase.table("customer_visits").select("id").eq("visit_no", current_v_no).execute()
-                                            if chk_exist.data:
-                                                b_code = st.session_state.get("branch_code", "BR")[:3].upper()
-                                                current_v_no = generate_branch_visit_no(clean_b_id, b_code)
-
-                                            pm_label = "Cash" if bank_portion == 0 else ("Bank/UPI" if cash_portion == 0 else "Split")
-                                            payout_status = "Pending_Transfer" if (net_target > 0 and bank_portion > 0) else None
-
-                                            draft_visit_data = {
-                                                "visit_no": current_v_no,
-                                                "customer_id": c_id,
-                                                "branch_id": clean_b_id,
-                                                "total_paid": float(visit.get("total_paid", 0.0) or 0.0),
-                                                "total_received": float(visit.get("total_received", 0.0) or 0.0),
-                                                "net_cash_amount": float(cash_portion),
-                                                "cash_amount": float(cash_portion),
-                                                "bank_amount": float(bank_portion),
-                                                "payment_mode": pm_label,
-                                                "bank_transfer_status": payout_status,
-                                                "bank_transfer_type": bank_transfer_type if 'bank_transfer_type' in locals() else "Customer",
-                                                "bank_reference_no": bank_ref_no.strip() if bank_ref_no else None,
-                                                "bank_acc_holder_name": b_holder if 'b_holder' in locals() else None,
-                                                "bank_acc_number": b_acc if 'b_acc' in locals() else None,
-                                                "bank_name": bank_name if 'bank_name' in locals() else None,
-                                                "bank_branch": b_branch if 'b_branch' in locals() else None,
-                                                "bank_ifsc_code": b_ifsc if 'b_ifsc' in locals() else None,
-                                                "denomination_details": {
-                                                    "in": {"500": in_500, "200": in_200, "100": in_100, "50": in_50, "20": in_20, "10": in_10, "5": in_5, "coins": in_coins, "total": total_cash_in},
-                                                    "out": {"500": out_500, "200": out_200, "100": out_100, "50": out_50, "20": out_20, "10": out_10, "5": out_5, "coins": out_coins, "total": total_cash_out},
-                                                    "net_change": total_cash_in - total_cash_out,
-                                                },
-                                                "otp_verified": False,
-                                                "status": "Draft_Pending_OTP"
-                                            }
-                                            v_ins = supabase.table("customer_visits").insert(draft_visit_data).execute()
-                                            new_v_id = v_ins.data[0]["id"]
 
                                             # 🌟 கார்ட்டில் உள்ள ஒவ்வொரு நடவடிக்கைக்கும் அந்த நேரத்தில் ஒதுக்கப்பட்ட எண்களை பத்திரமாகப் பூட்டுதல்:
                                             for item in st.session_state.transactions_cart:
