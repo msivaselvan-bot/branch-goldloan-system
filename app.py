@@ -1686,151 +1686,151 @@ def render_staff_attribution_report(selected_branch_id=None):
     # 🎯 recurring_deposits அட்டவணையில் இருந்து துவக்கத் தேதி & திட்டப் பெயரை எடுத்தல்
     # -------------------------------------------------------------
     rd_accounts_info = {}
-try:
-    rd_acc_res = (
-        supabase.table("recurring_deposits")
-        .select("*")  # start_date, open_date அல்லது created_at அனைத்தையும் பெறுதல்
-        .execute()
-        .data
-        or []
+    try:
+        rd_acc_res = (
+            supabase.table("recurring_deposits")
+            .select("*")  # start_date, open_date அல்லது created_at அனைத்தையும் பெறுதல்
+            .execute()
+            .data
+            or []
+        )
+        for r in rd_acc_res:
+            acc_no = str(r.get("rd_account_no", "")).strip().upper()
+            if acc_no:
+                # 🌟 அசல் வணிகத் தேதியை முதலில் எடுத்து, இல்லையெனில் created_at எடுத்தல்:
+                actual_open_dt = str(r.get("start_date") or r.get("open_date") or r.get("created_at", ""))[:10]
+                rd_accounts_info[acc_no] = {
+                    "open_date": actual_open_dt,
+                    "scheme_name": (r.get("scheme_name") or "All").strip(),
+                }
+    except Exception as e:
+        st.warning(f"RD விவரங்களைப் பெறுவதில் பிழை: {e}")
+
+    rd_cutoff_date = date(2026, 10, 1)
+
+    branch_staff_query = (
+        supabase.table("users").select("name, role, branch_id").eq("is_active", True)
     )
-    for r in rd_acc_res:
-        acc_no = str(r.get("rd_account_no", "")).strip().upper()
-        if acc_no:
-            # 🌟 அசல் வணிகத் தேதியை முதலில் எடுத்து, இல்லையெனில் created_at எடுத்தல்:
-            actual_open_dt = str(r.get("start_date") or r.get("open_date") or r.get("created_at", ""))[:10]
-            rd_accounts_info[acc_no] = {
-                "open_date": actual_open_dt,
-                "scheme_name": (r.get("scheme_name") or "All").strip(),
-            }
-except Exception as e:
-    st.warning(f"RD விவரங்களைப் பெறுவதில் பிழை: {e}")
+    if selected_branch_id:
+        branch_staff_query = branch_staff_query.eq("branch_id", selected_branch_id)
+    active_users = branch_staff_query.execute().data or []
 
-rd_cutoff_date = date(2026, 10, 1)
+    branch_staff_dict = {}
+    for u in active_users:
+        b_id = u.get("branch_id")
+        if b_id not in branch_staff_dict:
+            branch_staff_dict[b_id] = []
+        branch_staff_dict[b_id].append(u)
 
-branch_staff_query = (
-    supabase.table("users").select("name, role, branch_id").eq("is_active", True)
-)
-if selected_branch_id:
-    branch_staff_query = branch_staff_query.eq("branch_id", selected_branch_id)
-active_users = branch_staff_query.execute().data or []
+    # 🌟 1. visit_date அடிப்படையிலான வணிகத் தேதி வடிகட்டல் (created_at நீக்கப்பட்டது):
+    # தேதிகள் 'YYYY-MM-DD' வடிவில் அமைவதை உறுதிசெய்தல்
+    clean_start_dt = str(start_dt_str)[:10]
+    clean_end_dt = str(end_dt_str)[:10]
 
-branch_staff_dict = {}
-for u in active_users:
-    b_id = u.get("branch_id")
-    if b_id not in branch_staff_dict:
-        branch_staff_dict[b_id] = []
-    branch_staff_dict[b_id].append(u)
-
-# 🌟 1. visit_date அடிப்படையிலான வணிகத் தேதி வடிகட்டல் (created_at நீக்கப்பட்டது):
-# தேதிகள் 'YYYY-MM-DD' வடிவில் அமைவதை உறுதிசெய்தல்
-clean_start_dt = str(start_dt_str)[:10]
-clean_end_dt = str(end_dt_str)[:10]
-
-query = (
-    supabase.table("customer_visits")
-    .select(
-        "id, visit_no, branch_id, visit_date, created_at, payment_mode, cash_amount, bank_amount, branches(branch_name), transactions(*)"
+    query = (
+        supabase.table("customer_visits")
+        .select(
+            "id, visit_no, branch_id, visit_date, created_at, payment_mode, cash_amount, bank_amount, branches(branch_name), transactions(*)"
+        )
+        .gte("visit_date", clean_start_dt)  # 👈 visit_date அடிப்படையில் தொடக்கத் தேதி
+        .lte("visit_date", clean_end_dt)    # 👈 visit_date அடிப்படையில் முடிவுத் தேதி
     )
-    .gte("visit_date", clean_start_dt)  # 👈 visit_date அடிப்படையில் தொடக்கத் தேதி
-    .lte("visit_date", clean_end_dt)    # 👈 visit_date அடிப்படையில் முடிவுத் தேதி
-)
 
-if selected_branch_id:
-    query = query.eq("branch_id", selected_branch_id)
+    if selected_branch_id:
+        query = query.eq("branch_id", selected_branch_id)
 
-res = query.execute()
-visits = res.data or []
+    res = query.execute()
+    visits = res.data or []
 
-detailed_txn_logs = []
-staff_points_map = {}
+    detailed_txn_logs = []
+    staff_points_map = {}
 
-def add_staff_points(name, pts):
-    if name not in staff_points_map:
-        staff_points_map[name] = 0.0
-    staff_points_map[name] += pts
+    def add_staff_points(name, pts):
+        if name not in staff_points_map:
+            staff_points_map[name] = 0.0
+        staff_points_map[name] += pts
 
-import re
+    import re
 
-for v in visits:
-    b_id = v.get("branch_id")
-    b_name = (
-        v.get("branches", {}).get("branch_name", "Unknown")
-        if v.get("branches")
-        else "Unknown"
-    )
-    b_staff_list = branch_staff_dict.get(b_id, [])
+    for v in visits:
+        b_id = v.get("branch_id")
+        b_name = (
+            v.get("branches", {}).get("branch_name", "Unknown")
+            if v.get("branches")
+            else "Unknown"
+        )
+        b_staff_list = branch_staff_dict.get(b_id, [])
 
-    head_staff = next(
-        (
-            u["name"]
-            for u in b_staff_list
-            if "Head" in u.get("role", "") or "Cashier" in u.get("role", "")
-        ),
-        None,
-    )
-    other_staff = [u["name"] for u in b_staff_list if u["name"] != head_staff]
-    total_staff_count = len(b_staff_list)
+        head_staff = next(
+            (
+                u["name"]
+                for u in b_staff_list
+                if "Head" in u.get("role", "") or "Cashier" in u.get("role", "")
+            ),
+            None,
+        )
+        other_staff = [u["name"] for u in b_staff_list if u["name"] != head_staff]
+        total_staff_count = len(b_staff_list)
 
-    for t in v.get("transactions", []):
-        txn_type = t.get("transaction_type", "-")
-        raw_staff = t.get("staff_name") or "Walk-in (நேரடி வருகை)"
-        paid_val = float(t.get("paid_amount", 0.0) or 0.0)
-        rec_val = float(t.get("received_amount", 0.0) or 0.0)
-        principal_val = float(t.get("principal_amount", 0.0) or 0.0)
-        remarks_str = str(t.get("remarks", ""))
+        for t in v.get("transactions", []):
+            txn_type = t.get("transaction_type", "-")
+            raw_staff = t.get("staff_name") or "Walk-in (நேரடி வருகை)"
+            paid_val = float(t.get("paid_amount", 0.0) or 0.0)
+            rec_val = float(t.get("received_amount", 0.0) or 0.0)
+            principal_val = float(t.get("principal_amount", 0.0) or 0.0)
+            remarks_str = str(t.get("remarks", ""))
 
-        effective_vol = 0.0
-        if "Release" in txn_type or "அடமானம் மீட்டல்" in txn_type:
-            if principal_val > 0:
-                effective_vol = principal_val
-            elif "அசல்: ₹" in remarks_str:
-                try:
-                    p_str = (
-                        remarks_str.split("அசல்: ₹")[1]
-                        .split("|")[0]
-                        .strip()
-                        .replace(",", "")
-                    )
-                    effective_vol = float(p_str)
-                except Exception:
+            effective_vol = 0.0
+            if "Release" in txn_type or "அடமானம் மீட்டல்" in txn_type:
+                if principal_val > 0:
+                    effective_vol = principal_val
+                elif "அசல்: ₹" in remarks_str:
+                    try:
+                        p_str = (
+                            remarks_str.split("அசல்: ₹")[1]
+                            .split("|")[0]
+                            .strip()
+                            .replace(",", "")
+                        )
+                        effective_vol = float(p_str)
+                    except Exception:
+                        effective_vol = rec_val
+                else:
                     effective_vol = rec_val
-            else:
-                effective_vol = rec_val
 
-        elif "Part Payment" in txn_type or "அசல் வரவு" in txn_type:
-            if principal_val > 0:
-                effective_vol = principal_val
-            elif "அசல்: ₹" in remarks_str:
-                try:
-                    p_str = (
-                        remarks_str.split("அசல்: ₹")[1]
-                        .split("|")[0]
-                        .strip()
-                        .replace(",", "")
-                    )
-                    effective_vol = float(p_str)
-                except Exception:
+            elif "Part Payment" in txn_type or "அசல் வரவு" in txn_type:
+                if principal_val > 0:
+                    effective_vol = principal_val
+                elif "அசல்: ₹" in remarks_str:
+                    try:
+                        p_str = (
+                            remarks_str.split("அசல்: ₹")[1]
+                            .split("|")[0]
+                            .strip()
+                            .replace(",", "")
+                        )
+                        effective_vol = float(p_str)
+                    except Exception:
+                        effective_vol = rec_val
+                else:
                     effective_vol = rec_val
-            else:
+
+            elif "RD Due" in txn_type or "RD தவணை" in txn_type:
                 effective_vol = rec_val
+            else:
+                effective_vol = paid_val if paid_val > 0 else rec_val
 
-        elif "RD Due" in txn_type or "RD தவணை" in txn_type:
-            effective_vol = rec_val
-        else:
-            effective_vol = paid_val if paid_val > 0 else rec_val
-
-        # தொடக்க திட்டப் பெயர் (Fallback)
-        detected_scheme = "All"
-        try:
-            if "ஸ்கீம்:" in remarks_str:
-                detected_scheme = remarks_str.split("ஸ்கீம்:")[1].split("|")[0].strip()
-            elif "Scheme:" in remarks_str:
-                detected_scheme = remarks_str.split("Scheme:")[1].split("|")[0].strip()
-        except Exception:
+            # தொடக்க திட்டப் பெயர் (Fallback)
             detected_scheme = "All"
+            try:
+                if "ஸ்கீம்:" in remarks_str:
+                    detected_scheme = remarks_str.split("ஸ்கீம்:")[1].split("|")[0].strip()
+                elif "Scheme:" in remarks_str:
+                    detected_scheme = remarks_str.split("Scheme:")[1].split("|")[0].strip()
+            except Exception:
+                detected_scheme = "All"
 
-        is_pre_cutoff = False
+            is_pre_cutoff = False
 
             # -------------------------------------------------------------
             # ⭐ RD தவணை: திட்டப் பெயர் மற்றும் வெட்டுத் தேதி பொருத்துதல்
