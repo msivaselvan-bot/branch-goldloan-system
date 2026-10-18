@@ -8582,11 +8582,15 @@ if st.session_state.get("logged_in", False):
 
                                                         item["loan_no"] = actual_gl_no
 
+                                                        # 🌟 வணிகத் தேதியை உறுதிசெய்தல் (17-10-2026 Catch-up Mode Fix)
+                                                        effective_loan_date = str(visit.get("visit_date") or visit_business_date)
+
                                                         loan_payload = {
                                                             "visit_id": new_visit_id,
                                                             "branch_id": clean_b_id,
                                                             "customer_id": c_id,
                                                             "loan_no": actual_gl_no,
+                                                            "loan_date": effective_loan_date,  # 👈 🌟 வணிகத் தேதி நேரடியாகப் பதிகிறது!
                                                             "ornament_details": item.get("ornament_details", ""),
                                                             "items_count": int(item.get("items_count") or 1),
                                                             "gross_weight": float(item.get("total_weight", 0.0) or item.get("gross_weight", 0.0) or 0.0),
@@ -8599,7 +8603,13 @@ if st.session_state.get("logged_in", False):
                                                             "staff_name": s_name,
                                                             "status": "Active"
                                                         }
-                                                        supabase.table("gold_loans").insert(loan_payload).execute()
+
+                                                        # 🌟 ஏற்கனவே இந்தக் கடன் எண் உள்ளதா எனப் பார்த்து சேமித்தல் (Duplicate Error தடுப்பு)
+                                                        chk_gl = supabase.table("gold_loans").select("id").eq("loan_no", actual_gl_no).execute()
+                                                        if chk_gl.data:
+                                                            supabase.table("gold_loans").update(loan_payload).eq("loan_no", actual_gl_no).execute()
+                                                        else:
+                                                            supabase.table("gold_loans").insert(loan_payload).execute()
 
                                                         if num_val > 0:
                                                             commit_next_gl_number(clean_b_id, num_val)
