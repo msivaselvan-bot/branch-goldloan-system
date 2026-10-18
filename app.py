@@ -1843,7 +1843,6 @@ def render_staff_attribution_report(selected_branch_id=None):
                 )
 
                 if not extracted_acc_no:
-                    # Remarks-லிருந்து RD கணக்கு எண்ணைப் பிரித்தல் (எ.கா: MYL/GSS/0003, KMK/RD/0002)
                     match = re.search(r"\b([A-Z]{3}/[A-Z]{2,3}/\d+)\b", remarks_str, re.IGNORECASE)
                     if not match:
                         match = re.search(r"\b(RD[-\s]?\d+)\b", remarks_str, re.IGNORECASE)
@@ -1854,7 +1853,6 @@ def render_staff_attribution_report(selected_branch_id=None):
                     norm_acc_no = str(extracted_acc_no).strip().upper()
                     acc_info = rd_accounts_info.get(norm_acc_no)
 
-                    # ஸ்லாஷ்/ஹைபன் இல்லாமல் இருந்தால் தேடுதல்
                     if not acc_info:
                         norm_clean = re.sub(r"[^A-Z0-9]", "", norm_acc_no)
                         for k, v_info in rd_accounts_info.items():
@@ -1863,11 +1861,9 @@ def render_staff_attribution_report(selected_branch_id=None):
                                 break
 
                     if acc_info:
-                        # 1. டேட்டாபேஸில் உள்ள திட்டப் பெயரை நேரடியாகப் பொருத்துதல்
                         if acc_info.get("scheme_name") and acc_info.get("scheme_name") != "All":
                             detected_scheme = acc_info.get("scheme_name")
 
-                        # 2. தொடக்கத் தேதி 01/10/2026-க்கு முந்தையதா எனச் சரிபார்த்தல்
                         open_dt_str = acc_info.get("open_date")
                         if open_dt_str:
                             try:
@@ -1890,7 +1886,6 @@ def render_staff_attribution_report(selected_branch_id=None):
                     matched_rule = r_obj
                     break
 
-            # குறிப்பிட்ட திட்டம் கிடைக்கவில்லை எனில் 'All' விதியைப் பொருத்துதல்
             if not matched_rule:
                 for (rt_type, r_sch), r_obj in rule_dict.items():
                     is_type_match = (rt_type == txn_type) or (
@@ -1938,10 +1933,10 @@ def render_staff_attribution_report(selected_branch_id=None):
                     calc_pts = abs(base_calc)
                 disp_val = f"₹{effective_vol:,.2f}"
 
-            # 01/10/2026-க்கு முந்தைய கணக்கு எனில் புள்ளிகள் = 0
+            # 01/10/2026-க்கு முந்தைய கணக்கு எனில் புள்ளிகள் = 0 (Syntax error சரிசெய்யப்பட்டது)
             if ("RD Due" in txn_type or "RD தவணை" in txn_type) and is_pre_cutoff:
                 calc_pts = 0.0
-                remarks_str += f" | (பழைய RD - திட்டப் பெயர்: {detected_scheme} - 01/10/2026-க்கு முந்தையது என்பதால் 0 புள்ளிகள்)"
+                remarks_str += f" | (பழைய RD - திட்டம்: {detected_scheme} | 01/10/2026-க்கு முந்தையது என்பதால் 0 புள்ளிகள்)"
 
             # பணியாளர் ஒதுக்கீடு
             assigned_staff_list = []
@@ -1969,11 +1964,14 @@ def render_staff_attribution_report(selected_branch_id=None):
             else:
                 assigned_staff_list = [(raw_staff, calc_pts)]
 
+            # 🌟 அசல் வணிகத் தேதியை எடுத்தல் (Catch-up Date Fix):
+            row_business_date = str(t.get("txn_date") or v.get("visit_date") or str(v.get("created_at", ""))[:10])
+
             for staff_member, s_pts in assigned_staff_list:
                 add_staff_points(staff_member, s_pts)
                 detailed_txn_logs.append(
                     {
-                        "தேதி": str(v.get("created_at", ""))[:10],
+                        "தேதி": row_business_date,  # 👈 வணிகத் தேதி சரியாகப் பதிகிறது!
                         "வருகை எண்": v.get("visit_no", "-"),
                         "கிளை": b_name,
                         "பணியாளர்": staff_member,
@@ -2054,10 +2052,14 @@ def render_staff_attribution_report(selected_branch_id=None):
         f"##### 🏆 பணியாளர் வாரியான புள்ளி விவரம் & ஊக்கத்தொகை (1 புள்ளி = ₹{rupees_per_point:.2f})"
     )
     perf_rows = []
-    active_staff_count = max(1, len(staff_points_map))
+    
+    # 🌟 Walk-in தவிர்த்த உண்மையான பணியாளர்களின் எண்ணிக்கையை மட்டும் கணக்கிடுதல்:
+    real_staff_names = [s for s in staff_points_map.keys() if "Walk-in" not in s and "நேரடி" not in s]
+    active_staff_count = max(1, len(real_staff_names))
 
     for s_name, pts in staff_points_map.items():
-        deduct_pts = (penalty_pts / active_staff_count) if is_negative_growth else 0.0
+        is_real_staff = ("Walk-in" not in s_name and "நேரடி" not in s_name)
+        deduct_pts = (penalty_pts / active_staff_count) if (is_negative_growth and is_real_staff) else 0.0
         final_pts = pts - deduct_pts
         final_incentive = final_pts * rupees_per_point
 
