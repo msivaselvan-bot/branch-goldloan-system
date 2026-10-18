@@ -8829,7 +8829,7 @@ if st.session_state.get("logged_in", False):
                                                 "net_cash_amount": cur_cash,
                                                 "cash_amount": cur_cash,
                                                 "bank_amount": cur_bank,
-                                                "payment_mode": draft_pm_label,  # 👈 🌟 பாதுகாப்பாக draft_pm_label பயன்படுத்தப்படுகிறது
+                                                "payment_mode": draft_pm_label,
                                                 "status": "Draft_Pending_OTP",
                                                 "otp_verified": False
                                             }
@@ -8847,6 +8847,7 @@ if st.session_state.get("logged_in", False):
                                                 raw_p_amt = float(item.get("paid_amount", 0.0) or 0.0)
                                                 raw_r_amt = float(item.get("received_amount", 0.0) or 0.0)
                                                 base_amount = float(item.get("amount", 0.0) or 0.0)
+                                                s_name = item.get("staff_name") or st.session_state.get("username", "Staff")
 
                                                 is_cash_out = any(k in t_type for k in [
                                                     "Pledge", "Loan", "நகைக் கடன்", "RD Closure", "RD முதிர்வு",
@@ -8870,6 +8871,180 @@ if st.session_state.get("logged_in", False):
                                                     r_amt = raw_r_amt
                                                     final_amt = r_amt if r_amt > 0 else (p_amt if p_amt > 0 else base_amount)
 
+                                                # -------------------------------------------------------------
+                                                # 🌟 A. நகைக் கடன்: gold_loans அட்டவணையில் டிராஃப்ட்டாகச் சேமித்தல்
+                                                # -------------------------------------------------------------
+                                                if any(k in t_type for k in ["Pledge", "Loan", "நகைக் கடன்"]):
+                                                    try:
+                                                        actual_gl_no = item.get("loan_no") or item.get("gp_number")
+                                                        if not actual_gl_no and "GL:" in str(item.get("remarks", "")):
+                                                            try:
+                                                                actual_gl_no = str(item.get("remarks")).split("GL:")[1].split("|")[0].strip()
+                                                            except Exception:
+                                                                actual_gl_no = None
+
+                                                        if not actual_gl_no:
+                                                            actual_gl_no, num_val = get_current_display_gl_number(clean_b_id)
+                                                        else:
+                                                            num_part = actual_gl_no.split("/")[-1] if "/" in actual_gl_no else actual_gl_no
+                                                            num_digits = "".join(c for c in num_part if c.isdigit())
+                                                            num_val = int(num_digits) if num_digits else 0
+
+                                                        item["loan_no"] = actual_gl_no
+
+                                                        draft_loan_payload = {
+                                                            "visit_id": new_v_id,
+                                                            "branch_id": clean_b_id,
+                                                            "customer_id": c_id,
+                                                            "loan_no": actual_gl_no,
+                                                            "loan_date": effective_v_date,  # 👈 🌟 வணிகத் தேதி நேரடியாகப் பதிகிறது
+                                                            "ornament_details": item.get("ornament_details", ""),
+                                                            "items_count": int(item.get("items_count") or 1),
+                                                            "gross_weight": float(item.get("total_weight", 0.0) or item.get("gross_weight", 0.0) or 0.0),
+                                                            "net_weight": float(item.get("net_weight", 0.0) or 0.0),
+                                                            "purity": item.get("purity", "916 KDM"),
+                                                            "sanctioned_amount": float(item.get("paid_amount", 0.0) or item.get("amount", 0.0)),
+                                                            "scheme_name": item.get("scheme_name", "Regular"),
+                                                            "interest_rate": float(item.get("interest_rate", 18.0) or 18.0),
+                                                            "market_rate_per_gram": float(item.get("market_rate", 0.0) or 0.0),
+                                                            "staff_name": s_name,
+                                                            "status": "Draft_Locked"
+                                                        }
+
+                                                        chk_gl = supabase.table("gold_loans").select("id").eq("loan_no", actual_gl_no).execute()
+                                                        if chk_gl.data:
+                                                            supabase.table("gold_loans").update(draft_loan_payload).eq("loan_no", actual_gl_no).execute()
+                                                        else:
+                                                            supabase.table("gold_loans").insert(draft_loan_payload).execute()
+
+                                                        if num_val > 0:
+                                                            commit_next_gl_number(clean_b_id, num_val)
+
+                                                    except Exception as d_gl_err:
+                                                        st.error(f"⚠️ gold_loans டிராஃப்ட் சேமிப்பில் பிழை: {d_gl_err}")
+
+                                                # -------------------------------------------------------------
+                                                # 🌟 B. புதிய FD கணக்கு (FD Open)
+                                                # -------------------------------------------------------------
+                                                elif "FD Open" in t_type or ("FD" in t_type and any(x in t_type for x in ["Open", "புதிய"])):
+                                                    try:
+                                                        fd_meta = item.get("extra_meta_data", {}) or item
+                                                        dep_amt = float(fd_meta.get("deposit_amount") or item.get("received_amount") or item.get("amount") or 0.0)
+                                                        final_fd_no = item.get("account_no") or fd_meta.get("account_no") or fd_meta.get("fd_account_no")
+                                                        if not final_fd_no:
+                                                            final_fd_no = generate_fd_account_no(clean_b_id)
+                                                        item["account_no"] = final_fd_no
+
+                                                        fd_draft_data = {
+                                                            "visit_id": new_v_id,
+                                                            "branch_id": clean_b_id,
+                                                            "customer_id": c_id,
+                                                            "fd_account_no": final_fd_no,
+                                                            "deposit_amount": dep_amt,
+                                                            "tenure_months": int(fd_meta.get("tenure_months", 12)),
+                                                            "interest_rate": float(fd_meta.get("interest_rate", 12.0)),
+                                                            "maturity_amount": float(fd_meta.get("maturity_amount", dep_amt * 1.12)),
+                                                            "nominee_name": fd_meta.get("nominee") or "-",
+                                                            "nominee_relation": fd_meta.get("relation") or "-",
+                                                            "status": "Draft_Locked"
+                                                        }
+                                                        chk_fd = supabase.table("fixed_deposits").select("id").eq("fd_account_no", final_fd_no).execute()
+                                                        if chk_fd.data:
+                                                            supabase.table("fixed_deposits").update(fd_draft_data).eq("fd_account_no", final_fd_no).execute()
+                                                        else:
+                                                            supabase.table("fixed_deposits").insert(fd_draft_data).execute()
+                                                    except Exception as d_fd_err:
+                                                        st.error(f"⚠️ fixed_deposits டிராஃப்ட் பிழை: {d_fd_err}")
+
+                                                # -------------------------------------------------------------
+                                                # 🌟 C. புதிய RD கணக்கு (RD Open)
+                                                # -------------------------------------------------------------
+                                                elif "RD Open" in t_type or ("RD" in t_type and any(x in t_type for x in ["Open", "புதிய"])):
+                                                    try:
+                                                        rd_meta = item.get("extra_meta_data", {}) or item
+                                                        inst_amt = float(rd_meta.get("installment_amount") or item.get("received_amount") or item.get("amount") or 0.0)
+                                                        final_rd_no = item.get("account_no") or rd_meta.get("account_no") or rd_meta.get("rd_account_no")
+                                                        if not final_rd_no:
+                                                            final_rd_no = generate_rd_account_no(clean_b_id)
+                                                        item["account_no"] = final_rd_no
+
+                                                        tenure = int(rd_meta.get("tenure_months", 12))
+                                                        total_target = inst_amt * tenure
+
+                                                        rd_draft_data = {
+                                                            "visit_id": new_v_id,
+                                                            "branch_id": clean_b_id,
+                                                            "customer_id": c_id,
+                                                            "rd_account_no": final_rd_no,
+                                                            "monthly_installment": inst_amt,
+                                                            "tenure_months": tenure,
+                                                            "interest_rate": float(rd_meta.get("interest_rate", 12.0)),
+                                                            "total_target_amount": float(rd_meta.get("total_target_amount", total_target)),
+                                                            "current_installment_no": 1,
+                                                            "total_received_amount": inst_amt,
+                                                            "nominee_name": rd_meta.get("nominee") or "-",
+                                                            "nominee_relation": rd_meta.get("relation") or "-",
+                                                            "status": "Draft_Locked"
+                                                        }
+                                                        chk_rd = supabase.table("recurring_deposits").select("id").eq("rd_account_no", final_rd_no).execute()
+                                                        if chk_rd.data:
+                                                            supabase.table("recurring_deposits").update(rd_draft_data).eq("rd_account_no", final_rd_no).execute()
+                                                        else:
+                                                            supabase.table("recurring_deposits").insert(rd_draft_data).execute()
+                                                    except Exception as d_rd_err:
+                                                        st.error(f"⚠️ recurring_deposits டிராஃப்ட் பிழை: {d_rd_err}")
+
+                                                # -------------------------------------------------------------
+                                                # 🌟 D. நகை விற்பனை (Sale)
+                                                # -------------------------------------------------------------
+                                                elif any(k in t_type for k in ["Sale", "விற்பனை"]):
+                                                    try:
+                                                        sale_b_no = item.get("bill_no") or f"SL-{datetime.now().strftime('%y%m%d%H%M%S')}"
+                                                        sale_draft_payload = {
+                                                            "visit_id": new_v_id, "branch_id": clean_b_id, "customer_id": c_id,
+                                                            "bill_no": sale_b_no,
+                                                            "item_name": item.get("ornament_details", "Gold Jewellery"),
+                                                            "gross_weight": float(item.get("total_weight", 0.0) or item.get("gross_weight", 0.0) or 0.0),
+                                                            "net_weight": float(item.get("net_weight", 0.0) or 0.0),
+                                                            "gold_rate_per_gram": float(item.get("rate_per_gram") or item.get("gold_rate_per_gram") or 0.0),
+                                                            "total_sale_amount": float(item.get("received_amount", 0.0) or item.get("amount", 0.0)),
+                                                            "staff_name": s_name
+                                                        }
+                                                        chk_sl = supabase.table("gold_sales").select("id").eq("bill_no", sale_b_no).execute()
+                                                        if chk_sl.data:
+                                                            supabase.table("gold_sales").update(sale_draft_payload).eq("bill_no", sale_b_no).execute()
+                                                        else:
+                                                            supabase.table("gold_sales").insert(sale_draft_payload).execute()
+                                                    except Exception as d_sl_err:
+                                                        st.error(f"⚠️ gold_sales டிராஃப்ட் பிழை: {d_sl_err}")
+
+                                                # -------------------------------------------------------------
+                                                # 🌟 E. பழைய நகை கொள்முதல் (Purchase / GP)
+                                                # -------------------------------------------------------------
+                                                elif any(k in t_type for k in ["GP", "Purchase", "வாங்க", "கொள்முதல்"]):
+                                                    try:
+                                                        clean_gp_no = item.get("gp_number") or item.get("loan_number") or f"AVL/GP/{datetime.now().strftime('%y%m%d%H%M')}"
+                                                        gp_draft_payload = {
+                                                            "visit_id": new_v_id, "branch_id": clean_b_id, "customer_id": c_id,
+                                                            "purchase_bill_no": clean_gp_no,
+                                                            "item_details": item.get("ornament_details", "Gold Jewellery"),
+                                                            "gross_weight": float(item.get("gross_weight") or item.get("total_weight") or 0.0),
+                                                            "net_weight": float(item.get("net_weight", 0.0) or 0.0),
+                                                            "buy_rate_per_gram": float(item.get("rate_per_gram", 0.0) or 0.0),
+                                                            "purchase_amount": float(item.get("total_value") or item.get("amount") or item.get("paid_amount") or 0.0),
+                                                            "staff_name": s_name
+                                                        }
+                                                        chk_gp = supabase.table("gold_purchases").select("id").eq("purchase_bill_no", clean_gp_no).execute()
+                                                        if chk_gp.data:
+                                                            supabase.table("gold_purchases").update(gp_draft_payload).eq("purchase_bill_no", clean_gp_no).execute()
+                                                        else:
+                                                            supabase.table("gold_purchases").insert(gp_draft_payload).execute()
+                                                    except Exception as d_gp_err:
+                                                        st.error(f"⚠️ gold_purchases டிராஃப்ட் பிழை: {d_gp_err}")
+
+                                                # -------------------------------------------------------------
+                                                # 🌟 F. transactions அட்டவணையில் Draft_Locked ஆகப் பதிவு செய்தல்
+                                                # -------------------------------------------------------------
                                                 draft_remarks = item.get("remarks") or ""
                                                 actual_gl = item.get("loan_no") or item.get("gp_number")
                                                 if actual_gl and "GL:" not in draft_remarks:
@@ -8893,24 +9068,25 @@ if st.session_state.get("logged_in", False):
                                                     "net_weight": float(item.get("net_weight", 0.0) or 0.0),
                                                     "item_details": item.get("ornament_details") or item.get("item_details", ""),
                                                     "remarks": draft_remarks,
-                                                    "payment_mode": draft_pm_label,  # 👈 🌟 இங்கும் draft_pm_label
+                                                    "payment_mode": draft_pm_label,
                                                     "status": "Draft_Locked"
                                                 }
                                                 supabase.table("transactions").insert(gen_txn).execute()
 
+                                            # படிவ அமைப்புகளைச் சுத்தப்படுத்துதல்
                                             st.session_state.transactions_cart = []
                                             st.session_state.current_visit = None
                                             st.session_state.otp_cleared = False
                                             st.session_state.otp_already_sent = False
                                             st.session_state.generated_otp = None
                                             
-                                            st.success(f"💾 வருகை `{current_v_no}` தற்காலிகமாகச் சேமிக்கப்பட்டது! எண்கள் லாக் செய்யப்பட்டன.")
+                                            st.success(f"💾 வருகை `{current_v_no}` தற்காலிகமாகச் சேமிக்கப்பட்டது! அனைத்து விவரங்களும் லாக் செய்யப்பட்டன.")
                                             import time
                                             time.sleep(1.5)
                                             st.rerun()
 
                                     except Exception as d_err:
-                                        st.error(f"❌ தற்காலிகமாகச் சேமிப்பதில் பிழை: {d_err}")                       
+                                        st.error(f"❌ தற்காலிகமாகச் சேமிப்பதில் பிழை: {d_err}")                      
                             
                                     # =========================================================================
                                 
