@@ -8896,28 +8896,7 @@ if st.session_state.get("logged_in", False):
 
                                     except Exception as d_err:
                                         st.error(f"❌ தற்காலிகமாகச் சேமிப்பதில் பிழை: {d_err}")                       
-                                            # =========================================================================
-                                            # 🌟 5. முடித்தல், பலூன் மற்றும் மறுஏற்றம் (Reset & Balloons)
-                                            # =========================================================================
-                                            st.session_state.transactions_cart = []
-                                            st.session_state.current_visit = None
-                                            st.session_state.otp_cleared = False
-                                            st.session_state.otp_verified = False
-                                            st.session_state.otp_already_sent = False
-                                            st.session_state.generated_otp = None
-
-                                            st.balloons()
-                                            st.success(f"🎉 வருகை {current_v_no} வெற்றிகரமாக நிறைவுபெற்றது!")
-
-                                            import time
-                                            time.sleep(2.5)
-                                            st.rerun()
-
-                                    except Exception as save_err:
-                                        st.error(f"❌ வருகையைச் சேமிப்பதில் பிழை ஏற்பட்டது: {save_err}")
-
-                                    # =========================================================================
-                                    # விருப்பம் 2: தற்காலிகச் சேமிப்பு (Save as Draft - எண்களை அப்படியே லாக் செய்தல்)
+                            
                                     # =========================================================================
                                 
                                     # விருப்பம் 2: தற்காலிகச் சேமிப்பு (Save as Draft - எண்களை அப்படியே லாக் செய்தல்)
