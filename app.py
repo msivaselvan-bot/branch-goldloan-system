@@ -3578,13 +3578,13 @@ if st.session_state.get("logged_in", False):
                                         }).eq("id", rpk["id"]).execute()
 
                                         # 2. பாஸ்புக் ஏட்டில் பற்று 'Pending' பதிவு
+                                        # ✅ மீட்புப் பகுதிக்கான சரியான இன்சர்ட்:
                                         supabase.table("bank_transactions").insert({
                                             "bank_account_id": chosen_debit_obj["id"] if chosen_debit_obj else None,
-                                            "transaction_type": "பற்று (OUT)",
+                                            "txn_flow": "OUT",  # 👈 transaction_type-க்கு பதிலாக txn_flow
                                             "amount": total_payout,
-                                            "gl_no": rpk["loan_no"],
-                                            "description": f"[Re-Pledge Redemption] ரீபிளட்ஜ் மீட்பு பற்று: {rpk['loan_no']} (அசல்: ₹{rep_amt:,.2f} + வட்டி: ₹{int_paid_in:,.2f})",
-                                            "status": "Pending_Approval",
+                                            "reference_no": rpk.get("repledge_loan_no", "-"),
+                                            "remarks": f"ரீபிளட்ஜ் மீட்பு பற்று: {rpk['loan_no']} (அசல்: ₹{rep_amt:,.2f} + வட்டி: ₹{int_paid_in:,.2f})",
                                             "created_by": st.session_state.get("username", "Staff"),
                                             "created_at": datetime.now().isoformat()
                                         }).execute()
