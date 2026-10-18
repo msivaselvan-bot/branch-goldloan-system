@@ -3487,13 +3487,13 @@ if st.session_state.get("logged_in", False):
                                             }).eq("id", vl["id"]).execute()
 
                                             # 2. வங்கி பாஸ்புக் ஏட்டில் 'Pending' ஆகப் பதிவு செய்தல் (இருப்பு இன்னும் மாறாது)
+                                            # ✅ சரியான வரி (txn_flow என மாற்றப்பட்டது):
                                             supabase.table("bank_transactions").insert({
                                                 "bank_account_id": chosen_bank_obj["id"] if chosen_bank_obj else None,
-                                                "transaction_type": "வரவு (IN)",
+                                                "txn_flow": "IN",  # 👈 transaction_type-க்கு பதிலாக txn_flow
                                                 "amount": net_credit,
-                                                "gl_no": vl["loan_no"],
-                                                "description": f"[Re-Pledge Inflow] ரீபிளட்ஜ் வரவு: {vl['loan_no']} | வங்கி கடன் எண்: {b_loan_in} (அசல்: ₹{b_amt_in:,.2f} - பிடித்தம்: ₹{b_charges_in:,.2f})",
-                                                "status": "Pending_Approval",
+                                                "reference_no": b_loan_in.strip(),
+                                                "remarks": f"ரீபிளட்ஜ் வரவு: {vl['loan_no']} | வங்கி கடன் எண்: {b_loan_in} (அசல்: ₹{b_amt_in:,.2f} - பிடித்தம்: ₹{b_charges_in:,.2f})",
                                                 "created_by": st.session_state.get("username", "Staff"),
                                                 "created_at": datetime.now().isoformat()
                                             }).execute()
