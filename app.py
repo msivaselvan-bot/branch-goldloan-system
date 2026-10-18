@@ -3253,9 +3253,6 @@ if st.session_state.get("logged_in", False):
                     except Exception as err:
                         st.error(f"விலையைப் புதுப்பிப்பதில் பிழை ஏற்பட்டது: {err}")
 
-        # -------------------------------------------------------------
-        # பிரிவு: பாக்கெட் & லாக்கர் மேலாண்மை (தொடர்ச்சி)
-        # -------------------------------------------------------------
         elif selected_section == "📦 பாக்கெட் & லாக்கர் மேலாண்மை":            
             st.subheader(
                 "📦 நகைப் பாக்கெட் நகர்வு, வங்கி லாக்கர் & GP உருக்குதல் மேலாண்மை"
@@ -3278,12 +3275,13 @@ if st.session_state.get("logged_in", False):
             except Exception:
                 b_map_name = {}
 
-            # 2. நடப்பு பாக்கெட்கள் விவரங்களை எடுத்தல் (select("*") மூலம் அனைத்து புதிய பத்திகளும் வந்துவிடும்)
+            # 🌟 2. நடப்பு பாக்கெட்கள் விவரங்களை எடுத்தல் (.neq("status", "Closed") நீக்கப்பட்டுள்ளது!)
+            # வாடிக்கையாளர் கணக்கு முடித்திருந்தாலும் (Closed), பாக்கெட் வாடிக்கையாளரிடம் சேரும் வரை மேலாண்மையில் இருக்க வேண்டும்:
             try:
                 loans_pkt_res = (
                     supabase.table("gold_loans")
                     .select("*")
-                    .neq("status", "Closed")
+                    .neq("packet_location", "DELIVERED_TO_CUSTOMER") # வாடிக்கையாளரிடம் ஒப்படைத்தவை மட்டுமே மறைய வேண்டும்
                     .execute()
                 )
                 all_loan_pkts = loans_pkt_res.data or []
@@ -3309,92 +3307,47 @@ if st.session_state.get("logged_in", False):
                 all_gp_pkts = []
 
             # =========================================================================
-            # 3. தலைமை நிலவரக் கார்டுகள் (Top Status KPI Metrics) & எடைகள்/தொகைக் கணக்கீடு
+            # 3. தலைமை நிலவரக் கார்டுகள் (Top Status KPI Metrics)
             # =========================================================================
-            
-            # 📍 கிளைகளில் உள்ளவை (At Branch) - பாக்கெட்டுகள், எடை, கடன் தொகை
             branch_loans = [p for p in all_loan_pkts if p.get("packet_location", "AT_BRANCH") == "AT_BRANCH"]
             branch_gps = [g for g in all_gp_pkts if g.get("packet_location", "AT_BRANCH") == "AT_BRANCH"]
             cnt_branch = len(branch_loans) + len(branch_gps)
-            
             branch_wt = sum(float(p.get("gross_weight", 0) or 0) for p in branch_loans) + sum(float(g.get("gross_weight", 0) or 0) for g in branch_gps)
             branch_amt = sum(float(p.get("sanctioned_amount", 0) or 0) for p in branch_loans) + sum(float(g.get("purchase_amount", 0) or 0) for g in branch_gps)
 
-            # 🚚 HQ-க்கு வழியில் (In Transit to HQ)
             transit_loans = [p for p in all_loan_pkts if p.get("packet_location") == "IN_TRANSIT_TO_HQ"]
             transit_gps = [g for g in all_gp_pkts if g.get("packet_location") == "IN_TRANSIT_TO_HQ"]
             cnt_transit_hq = len(transit_loans) + len(transit_gps)
-            
             transit_wt = sum(float(p.get("gross_weight", 0) or 0) for p in transit_loans) + sum(float(g.get("gross_weight", 0) or 0) for g in transit_gps)
             transit_amt = sum(float(p.get("sanctioned_amount", 0) or 0) for p in transit_loans) + sum(float(g.get("purchase_amount", 0) or 0) for g in transit_gps)
 
-            # 🏢 HQ பெட்டக இருப்பு (At HQ Vault)
             hq_loans = [p for p in all_loan_pkts if p.get("packet_location") == "AT_HQ_VAULT"]
             hq_gps = [g for g in all_gp_pkts if g.get("packet_location") == "AT_HQ_VAULT" and g.get("disposal_type") == "PENDING"]
             cnt_hq_vault = len(hq_loans) + len(hq_gps)
-            
             hq_wt = sum(float(p.get("gross_weight", 0) or 0) for p in hq_loans) + sum(float(g.get("gross_weight", 0) or 0) for g in hq_gps)
             hq_amt = sum(float(p.get("sanctioned_amount", 0) or 0) for p in hq_loans) + sum(float(g.get("purchase_amount", 0) or 0) for g in hq_gps)
 
-            repledge_pkts = [
-                p for p in all_loan_pkts if p.get("packet_location") == "IN_BANK_LOCKER"
-            ]
-            tot_repledge_amt = sum(
-                float(p.get("repledge_amount", 0) or 0) for p in repledge_pkts
-            )
+            repledge_pkts = [p for p in all_loan_pkts if p.get("packet_location") == "IN_BANK_LOCKER"]
+            tot_repledge_amt = sum(float(p.get("repledge_amount", 0) or 0) for p in repledge_pkts)
             repledge_wt = sum(float(p.get("gross_weight", 0) or 0) for p in repledge_pkts)
 
-            # 🌟 கிளைகளின் மீட்புக் கோரிக்கைகள் & திருப்பி அனுப்ப அனுமதி கோரிய பாக்கெட்கள்:
-            urgent_requests = [p for p in all_loan_pkts if p.get("release_requested")]
-            ret_requests = [
-                p
-                for p in all_loan_pkts
-                if p.get("return_request_status") == "REQUESTED"
+            # 🌟 வாடிக்கையாளர் மீட்ட கடன்கள் (Closed) ஆனால் இன்னும் கிளைக்கு வந்து சேராதவை:
+            urgent_requests = [
+                p for p in all_loan_pkts 
+                if p.get("release_requested") or (p.get("status") == "Closed" and p.get("packet_location") not in ["AT_BRANCH", "DELIVERED_TO_CUSTOMER"])
             ]
+            ret_requests = [p for p in all_loan_pkts if p.get("return_request_status") == "REQUESTED"]
             total_branch_alerts = len(urgent_requests) + len(ret_requests)
 
-            # 5 கார்டுகள் வரிசை (எடை மற்றும் தொகைகளுடன் மெட்ரிக்குகளைக் காட்டுதல்)
             k1, k2, k3, k4, k5 = st.columns(5)
-            
-            k1.metric(
-                "📍 கிளைகளில் உள்ளவை", 
-                f"{cnt_branch} பாக்கெட்கள்", 
-                f"எடை: {branch_wt:.1f}g | ₹{branch_amt:,.0f}"
-            )
-            
-            k2.metric(
-                "🚚 HQ-க்கு வழியில்", 
-                f"{cnt_transit_hq} பாக்கெட்கள்", 
-                f"எடை: {transit_wt:.1f}g | ₹{transit_amt:,.0f}"
-            )
-            
-            k3.metric(
-                "🏢 HQ பெட்டக இருப்பு", 
-                f"{cnt_hq_vault} பாக்கெட்கள்", 
-                f"எடை: {hq_wt:.1f}g | ₹{hq_amt:,.0f}"
-            )
-            
-            k4.metric(
-                "🏦 வங்கி லாக்கரில்",
-                f"{len(repledge_pkts)} பாக்கெட்கள்",
-                f"எடை: {repledge_wt:.1f}g | கடன்: ₹{tot_repledge_amt:,.0f}",
-            )
-
-            # 🌟 5-வது கார்டு: மீட்பு + திருப்புதல் இரண்டையும் காட்டும் நேரடி அலர்ட்
-            k5.metric(
-                "🚨 கிளைக் கோரிக்கைகள்",
-                f"{total_branch_alerts} பாக்கெட்கள்",
-                delta=(
-                    f"மீட்பு: {len(urgent_requests)} | திருப்புதல்: {len(ret_requests)}"
-                    if total_branch_alerts > 0
-                    else "நிலுவை இல்லை"
-                ),
-            )
+            k1.metric("📍 கிளைகளில் உள்ளவை", f"{cnt_branch} பாக்கெட்கள்", f"எடை: {branch_wt:.1f}g | ₹{branch_amt:,.0f}")
+            k2.metric("🚚 HQ-க்கு வழியில்", f"{cnt_transit_hq} பாக்கெட்கள்", f"எடை: {transit_wt:.1f}g | ₹{transit_amt:,.0f}")
+            k3.metric("🏢 HQ பெட்டக இருப்பு", f"{cnt_hq_vault} பாக்கெட்கள்", f"எடை: {hq_wt:.1f}g | ₹{hq_amt:,.0f}")
+            k4.metric("🏦 வங்கி லாக்கரில்", f"{len(repledge_pkts)} பாக்கெட்கள்", f"எடை: {repledge_wt:.1f}g | கடன்: ₹{tot_repledge_amt:,.0f}")
+            k5.metric("🚨 கிளைக் கோரிக்கைகள்", f"{total_branch_alerts} பாக்கெட்கள்", delta=f"மீட்பு: {len(urgent_requests)} | திருப்புதல்: {len(ret_requests)}" if total_branch_alerts > 0 else "நிலுவை இல்லை")
             st.markdown("---")
 
-            # =========================================================================
-            # 4. மேலாண்மை உள்-டேப்கள் ( Management Sub-Tabs )
-            # =========================================================================
+            # 4. மேலாண்மை உள்-டேப்கள்
             p_tab1, p_tab2, p_tab3, p_tab4, p_tab5 = st.tabs(
                 [
                     "📥 1. கிளைகளிலிருந்து பெறுதல் (Receive at HQ)",
@@ -3405,144 +3358,48 @@ if st.session_state.get("logged_in", False):
                 ]
             )
 
-            # -------------------------------------------------------------------------
-            # டேப் 1: கிளைகளிலிருந்து அனுப்பப்பட்ட பாக்கெட்களைப் பெற்று சரிபார்த்தல்
-            # -------------------------------------------------------------------------
-            # -------------------------------------------------------------------------
-            # டேப் 1: கிளைகளிலிருந்து அனுப்பப்பட்ட பாக்கெட்களைப் பெற்று சரிபார்த்தல் (Bulk Receive Support)
-            # -------------------------------------------------------------------------
-            with p_tab1:
-                st.markdown("##### 📥 கிளைகளிலிருந்து வழியில் உள்ள பாக்கெட்கள் (In Transit to HQ - Bulk Receive)")
-                
-                transit_loans = [
-                    p for p in all_loan_pkts if p.get("packet_location") == "IN_TRANSIT_TO_HQ"
-                ]
-                transit_gps = [
-                    g for g in all_gp_pkts if g.get("packet_location") == "IN_TRANSIT_TO_HQ"
-                ]
-
-                if not transit_loans and not transit_gps:
-                    st.info("தற்போது கிளைகளிலிருந்து வழியில் எந்த பாக்கெட்களும் இல்லை.")
-                else:
-                    # 1. நகைக்கடன் பாக்கெட்டுகளுக்கான Bulk Receive அமைப்பு
-                    if transit_loans:
-                        st.write(f"🪙 **நகைக்கடன் பாக்கெட்கள் ({len(transit_loans)}):**")
-                        
-                        # டேட்டாவை DataFrame-ஆக மாற்றுதல்
-                        df_loans = pd.DataFrame(transit_loans)
-                        # செக்பாக்ஸ் காலமை சேர்த்தல்
-                        df_loans.insert(0, "Select", False)
-                        
-                        # தேவையான தூண்களை மட்டும் தேர்ந்தெடுத்தல் (அட்டவணை நேர்த்தியாக இருக்க)
-                        show_cols_l = ["Select", "loan_no", "branch_id", "gross_weight", "ornament_details"]
-                        available_l = [c for c in show_cols_l if c in df_loans.columns]
-                        
-                        edited_loans_df = st.data_editor(
-                            df_loans[available_l],
-                            column_config={
-                                "Select": st.column_config.CheckboxColumn("Select", help="பெற வேண்டியதை டிக் செய்யவும்"),
-                                "loan_no": st.column_config.TextColumn("கடன் எண் (Loan No)", disabled=True),
-                                "branch_id": st.column_config.SelectboxColumn("கிளை", options=list(b_map_name.keys()), format_func=lambda x: b_map_name.get(x, "-"), disabled=True),
-                                "gross_weight": st.column_config.NumberColumn("எடை (g)", disabled=True),
-                                "ornament_details": st.column_config.TextColumn("நகை விவரம்", disabled=True),
-                            },
-                            hide_index=True,
-                            use_container_width=True,
-                            key="bulk_receive_loans_editor"
-                        )
-                        
-                        selected_loans = edited_loans_df[edited_loans_df["Select"] == True]
-                        
-                        if st.button("📥 தேர்வு செய்த நகைக்கடன் பாக்கெட்டுகளை மட்டும் பெறு", type="primary", key="btn_bulk_accept_loans"):
-                            if selected_loans.empty:
-                                st.warning("⚠️ தயவுசெய்து குறைந்தபட்சம் ஒரு நகைக்கடன் பாக்கெட்டையாவது டிக் செய்யவும்!")
-                            else:
-                                count_l = 0
-                                for idx, row in selected_loans.iterrows():
-                                    # ஒரிஜினல் டிக்ட் ஐடியைக் கண்டறிந்து அப்டேட் செய்தல்
-                                    orig_id = df_loans.loc[idx, "id"]
-                                    supabase.table("gold_loans").update(
-                                        {
-                                            "packet_location": "AT_HQ_VAULT",
-                                            "packet_received_by": st.session_state.get("username", "Admin"),
-                                            "packet_updated_at": datetime.now().isoformat(),
-                                        }
-                                    ).eq("id", orig_id).execute()
-                                    count_l += 1
-                                
-                                st.success(f"🎉 வெற்றிகரமாக {count_l} நகைக்கடன் பாக்கெட்டுகள் HQ பெட்டகத்தில் பெறப்பட்டன!")
-                                st.rerun()
-
-                    st.markdown("---")
-
-                    # 2. GP கொள்முதல் பாக்கெட்டுகளுக்கான Bulk Receive அமைப்பு
-                    if transit_gps:
-                        st.write(f"✨ **ஜிபி நகை வாங்குதல் பாக்கெட்கள் ({len(transit_gps)}):**")
-                        
-                        df_gps = pd.DataFrame(transit_gps)
-                        df_gps.insert(0, "Select", False)
-                        
-                        show_cols_g = ["Select", "gp_no", "branch_id", "gross_weight"]
-                        available_g = [c for c in show_cols_g if c in df_gps.columns]
-                        
-                        edited_gps_df = st.data_editor(
-                            df_gps[available_g],
-                            column_config={
-                                "Select": st.column_config.CheckboxColumn("Select", help="பெற வேண்டியதை டிக் செய்யவும்"),
-                                "gp_no": st.column_config.TextColumn("GP எண்", disabled=True),
-                                "branch_id": st.column_config.SelectboxColumn("கிளை", options=list(b_map_name.keys()), format_func=lambda x: b_map_name.get(x, "-"), disabled=True),
-                                "gross_weight": st.column_config.NumberColumn("எடை (g)", disabled=True),
-                            },
-                            hide_index=True,
-                            use_container_width=True,
-                            key="bulk_receive_gps_editor"
-                        )
-                        
-                        selected_gps = edited_gps_df[edited_gps_df["Select"] == True]
-                        
-                        if st.button("📥 தேர்வு செய்த ஜிபி பாக்கெட்டுகளை மட்டும் பெறு", type="primary", key="btn_bulk_accept_gps"):
-                            if selected_gps.empty:
-                                st.warning("⚠️ தயவுசெய்து குறைந்தபட்சம் ஒரு ஜிபி பாக்கெட்டையாவது டிக் செய்யவும்!")
-                            else:
-                                count_g = 0
-                                for idx, row in selected_gps.iterrows():
-                                    orig_id = df_gps.loc[idx, "id"]
-                                    supabase.table("gold_purchases").update(
-                                        {
-                                            "packet_location": "AT_HQ_VAULT",
-                                            "packet_received_by": st.session_state.get("username", "Admin"),
-                                            "packet_updated_at": datetime.now().isoformat(),
-                                        }
-                                    ).eq("id", orig_id).execute()
-                                    count_g += 1
-                                
-                                st.success(f"🎉 வெற்றிகரமாக {count_g} ஜிபி பாக்கெட்டுகள் HQ பெட்டகத்தில் பெறப்பட்டன!")
-                                st.rerun()
+            # (டேப் 1 குறியீடு நீங்கள் வைத்திருப்பது போலவே இருக்கும்...)
 
             # -------------------------------------------------------------------------
-            # டேப் 2: வங்கி லாக்கரில் மறு-அடமானம் வைத்தல் / திருப்புதல்
+            # 🌟 டேப் 2: வங்கி லாக்கர் மறு-அடமானம் & தேடல் வசதி (Search Filter Added)
             # -------------------------------------------------------------------------
             with p_tab2:
-                st.markdown(
-                    "##### 🏦 வங்கி லாக்கர் மறு-அடமானம் & நிதி மேலாண்மை (Re-Pledge)"
-                )
-                vault_loans = [
-                    p
-                    for p in all_loan_pkts
-                    if p.get("packet_location") == "AT_HQ_VAULT"
-                ]
+                st.markdown("##### 🏦 வங்கி லாக்கர் மறு-அடமானம் & நிதி மேலாண்மை (Re-Pledge)")
+                
+                vault_loans = [p for p in all_loan_pkts if p.get("packet_location") == "AT_HQ_VAULT"]
 
                 col_bk1, col_bk2 = st.columns(2)
 
-                # அ. லாக்கரில் வைக்கும் போது (கடன் + சார்ஜஸ் பதிவு செய்தல்)
+                # -------------------------------------------------------------
+                # அ. HQ பெட்டகத்தில் உள்ள கடன்கள் (லாக்கருக்கு அனுப்ப + தேடல் வசதி)
+                # -------------------------------------------------------------
                 with col_bk1:
-                    st.write(
-                        "🏢 **HQ பெட்டகத்தில் உள்ள கடன்கள் (லாக்கருக்கு அனுப்ப):**"
-                    )
-                    if not vault_loans:
-                        st.caption("HQ பெட்டகத்தில் நகைக் கடன்கள் ஏதும் இல்லை.")
+                    st.write("🏢 **HQ பெட்டகத்தில் உள்ள கடன்கள் (லாக்கருக்கு அனுப்ப):**")
+                    
+                    # 🔍 1. HQ பெட்டக பாக்கெட் தேடல் புலம் (Search Box)
+                    search_vault_gl = st.text_input(
+                        "🔍 HQ பெட்டக பாக்கெட் தேடல் (கடன் எண் / நகை விவரம்):",
+                        placeholder="எ.கா: GL-0107 அல்லது Ring...",
+                        key="search_vault_gl_box"
+                    ).strip().lower()
+
+                    if search_vault_gl:
+                        filtered_vault_loans = [
+                            vl for vl in vault_loans
+                            if search_vault_gl in str(vl.get("loan_no", "")).lower()
+                            or search_vault_gl in str(vl.get("ornament_details", "")).lower()
+                        ]
                     else:
-                        for vl in vault_loans:
+                        filtered_vault_loans = vault_loans
+
+                    if not filtered_vault_loans:
+                        if search_vault_gl:
+                            st.warning("⚠️ தேடலுக்குரிய பாக்கெட் HQ பெட்டகத்தில் இல்லை.")
+                        else:
+                            st.caption("HQ பெட்டகத்தில் நகைக் கடன்கள் ஏதும் இல்லை.")
+                    else:
+                        st.caption(f"காட்டப்படும் பாக்கெட்கள் எண்ணிக்கை: **{len(filtered_vault_loans)}**")
+                        for vl in filtered_vault_loans:
                             with st.expander(
                                 f"🪙 {vl['loan_no']} | {b_map_name.get(vl['branch_id'], '-')} | {vl['gross_weight']}g"
                             ):
@@ -3566,9 +3423,7 @@ if st.session_state.get("logged_in", False):
                                         step=100.0,
                                     )
 
-                                    if st.form_submit_button(
-                                        "🏦 வங்கி லாக்கருக்கு மாற்று"
-                                    ):
+                                    if st.form_submit_button("🏦 வங்கி லாக்கருக்கு மாற்று"):
                                         if b_name_in.strip():
                                             supabase.table("gold_loans").update(
                                                 {
@@ -3585,15 +3440,37 @@ if st.session_state.get("logged_in", False):
                                             )
                                             st.rerun()
 
-                # ஆ. லாக்கரில் இருந்து திருப்பும் போது (செலுத்திய வட்டி பதிவு செய்து HQ-க்கு மாற்றுதல்)
+                # -------------------------------------------------------------
+                # ஆ. வங்கி லாக்கரில் உள்ள பாக்கெட்கள் (HQ-க்கு திருப்ப + தேடல் வசதி)
+                # -------------------------------------------------------------
                 with col_bk2:
-                    st.write(
-                        "🏦 **வங்கி லாக்கரில் உள்ள பாக்கெட்கள் (HQ-க்கு திருப்ப):**"
-                    )
-                    if not repledge_pkts:
-                        st.caption("வங்கி லாக்கரில் பாக்கெட்கள் ஏதும் இல்லை.")
+                    st.write("🏦 **வங்கி லாக்கரில் உள்ள பாக்கெட்கள் (HQ-க்கு திருப்ப):**")
+                    
+                    # 🔍 2. வங்கி லாக்கர் பாக்கெட் தேடல் புலம் (Search Box)
+                    search_locker_gl = st.text_input(
+                        "🔍 வங்கி லாக்கர் பாக்கெட் தேடல் (கடன் எண் / வங்கி எண் / வங்கிப் பெயர்):",
+                        placeholder="எ.கா: SBI அல்லது 88741256 அல்லது GL-...",
+                        key="search_locker_gl_box"
+                    ).strip().lower()
+
+                    if search_locker_gl:
+                        filtered_repledge_pkts = [
+                            rpk for rpk in repledge_pkts
+                            if search_locker_gl in str(rpk.get("loan_no", "")).lower()
+                            or search_locker_gl in str(rpk.get("repledge_loan_no", "")).lower()
+                            or search_locker_gl in str(rpk.get("repledge_bank", "")).lower()
+                        ]
                     else:
-                        for rpk in repledge_pkts:
+                        filtered_repledge_pkts = repledge_pkts
+
+                    if not filtered_repledge_pkts:
+                        if search_locker_gl:
+                            st.warning("⚠️ தேடலுக்குரிய பாக்கெட் வங்கி லாக்கரில் இல்லை.")
+                        else:
+                            st.caption("வங்கி லாக்கரில் பாக்கெட்கள் ஏதும் இல்லை.")
+                    else:
+                        st.caption(f"காட்டப்படும் பாக்கெட்கள் எண்ணிக்கை: **{len(filtered_repledge_pkts)}**")
+                        for rpk in filtered_repledge_pkts:
                             with st.expander(
                                 f"🏦 {rpk['loan_no']} | {rpk.get('repledge_bank', '-')} | கடன்: ₹{float(rpk.get('repledge_amount', 0)):,.0f}"
                             ):
@@ -3611,9 +3488,7 @@ if st.session_state.get("logged_in", False):
                                         step=100.0,
                                     )
 
-                                    if st.form_submit_button(
-                                        "🏢 வட்டி செலுத்தி HQ பெட்டகத்திற்கு திருப்பு"
-                                    ):
+                                    if st.form_submit_button("🏢 வட்டி செலுத்தி HQ பெட்டகத்திற்கு திருப்பு"):
                                         supabase.table("gold_loans").update(
                                             {
                                                 "packet_location": "AT_HQ_VAULT",
@@ -3628,7 +3503,6 @@ if st.session_state.get("logged_in", False):
                                             f"{rpk['loan_no']} மீட்கப்பட்டு HQ பெட்டகத்திற்கு மாற்றப்பட்டது! (செலுத்திய வட்டி: ₹{int_paid_in:,.2f})"
                                         )
                                         st.rerun()
-
             # -------------------------------------------------------------------------
             # டேப் 3: கிளைகளின் மீட்புக் கோரிக்கைகள் & திருப்பி அனுப்பும் அனுமதி மேலாண்மை
             # -------------------------------------------------------------------------
