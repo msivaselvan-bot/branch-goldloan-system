@@ -8429,7 +8429,7 @@ if st.session_state.get("logged_in", False):
                         act_col1, act_col2 = st.columns(2)
 
                         # =========================================================================
-                        # விருப்பம் 1: OTP முடிந்து முழுமையாக முடிப்பது
+                        # விருப்பம் 1: OTP முடிந்து முழுமையாக முடிப்பது (act_col1)
                         # =========================================================================
                         with act_col1:
                             if st.button("✅ வருகையை நிறைவு செய்க", type="primary", use_container_width=True, key="btn_complete_visit_final"):
@@ -8443,11 +8443,8 @@ if st.session_state.get("logged_in", False):
                                     try:
                                         with st.spinner("டேட்டாபேஸில் விவரங்கள் புதுப்பிக்கப்படுகின்றன..."):
                                             current_v_no = visit.get("visit_no")
-
-                                            # 🌟 0. தேர்ந்தெடுக்கப்பட்ட வணிகத் தேதியை உறுதிசெய்தல் (Catch-up Mode Fix - 17-10-2026)
                                             effective_v_date = str(visit.get("visit_date") or visit_business_date)
 
-                                            # 🌟 1. ஏற்கனவே டிராஃப்ட்டில் உள்ள வருகையா எனப் பார்த்தல்:
                                             chk_draft = (
                                                 supabase.table("customer_visits")
                                                 .select("id, status")
@@ -8457,7 +8454,6 @@ if st.session_state.get("logged_in", False):
                                             )
                                             is_existing_draft = bool(chk_draft.data)
 
-                                            # 🌟 2. புதிய நேரடி வருகைக்கான எண் மோதலைத் தவிர்த்தல் (வணிகத் தேதியுடன்):
                                             if not is_existing_draft:
                                                 chk_exist = supabase.table("customer_visits").select("id").eq("visit_no", current_v_no).execute()
                                                 if chk_exist.data:
@@ -8467,21 +8463,18 @@ if st.session_state.get("logged_in", False):
                                                     except TypeError:
                                                         current_v_no = generate_branch_visit_no(clean_b_id, b_code)
 
-                                            # =========================================================================
-                                            # 🌟 3. நிலைகள் மற்றும் கட்டண முறைகளை நிர்ணயித்தல்
-                                            # =========================================================================
                                             pm_label = "Cash" if bank_portion == 0 else ("Bank/UPI" if cash_portion == 0 else "Split")
                                             
                                             if net_target <= 0 and bank_portion > 0:
-                                                visit_main_status = "Pending_Bank_Verification"  # வாடிக்கையாளர் வங்கி வரவு சரிபார்ப்பிற்கு
+                                                visit_main_status = "Pending_Bank_Verification"
                                                 payout_status = "Not_Applicable"
                                             elif net_target > 0 and bank_portion > 0:
                                                 visit_main_status = "Pending_Calling_Verification"
-                                                payout_status = "Pending_Transfer"              # வாடிக்கையாளர் வங்கிப் பட்டுவாடா மேசைக்கு
+                                                payout_status = "Pending_Transfer"
                                             else:
                                                 visit_main_status = "Pending_Calling_Verification"
                                                 payout_status = "Not_Applicable"
-                                            # 2. வாடிக்கையாளர் ஆவண URL-கள்
+
                                             passbook_url = None
                                             consent_url = None
                                             if net_target > 0 and bank_portion > 0:
@@ -8503,14 +8496,14 @@ if st.session_state.get("logged_in", False):
                                                         pass
 
                                             visit_payload = {
-                                                "visit_date": str(visit.get("visit_date") or visit_business_date),
+                                                "visit_date": effective_v_date,
                                                 "total_paid": float(visit.get("total_paid", 0.0) or 0.0),
                                                 "total_received": float(visit.get("total_received", 0.0) or 0.0),
                                                 "net_cash_amount": float(cash_portion),
                                                 "cash_amount": float(cash_portion),
                                                 "bank_amount": float(bank_portion),
                                                 "payment_mode": pm_label,
-                                                "bank_transfer_status": payout_status,     # 👈 Payout மேசைக்குத் தேவையானது
+                                                "bank_transfer_status": payout_status,
                                                 "bank_transfer_type": bank_transfer_type if 'bank_transfer_type' in locals() else "Customer",
                                                 "bank_reference_no": bank_ref_no.strip() if bank_ref_no else None,
                                                 "bank_acc_holder_name": b_holder if 'b_holder' in locals() else None,
@@ -8522,57 +8515,34 @@ if st.session_state.get("logged_in", False):
                                                 "bank_consent_doc_url": consent_url,
                                                 "denomination_details": {
                                                     "in": {"500": in_500, "200": in_200, "100": in_100, "50": in_50, "20": in_20, "10": in_10, "5": in_5, "coins": in_coins, "total": total_cash_in},
-                                                    "out": {"500": out_500, "200": out_200, "100": out_100, "50": out_50, "20": out_20, "10": out_10, "5": out_5, "coins": out_coins, "total": total_cash_out},
+                                                    "out": {"500": out_500, "200": out_200, "100": out_100, "50": out_50, "20": out_20, "10": out_20, "5": out_5, "coins": out_coins, "total": total_cash_out},
                                                     "net_change": total_cash_in - total_cash_out,
                                                 },
                                                 "otp_verified": True,
-                                                "status": visit_main_status                 # 👈 Inflow மேசைக்குத் தேவையானது
+                                                "status": visit_main_status
                                             }
 
-                                            # 🌟 3. ஏற்கனவே உள்ள டிராஃப்ட் எனில் UPDATE செய்தல்
                                             if is_existing_draft:
                                                 target_id = chk_draft.data[0]["id"]
-                                                
-                                                # 🌟 visit_date விடுபடாமல் உறுதிசெய்தல்
-                                                effective_txn_date = str(visit.get("visit_date") or visit_business_date)
-                                                visit_payload["visit_date"] = effective_txn_date
-                                                
                                                 supabase.table("customer_visits").update(visit_payload).eq("id", target_id).execute()
                                                 new_visit_id = target_id
-                                                
-                                                # டிராஃப்ட் செய்யப்பட்ட பரிவர்த்தனைகளின் நிலையை மற்றும் தேதியை மாற்றுதல்:
-                                                # வங்கி வரவு சரிபார்ப்பில் இருந்தால் Pending, இல்லையெனில் Approved
-                                                txn_target_status = "Pending" if visit_main_status == "Pending_Bank_Verification" else "Approved"
-                                                
-                                                supabase.table("transactions").update({
-                                                    "status": txn_target_status,
-                                                    "txn_date": effective_txn_date  # 👈 🌟 இங்கும் தேர்ந்தெடுக்கப்பட்ட வணிகத் தேதி (17-10-2026) புதுப்பிக்கப்படுகிறது!
-                                                }).eq("visit_id", new_visit_id).execute()
-
                                             else:
-                                                # புதிய வருகை எனில் INSERT செய்தல்
-                                                effective_txn_date = str(visit.get("visit_date") or visit_business_date)
-                                                
                                                 visit_payload["visit_no"] = current_v_no
                                                 visit_payload["customer_id"] = c_id
                                                 visit_payload["branch_id"] = clean_b_id
-                                                visit_payload["visit_date"] = effective_txn_date  # 👈 🌟 புதிய வருகைக்கும் வணிகத் தேதி நேரடியாக அமைகிறது
-                                                
                                                 v_insert = supabase.table("customer_visits").insert(visit_payload).execute()
                                                 new_visit_id = v_insert.data[0]["id"]
 
-                                            # =========================================================================
-                                            # 🌟 2. நடவடிக்கைகள்: தனி அட்டவணைகளில் பதிவு செய்தல் (GL, FD, RD, Sale, GP)
-                                            # =========================================================================
+                                            # தனி அட்டவணைகளில் பதிவு செய்தல் (GL, FD, RD, Sale, GP)
                                             for item in st.session_state.transactions_cart:
-                                                t_type = str(item.get("transaction_type", "RD Due (RD தவணை)"))
+                                                t_type = str(item.get("transaction_type", ""))
                                                 s_name = item.get("staff_name") or st.session_state.get("username", "Staff")
                                                 p_amt = float(item.get("paid_amount", 0.0) or 0.0)
                                                 r_amt = float(item.get("received_amount", 0.0) or item.get("amount", 0.0) or 0.0)
                                                 final_amt = r_amt if r_amt > 0 else (p_amt if p_amt > 0 else float(item.get("amount", 0.0) or 0.0))
                                                 combined_remarks = item.get("remarks") or ""
 
-                                                # A. நகைக்கடன் அட்டவணை (Pledge / Gold Loan)
+                                                # A. நகைக்கடன்
                                                 if any(k in t_type for k in ["Pledge", "Loan", "நகைக்கடன்"]):
                                                     try:
                                                         actual_gl_no = item.get("loan_no") or item.get("gp_number")
@@ -8590,16 +8560,14 @@ if st.session_state.get("logged_in", False):
                                                             num_val = int(num_digits) if num_digits else 0
 
                                                         item["loan_no"] = actual_gl_no
-
-                                                        # 🌟 வணிகத் தேதியை உறுதிசெய்தல் (17-10-2026 Catch-up Mode Fix)
-                                                        effective_loan_date = str(visit.get("visit_date") or visit_business_date)
+                                                        effective_loan_date = effective_v_date
 
                                                         loan_payload = {
                                                             "visit_id": new_visit_id,
                                                             "branch_id": clean_b_id,
                                                             "customer_id": c_id,
                                                             "loan_no": actual_gl_no,
-                                                            "loan_date": effective_loan_date,  # 👈 🌟 வணிகத் தேதி நேரடியாகப் பதிகிறது!
+                                                            "loan_date": effective_loan_date,
                                                             "ornament_details": item.get("ornament_details", ""),
                                                             "items_count": int(item.get("items_count") or 1),
                                                             "gross_weight": float(item.get("total_weight", 0.0) or item.get("gross_weight", 0.0) or 0.0),
@@ -8613,7 +8581,6 @@ if st.session_state.get("logged_in", False):
                                                             "status": "Active"
                                                         }
 
-                                                        # 🌟 ஏற்கனவே இந்தக் கடன் எண் உள்ளதா எனப் பார்த்து சேமித்தல் (Duplicate Error தடுப்பு)
                                                         chk_gl = supabase.table("gold_loans").select("id").eq("loan_no", actual_gl_no).execute()
                                                         if chk_gl.data:
                                                             supabase.table("gold_loans").update(loan_payload).eq("loan_no", actual_gl_no).execute()
@@ -8626,19 +8593,17 @@ if st.session_state.get("logged_in", False):
                                                     except Exception as gl_err:
                                                         st.error(f"⚠️ gold_loans அட்டவணையில் சேமிப்பதில் பிழை: {gl_err}")
 
-                                                # B. புதிய FD கணக்கு (FD Open)
+                                                # B. FD Open
                                                 elif "FD Open" in t_type or ("FD" in t_type and any(x in t_type for x in ["Open", "புதிய"])):
                                                     try:
                                                         fd_meta = item.get("extra_meta_data", {}) or item
                                                         dep_amt = float(fd_meta.get("deposit_amount") or item.get("received_amount") or item.get("amount") or 0.0)
-
                                                         final_fd_no = item.get("account_no") or fd_meta.get("account_no") or fd_meta.get("fd_account_no")
                                                         if not final_fd_no and "FD No:" in combined_remarks:
                                                             try:
                                                                 final_fd_no = combined_remarks.split("FD No:")[1].split("|")[0].strip()
                                                             except Exception:
                                                                 final_fd_no = None
-
                                                         if not final_fd_no:
                                                             final_fd_no = generate_fd_account_no(clean_b_id)
                                                         item["account_no"] = final_fd_no
@@ -8660,19 +8625,17 @@ if st.session_state.get("logged_in", False):
                                                     except Exception as fd_err:
                                                         st.error(f"⚠️ fixed_deposits சேமிப்பதில் பிழை: {fd_err}")
 
-                                                # C. புதிய RD கணக்கு (RD Open)
+                                                # C. RD Open
                                                 elif "RD Open" in t_type or ("RD" in t_type and any(x in t_type for x in ["Open", "புதிய"])):
                                                     try:
                                                         rd_meta = item.get("extra_meta_data", {}) or item
                                                         inst_amt = float(rd_meta.get("installment_amount") or item.get("received_amount") or item.get("amount") or 0.0)
-
                                                         final_rd_no = item.get("account_no") or rd_meta.get("account_no") or rd_meta.get("rd_account_no")
                                                         if not final_rd_no and "RD No:" in combined_remarks:
                                                             try:
                                                                 final_rd_no = combined_remarks.split("RD No:")[1].split("|")[0].strip()
                                                             except Exception:
                                                                 final_rd_no = None
-
                                                         if not final_rd_no:
                                                             final_rd_no = generate_rd_account_no(clean_b_id)
                                                         item["account_no"] = final_rd_no
@@ -8699,7 +8662,7 @@ if st.session_state.get("logged_in", False):
                                                     except Exception as rd_err:
                                                         st.error(f"⚠️ recurring_deposits சேமிப்பதில் பிழை: {rd_err}")
 
-                                                # D. நகை விற்பனை அட்டவணை
+                                                # D. நகை விற்பனை
                                                 elif any(k in t_type for k in ["Sale", "விற்பனை"]):
                                                     try:
                                                         sale_payload = {
@@ -8733,8 +8696,8 @@ if st.session_state.get("logged_in", False):
                                                     except Exception as gp_err:
                                                         st.error(f"⚠️ gold_purchases சேமிப்பதில் பிழை: {gp_err}")
 
-                                                # F. RD தவணை அட்டவணை புதுப்பித்தல் (RD Due Installments)
-                                                if any(k in t_type for k in ["RD", "ஆர்டி", "Installment"]):
+                                                # F. RD தவணை
+                                                elif any(k in t_type for k in ["RD", "ஆர்டி", "Installment"]):
                                                     try:
                                                         rd_acc_no = item.get("account_no") or item.get("rd_account_no") or ""
                                                         if not rd_acc_no and "RD No:" in combined_remarks:
@@ -8749,36 +8712,23 @@ if st.session_state.get("logged_in", False):
                                                     except Exception:
                                                         pass
 
-                 
-                                            # =========================================================================
-                                            # 🌟 3. transactions அட்டவணையில் நிலையை மாற்றுதல் / பதிவு செய்தல்
-                                            # =========================================================================
-                                            # 🌟 வணிகத் தேதியை உறுதிசெய்தல் (17-10-2026)
-                                            effective_txn_date = str(visit.get("visit_date") or visit_business_date)
+                                            # 🌟 3. transactions அட்டவணையில் பதிவு செய்தல்
                                             txn_target_status = "Pending" if visit_main_status == "Pending_Bank_Verification" else "Approved"
 
-                                            # டிராஃப்ட்டாக இருந்தால், பழைய பரிவர்த்தனைகளை நீக்கிவிட்டு கார்ட்டில் உள்ளவற்றை புதிதாகப் பதிய வழிசெய்தல்:
                                             if is_existing_draft:
                                                 try:
                                                     supabase.table("transactions").delete().eq("visit_id", new_visit_id).execute()
                                                 except Exception:
                                                     pass
 
-                                            # 🌟 டிராஃப்ட் மற்றும் நேரடி வருகை இரண்டிற்கும் கட்டாயமாக transactions-ல் INSERT செய்தல்:
                                             for item in st.session_state.transactions_cart:
                                                 t_type = str(item.get("transaction_type", ""))
                                                 raw_p_amt = float(item.get("paid_amount", 0.0) or 0.0)
                                                 raw_r_amt = float(item.get("received_amount", 0.0) or 0.0)
                                                 base_amount = float(item.get("amount", 0.0) or 0.0)
 
-                                                is_cash_out = any(k in t_type for k in [
-                                                    "Pledge", "Loan", "நகைக் கடன்", "RD Closure", "RD முதிர்வு",
-                                                    "FD Closure", "FD முதிர்வு", "FD Interest", "FD வட்டி", "GP", "Purchase", "கொள்முதல்"
-                                                ])
-                                                is_cash_in = any(k in t_type for k in [
-                                                    "Release", "Interest Payment", "Part Payment", "மீட்டல்", "அசல் வரவு", "வட்டி வரவு",
-                                                    "RD Open", "புதிய RD", "RD Due", "RD தவணை", "FD Open", "புதிய வைப்பு", "GS", "Sale", "விற்பனை"
-                                                ])
+                                                is_cash_out = any(k in t_type for k in ["Pledge", "Loan", "நகைக் கடன்", "RD Closure", "RD முதிர்வு", "FD Closure", "FD முதிர்வு", "FD Interest", "FD வட்டி", "GP", "Purchase", "கொள்முதல்"])
+                                                is_cash_in = any(k in t_type for k in ["Release", "Interest Payment", "Part Payment", "மீட்டல்", "அசல் வரவு", "வட்டி வரவு", "RD Open", "புதிய RD", "RD Due", "RD தவணை", "FD Open", "புதிய வைப்பு", "GS", "Sale", "விற்பனை"])
 
                                                 if is_cash_out:
                                                     p_amt = raw_p_amt if raw_p_amt > 0 else base_amount
@@ -8793,7 +8743,6 @@ if st.session_state.get("logged_in", False):
                                                     r_amt = raw_r_amt
                                                     final_amt = r_amt if r_amt > 0 else (p_amt if p_amt > 0 else base_amount)
 
-                                                # GL எண் விடுபடாமல் ரிமார்க்ஸில் சேர்ப்பதை உறுதிசெய்தல்:
                                                 actual_gl = item.get("loan_no") or item.get("gp_number")
                                                 combined_remarks = item.get("remarks") or ""
                                                 if actual_gl and "GL:" not in combined_remarks:
@@ -8814,7 +8763,7 @@ if st.session_state.get("logged_in", False):
                                                     "mobile": c_mob_final,
                                                     "transaction_type": item.get("transaction_type"),
                                                     "staff_name": s_name,
-                                                    "txn_date": effective_txn_date,
+                                                    "txn_date": effective_v_date,
                                                     "amount": final_amt,
                                                     "paid_amount": p_amt,
                                                     "received_amount": r_amt,
@@ -8830,6 +8779,123 @@ if st.session_state.get("logged_in", False):
                                                 except Exception as txn_ins_err:
                                                     st.error(f"⚠️ transactions அட்டவணையில் சேமிப்பதில் பிழை: {txn_ins_err}")
 
+                                            st.session_state.transactions_cart = []
+                                            st.session_state.current_visit = None
+                                            st.session_state.otp_cleared = False
+                                            st.session_state.otp_verified = False
+                                            st.session_state.otp_already_sent = False
+                                            st.session_state.generated_otp = None
+
+                                            st.balloons()
+                                            st.success(f"🎉 வருகை {current_v_no} வெற்றிகரமாக நிறைவுபெற்றது!")
+                                            import time
+                                            time.sleep(2.5)
+                                            st.rerun()
+
+                                    except Exception as save_err:
+                                        st.error(f"❌ வருகையைச் சேமிப்பதில் பிழை ஏற்பட்டது: {save_err}")
+
+                        # =========================================================================
+                        # விருப்பம் 2: தற்காலிகச் சேமிப்பு (Save as Draft - OTP-க்கு முன் எண்களை லாக் செய்தல்)
+                        # =========================================================================
+                        with act_col2:
+                            if st.button("💾 தற்காலிகமாகச் சேமி (Draft)", type="secondary", use_container_width=True, key="btn_save_draft_active"):
+                                if not st.session_state.get("transactions_cart"):
+                                    st.error("❌ கார்ட்டில் எந்த நடவடிக்கைகளும் இல்லை!")
+                                else:
+                                    try:
+                                        with st.spinner("விவரங்கள் தற்காலிகமாகச் சேமிக்கப்படுகின்றன..."):
+                                            effective_v_date = str(visit.get("visit_date") or visit_business_date)
+                                            current_v_no = visit.get("visit_no")
+
+                                            chk_v = supabase.table("customer_visits").select("id").eq("visit_no", current_v_no).execute()
+                                            
+                                            draft_visit_payload = {
+                                                "visit_no": current_v_no,
+                                                "customer_id": c_id,
+                                                "branch_id": clean_b_id,
+                                                "visit_date": effective_v_date,
+                                                "total_paid": float(visit.get("total_paid", 0.0) or 0.0),
+                                                "total_received": float(visit.get("total_received", 0.0) or 0.0),
+                                                "net_cash_amount": float(cash_portion),
+                                                "cash_amount": float(cash_portion),
+                                                "bank_amount": float(bank_portion),
+                                                "payment_mode": pm_label,
+                                                "status": "Draft_Pending_OTP",
+                                                "otp_verified": False
+                                            }
+
+                                            if chk_v.data:
+                                                new_v_id = chk_v.data[0]["id"]
+                                                supabase.table("customer_visits").update(draft_visit_payload).eq("id", new_v_id).execute()
+                                                supabase.table("transactions").delete().eq("visit_id", new_v_id).execute()
+                                            else:
+                                                v_ins = supabase.table("customer_visits").insert(draft_visit_payload).execute()
+                                                new_v_id = v_ins.data[0]["id"]
+
+                                            for item in st.session_state.transactions_cart:
+                                                t_type = str(item.get("transaction_type", ""))
+                                                raw_p_amt = float(item.get("paid_amount", 0.0) or 0.0)
+                                                raw_r_amt = float(item.get("received_amount", 0.0) or 0.0)
+                                                base_amount = float(item.get("amount", 0.0) or 0.0)
+
+                                                is_cash_out = any(k in t_type for k in ["Pledge", "Loan", "நகைக் கடன்", "RD Closure", "RD முதிர்வு", "FD Closure", "FD முதிர்வு", "FD Interest", "FD வட்டி", "GP", "Purchase", "கொள்முதல்"])
+                                                is_cash_in = any(k in t_type for k in ["Release", "Interest Payment", "Part Payment", "மீட்டல்", "அசல் வரவு", "வட்டி வரவு", "RD Open", "புதிய RD", "RD Due", "RD தவணை", "FD Open", "புதிய வைப்பு", "GS", "Sale", "விற்பனை"])
+
+                                                if is_cash_out:
+                                                    p_amt = raw_p_amt if raw_p_amt > 0 else base_amount
+                                                    r_amt = 0.0
+                                                    final_amt = p_amt
+                                                elif is_cash_in:
+                                                    p_amt = 0.0
+                                                    r_amt = raw_r_amt if raw_r_amt > 0 else base_amount
+                                                    final_amt = r_amt
+                                                else:
+                                                    p_amt = raw_p_amt
+                                                    r_amt = raw_r_amt
+                                                    final_amt = r_amt if r_amt > 0 else (p_amt if p_amt > 0 else base_amount)
+
+                                                draft_remarks = item.get("remarks") or ""
+                                                actual_gl = item.get("loan_no") or item.get("gp_number")
+                                                if actual_gl and "GL:" not in draft_remarks:
+                                                    draft_remarks = f"GL: {actual_gl} | {draft_remarks}".strip(" |")
+                                                elif item.get("account_no") and "A/C:" not in draft_remarks:
+                                                    draft_remarks = f"A/C: {item.get('account_no')} | {draft_remarks}".strip(" |")
+
+                                                gen_txn = {
+                                                    "visit_id": new_v_id,
+                                                    "branch_id": clean_b_id,
+                                                    "customer_id": c_id,
+                                                    "customer_name": c_name,
+                                                    "mobile": c_mob_final,
+                                                    "transaction_type": item.get("transaction_type"),
+                                                    "staff_name": item.get("staff_name", ""),
+                                                    "txn_date": effective_v_date,
+                                                    "amount": final_amt,
+                                                    "paid_amount": p_amt,
+                                                    "received_amount": r_amt,
+                                                    "gross_weight": float(item.get("total_weight", 0.0) or item.get("gross_weight", 0.0) or 0.0),
+                                                    "net_weight": float(item.get("net_weight", 0.0) or 0.0),
+                                                    "item_details": item.get("ornament_details") or item.get("item_details", ""),
+                                                    "remarks": draft_remarks,
+                                                    "payment_mode": pm_label,
+                                                    "status": "Draft_Locked"
+                                                }
+                                                supabase.table("transactions").insert(gen_txn).execute()
+
+                                            st.session_state.transactions_cart = []
+                                            st.session_state.current_visit = None
+                                            st.session_state.otp_cleared = False
+                                            st.session_state.otp_already_sent = False
+                                            st.session_state.generated_otp = None
+                                            
+                                            st.success(f"💾 வருகை `{current_v_no}` தற்காலிகமாகச் சேமிக்கப்பட்டது! எண்கள் லாக் செய்யப்பட்டன.")
+                                            import time
+                                            time.sleep(1.5)
+                                            st.rerun()
+
+                                    except Exception as d_err:
+                                        st.error(f"❌ தற்காலிகமாகச் சேமிப்பதில் பிழை: {d_err}")                       
                                             # =========================================================================
                                             # 🌟 5. முடித்தல், பலூன் மற்றும் மறுஏற்றம் (Reset & Balloons)
                                             # =========================================================================
