@@ -9249,10 +9249,9 @@ if st.session_state.get("logged_in", False):
                 # -------------------------------------------------------------------------
                 day_visits = (
                     supabase.table("customer_visits")
-                    .select("id, created_at, visit_no, customer_id, total_paid, total_received, cash_amount, bank_amount, payment_mode, status")
+                    .select("id, visit_date, created_at, visit_no, customer_id, total_paid, total_received, cash_amount, bank_amount, payment_mode, status")
                     .eq("branch_id", cur_b_id)
-                    .gte("created_at", f"{report_date_str} 00:00:00")
-                    .lte("created_at", f"{report_date_str} 23:59:59")
+                    .eq("visit_date", str(report_date_str))  # 👈 🌟 வணிகத் தேதி (visit_date) கொண்டு மட்டுமே வடிகட்டுதல்!
                     .neq("status", "Rejected")
                     .neq("status", "Draft_Locked")
                     .order("id", desc=False)
@@ -9377,8 +9376,7 @@ if st.session_state.get("logged_in", False):
                     supabase.table("branch_fund_transfers")
                     .select("*")
                     .eq("branch_id", cur_b_id)
-                    .gte("created_at", f"{report_date_str} 00:00:00")
-                    .lte("created_at", f"{report_date_str} 23:59:59")
+                    .eq("transfer_date", str(report_date_str))  # 👈 🌟 created_at நீக்கப்பட்டு transfer_date கொண்டு வடிகட்டப்படுகிறது!
                     .eq("status", "Approved")
                     .execute()
                     .data or []
@@ -9387,33 +9385,56 @@ if st.session_state.get("logged_in", False):
                 for f in day_funds:
                     f_amt = float(f.get("amount", 0.0) or 0.0)
                     f_type = str(f.get("transfer_type", "")).upper()
-                    f_time = str(f.get("created_at", "-"))[11:16]
+                    pm_mode = str(f.get("payment_mode", "Cash")).upper()
+                    
+                    # நேரத்தை மட்டும் துல்லியமாக எடுத்தல் (HH:MM):
+                    raw_time = str(f.get("created_at", "-"))
+                    f_time = raw_time[11:16] if len(raw_time) >= 16 else "-"
 
-                    if "HO_TO_BRANCH" in f_type:
-                        tot_cash_in += f_amt
+                    is_cash = ("CASH" in pm_mode)
+
+                    if "HO_TO_BRANCH" in f_type or "HO_DEPOSIT" in f_type:
+                        if is_cash:
+                            tot_cash_in += f_amt
+                            cash_col_val = f"₹{f_amt:,.2f}"
+                            bank_col_val = "-"
+                        else:
+                            tot_bank_in = tot_bank_in + f_amt if 'tot_bank_in' in locals() else f_amt
+                            cash_col_val = "-"
+                            bank_col_val = f"₹{f_amt:,.2f}"
+
                         unified_daybook_rows.append({
                             "நேரம்": f_time,
                             "வருகை எண்": "-",
                             "வகை": "HQ நிதி ஒதுக்கீடு",
                             "விவரம் / வாடிக்கையாளர்": "தலைமையக நிதி வரவு",
-                            "நடவடிக்கை": "HO to Branch Cash Inflow",
+                            "நடவடிக்கை": "HO to Branch Inflow",
                             "வரவு (IN)": f"₹{f_amt:,.2f}",
                             "பற்று (OUT)": "-",
-                            "ரொக்கம் (Cash)": f"₹{f_amt:,.2f}",
-                            "வங்கி (Bank)": "-"
+                            "ரொக்கம் (Cash)": cash_col_val,
+                            "வங்கி (Bank)": bank_col_val
                         })
-                    elif "BRANCH_TO_HO" in f_type:
-                        tot_cash_out += f_amt
+
+                    elif "BRANCH_TO_HO" in f_type or "HO_TRANSFER" in f_type:
+                        if is_cash:
+                            tot_cash_out += f_amt
+                            cash_col_val = f"₹{f_amt:,.2f}"
+                            bank_col_val = "-"
+                        else:
+                            tot_bank_out = tot_bank_out + f_amt if 'tot_bank_out' in locals() else f_amt
+                            cash_col_val = "-"
+                            bank_col_val = f"₹{f_amt:,.2f}"
+
                         unified_daybook_rows.append({
                             "நேரம்": f_time,
                             "வருகை எண்": "-",
                             "வகை": "HQ நிதி ஒப்படைப்பு",
                             "விவரம் / வாடிக்கையாளர்": "தலைமையகத்திற்கு அனுப்பியது",
-                            "நடவடிக்கை": "Branch to HO Cash Remittance",
+                            "நடவடிக்கை": "Branch to HO Remittance",
                             "வரவு (IN)": "-",
                             "பற்று (OUT)": f"₹{f_amt:,.2f}",
-                            "ரொக்கம் (Cash)": f"₹{f_amt:,.2f}",
-                            "வங்கி (Bank)": "-"
+                            "ரொக்கம் (Cash)": cash_col_val,
+                            "வங்கி (Bank)": bank_col_val
                         })
 
                 # -------------------------------------------------------------------------
