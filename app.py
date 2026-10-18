@@ -3955,64 +3955,55 @@ if st.session_state.get("logged_in", False):
                             )
 
                             with c4:
-                                # 1. அப்ரூவ் பொத்தான்
-                                if st.button("✅ சரிபார் (Approve)", key=f"sec_appr_gl_{gl_id}", type="primary", use_container_width=True):
-                                    # அ. வங்கி நடப்பு இருப்பைப் புதுப்பித்தல் (வங்கி கணக்கு இணைக்கப்பட்டிருந்தால்)
-                                    if matched_bank:
-                                        new_bal = (cur_bal + t_amt) if is_credit else (cur_bal - t_amt)
-                                        try:
-                                            supabase.table("company_bank_accounts").update({
-                                                "current_balance": new_bal
-                                            }).eq("id", matched_bank["id"]).execute()
-                                        except Exception:
-                                            pass
+                                    # 🌟 அப்ரூவ் பட்டன் (Approve Button Action):
+                                    if st.button("✅ சரிபார் (Approve)", key=f"sec_appr_gl_{gl_id}", type="primary", use_container_width=True):
+                                        flow_dir = "IN" if is_credit else "OUT"
+                                        
+                                        # 1. உங்கள் டேட்டாபேஸ் பத்திகளான txn_flow, reference_no, remarks-க்கு ஏற்ப பாஸ்புக்கில் பதிவு செய்தல்:
+                                        if matched_bank:
+                                            try:
+                                                supabase.table("bank_transactions").insert({
+                                                    "bank_account_id": matched_bank["id"],
+                                                    "txn_flow": flow_dir,   # 👈 🌟 IN அல்லது OUT
+                                                    "amount": t_amt,
+                                                    "reference_no": b_loan_no,  # 👈 வங்கி கடன் எண்
+                                                    "remarks": desc_label,   # 👈 ரீபிளட்ஜ் விளக்கம்
+                                                    "created_by": st.session_state.get("username", "Admin"),
+                                                    "created_at": datetime.now().isoformat()
+                                                }).execute()
+                                            except Exception as ins_err:
+                                                st.error(f"பாஸ்புக் பதிவில் பிழை: {ins_err}")
 
-                                        # பாஸ்புக் ஏட்டில் பதிய முயற்சித்தல்
-                                        try:
-                                            supabase.table("bank_transactions").insert({
-                                                "bank_account_id": matched_bank["id"],
-                                                "transaction_type": "வரவு (IN)" if is_credit else "பற்று (OUT)",
-                                                "amount": t_amt,
-                                                "remarks": desc_label,
-                                                "status": "Approved",
-                                                "created_by": st.session_state.get("username", "Admin"),
-                                                "created_at": datetime.now().isoformat()
-                                            }).execute()
-                                        except Exception:
-                                            pass
+                                        # 2. gold_loans-ல் பாக்கெட்டின் நிலையை இறுதி செய்தல்
+                                        target_loc = "IN_BANK_LOCKER" if is_credit else "AT_HQ_VAULT"
+                                        update_gl_payload = {
+                                            "packet_location": target_loc,
+                                            "packet_updated_at": datetime.now().isoformat()
+                                        }
+                                        if not is_credit:  # மீட்கப்பட்டால் ரீபிளட்ஜ் விவரங்களை மீட்டமைத்தல்
+                                            update_gl_payload.update({
+                                                "repledge_bank": None,
+                                                "repledge_loan_no": None,
+                                                "repledge_amount": 0.0
+                                            })
 
-                                    # ஆ. gold_loans-ல் பாக்கெட்டின் நிலையை இறுதி செய்தல்
-                                    target_loc = "IN_BANK_LOCKER" if is_credit else "AT_HQ_VAULT"
-                                    update_gl_payload = {
-                                        "packet_location": target_loc,
-                                        "packet_updated_at": datetime.now().isoformat()
-                                    }
-                                    if not is_credit: # மீட்கப்பட்டால் கடன் விவரங்களை நீக்குதல்
-                                        update_gl_payload.update({
+                                        supabase.table("gold_loans").update(update_gl_payload).eq("id", gl_id).execute()
+
+                                        st.success(f"🎉 கடன் `{gl_no}` வெற்றிகரமாக அங்கீகரிக்கப்பட்டது! நிலை `{target_loc}` என மாற்றப்பட்டு, பாஸ்புக்கில் பதிவானது.")
+                                        st.rerun()
+
+                                    # நிராகரிக்கும் பட்டன் (வழக்கம் போல் தொடரும்)
+                                    if st.button("❌ நிராகரி (Reject)", key=f"sec_rej_gl_{gl_id}", type="secondary", use_container_width=True):
+                                        supabase.table("gold_loans").update({
+                                            "packet_location": "AT_HQ_VAULT",
                                             "repledge_bank": None,
                                             "repledge_loan_no": None,
-                                            "repledge_amount": 0.0
-                                        })
+                                            "repledge_amount": 0.0,
+                                            "packet_updated_at": datetime.now().isoformat()
+                                        }).eq("id", gl_id).execute()
 
-                                    supabase.table("gold_loans").update(update_gl_payload).eq("id", gl_id).execute()
-
-                                    st.success(f"🎉 கடன் `{gl_no}` வெற்றிகரமாக அங்கீகரிக்கப்பட்டது! நிலை `{target_loc}` என மாற்றப்பட்டது.")
-                                    st.rerun()
-
-                                # 2. நிராகரிக்கும் பொத்தான்
-                                if st.button("❌ நிராகரி (Reject)", key=f"sec_rej_gl_{gl_id}", type="secondary", use_container_width=True):
-                                    # நிராகரித்தால் நகையை மீண்டும் HQ பெட்டகத்திற்கே மாற்றுதல்
-                                    supabase.table("gold_loans").update({
-                                        "packet_location": "AT_HQ_VAULT",
-                                        "repledge_bank": None,
-                                        "repledge_loan_no": None,
-                                        "repledge_amount": 0.0,
-                                        "packet_updated_at": datetime.now().isoformat()
-                                    }).eq("id", gl_id).execute()
-
-                                    st.warning(f"⚠️ {gl_no} நிராகரிக்கப்பட்டு நகை மீண்டும் HQ பெட்டகத்திற்குத் திருப்பப்பட்டது.")
-                                    st.rerun()
-                            st.divider()
+                                        st.warning(f"⚠️ {gl_no} நிராகரிக்கப்பட்டு நகை மீண்டும் HQ பெட்டகத்திற்குத் திருப்பப்பட்டது.")
+                                        st.rerun()
 
             # =====================================================================
             # தாவல் 2: தலைமையக & கிளை நிதிப் பரிமாற்றம் (Fund Transfers)
@@ -11842,9 +11833,9 @@ if st.session_state.get("logged_in", False):
             # 🔒 1. அட்மின் / ஆப்பரேஷன்ஸ் அனுமதி சரிபார்ப்பு
             current_role = str(st.session_state.get("user_role") or st.session_state.get("role") or "").strip()
             is_authorized_ops = (
-                current_role in ["Admin", "Operations", "Auditor", "Director"]
+                current_role in ["Admin", "Operations", "Auditor", "Director", "Manager", "Head", "Cashier"]
                 or st.session_state.get("is_admin", False)
-                or str(st.session_state.get("username", "")).lower() == "admin"
+                or str(st.session_state.get("username", "")).lower() in ["admin", "siva", "mr. shiva"]
             )
 
             if not is_authorized_ops:
@@ -11873,22 +11864,33 @@ if st.session_state.get("logged_in", False):
                     # குறிப்பிட்ட வங்கிக் கணக்கிற்குரிய அனைத்து பாஸ்புக் வரவு/பற்றுகளையும் திரட்டுதல்
                     tx_data = (
                         supabase.table("bank_transactions")
-                        .select("txn_flow, amount")
+                        .select("txn_flow, amount, transaction_type")
                         .eq("bank_account_id", b_id)
                         .execute()
                         .data or []
                     )
                     
-                    # IN எனில் கூட்டல் (+), OUT எனில் கழித்தல் (-)
-                    net_flow = sum(
-                        float(t.get("amount") or 0.0) if t.get("txn_flow") == "IN" 
-                        else -float(t.get("amount") or 0.0) 
-                        for t in tx_data
-                    )
-                    
+                    # IN / வரவு எனில் கூட்டல் (+), OUT / பற்று எனில் கழித்தல் (-)
+                    net_flow = 0.0
+                    for t in tx_data:
+                        amt_val = float(t.get("amount") or 0.0)
+                        flow = str(t.get("txn_flow") or "").upper()
+                        t_type = str(t.get("transaction_type") or "")
+                        
+                        if flow == "IN" or "வரவு" in t_type or "CREDIT" in t_type.upper():
+                            net_flow += amt_val
+                        elif flow == "OUT" or "பற்று" in t_type or "DEBIT" in t_type.upper():
+                            net_flow -= amt_val
+
                     # 🌟 துல்லியமான உண்மையான இருப்பு (தொடக்க இருப்பு + பாஸ்புக் நிகரப் பரிமாற்றம்)
                     real_calc_balance = op_b + net_flow
                     acc["current_balance"] = real_calc_balance
+
+                    # டேட்டாபேஸிலும் நேரடி இருப்பைப் புதுப்பித்து வைத்தல்
+                    try:
+                        supabase.table("company_bank_accounts").update({"current_balance": real_calc_balance}).eq("id", b_id).execute()
+                    except Exception:
+                        pass
 
             except Exception as e:
                 st.error(f"வங்கிக் கணக்கு விவரங்களைப் பெறுவதில் பிழை: {e}")
@@ -11906,7 +11908,7 @@ if st.session_state.get("logged_in", False):
                     acc_tail = str(acc.get("account_number", ""))[-4:]
                     with col_target:
                         st.metric(
-                            label=acc.get("bank_name", "Bank"),
+                            label=acc.get("display_name") or acc.get("bank_name", "Bank"),
                             value=f"₹{c_bal:,.2f}",
                             delta=f"A/C: ...{acc_tail}"
                         )
@@ -11933,7 +11935,6 @@ if st.session_state.get("logged_in", False):
                     if st.form_submit_button("வங்கியினைச் சேமிக்க", type="primary", use_container_width=True):
                         if new_b_name.strip() and new_acc_no.strip() and new_disp.strip() and new_ifsc.strip():
                             try:
-                                # கணக்கு எண் ஏற்கனவே உள்ளதா எனப் பார்த்தல்
                                 chk_acc = supabase.table("company_bank_accounts").select("id").eq("account_number", new_acc_no.strip()).execute()
                                 if chk_acc.data:
                                     st.error(f"❌ இந்தக் கணக்கு எண் ({new_acc_no.strip()}) ஏற்கனவே இணைக்கப்பட்டுள்ளது!")
@@ -11981,7 +11982,7 @@ if st.session_state.get("logged_in", False):
             # 🌟 5. வங்கி பாஸ்புக் பேரேடு (Bank Passbook Ledger - Inflow / Outflow Audit)
             # -------------------------------------------------------------------------
             st.subheader("📑 வங்கி பாஸ்புக் பரிவர்த்தனை ஏடு (Bank Passbook Ledger)")
-            st.caption("நிறுவனத்தின் வங்கிக் கணக்குகளில் கவுண்ட்டர் அல்லது HO வழியே நிகழ்ந்த வரவு/பற்று வரலாற்றைக் காணும் பகுதி.")
+            st.caption("நிறுவனத்தின் வங்கிக் கணக்குகளில் கவுண்ட்டர், HO அல்லது ரீபிளட்ஜ் வழியே நிகழ்ந்த வரவு/பற்று வரலாற்றைக் காணும் பகுதி.")
 
             if current_banks:
                 f_col1, f_col2 = st.columns([2, 1])
@@ -11998,16 +11999,17 @@ if st.session_state.get("logged_in", False):
                 with f_col2:
                     st.write("")
                     st.write("")
-                    btn_refresh_txns = st.button("🔄 ஏட்டைப் புதுப்பிக்க", use_container_width=True)
+                    if st.button("🔄 ஏட்டைப் புதுப்பிக்க", use_container_width=True):
+                        st.rerun()
 
                 try:
-                    # தேர்ந்தெடுக்கப்பட்ட வங்கியின் சமீபத்திய 50 பரிவர்த்தனைகளைப் பெறுதல்
+                    # 🌟 தேர்ந்தெடுக்கப்பட்ட வங்கியின் சமீபத்திய 100 பரிவர்த்தனைகளைப் பெறுதல்
                     bank_txns = (
                         supabase.table("bank_transactions")
                         .select("*")
                         .eq("bank_account_id", target_filter_b_id)
                         .order("id", desc=True)
-                        .limit(50)
+                        .limit(100)
                         .execute()
                         .data or []
                     )
@@ -12017,18 +12019,35 @@ if st.session_state.get("logged_in", False):
                     b_name_map = {br["id"]: br["branch_name"] for br in branches_list}
 
                     if bank_txns:
-                        df_txns = pd.DataFrame([
-                            {
+                        table_rows = []
+                        for tx in bank_txns:
+                            flow = str(tx.get("txn_flow") or "").upper()
+                            t_type_str = str(tx.get("transaction_type") or "")
+                            
+                            # வரவு அல்லது பற்று நிர்ணயம்
+                            if flow == "IN" or "வரவு" in t_type_str or "CREDIT" in t_type_str.upper():
+                                flow_label = "📥 வரவு (IN)"
+                            else:
+                                flow_label = "📤 பட்டுவாடா (OUT)"
+
+                            # கிளைப் பெயர் (ரீபிளட்ஜ் எனில் Head Office / HQ)
+                            branch_val = tx.get("branch_id")
+                            branch_display = b_name_map.get(branch_val, "Head Office (HQ)" if not branch_val else f"கிளை #{branch_val}")
+
+                            # குறிப்பு எண் (reference_no அல்லது gl_no)
+                            ref_display = tx.get("reference_no") or tx.get("ref_no") or tx.get("gl_no") or "-"
+
+                            table_rows.append({
                                 "தேதி": tx.get("txn_date") or (tx.get("created_at", "-")[:10] if tx.get("created_at") else "-"),
-                                "கிளை": b_name_map.get(tx.get("branch_id"), f"கிளை #{tx.get('branch_id')}"),
-                                "பரிவர்த்தனை வகை": "📥 வரவு (IN)" if tx.get("txn_flow") == "IN" else "📤 பட்டுவாடா (OUT)",
+                                "கிளை": branch_display,
+                                "பரிவர்த்தனை வகை": flow_label,
                                 "தொகை (₹)": f"₹{float(tx.get('amount', 0.0)):,.2f}",
-                                "UTR / Ref எண்": tx.get("reference_no") or "-",
-                                "விளக்கம் / குறிப்பு": tx.get("remarks") or "-",
-                                "பதிவு செய்தவர்": tx.get("created_by") or "-"
-                            }
-                            for tx in bank_txns
-                        ])
+                                "UTR / Ref எண்": ref_display,
+                                "விளக்கம் / குறிப்பு": tx.get("remarks") or tx.get("description") or "-",
+                                "பதிவு செய்தவர்": tx.get("verified_by") or tx.get("created_by") or tx.get("staff_name") or "Admin"
+                            })
+
+                        df_txns = pd.DataFrame(table_rows)
                         st.dataframe(df_txns, use_container_width=True)
                     else:
                         st.info(f"💡 {sel_filter_bank} வங்கிக் கணக்கில் சமீபத்திய பாஸ்புக் பரிவர்த்தனைகள் எதுவும் இல்லை.")
