@@ -3488,9 +3488,11 @@ if st.session_state.get("logged_in", False):
 
                                             # 2. வங்கி பாஸ்புக் ஏட்டில் 'Pending' ஆகப் பதிவு செய்தல் (இருப்பு இன்னும் மாறாது)
                                             # ✅ சரியான வரி (txn_flow என மாற்றப்பட்டது):
+                                            today_date = datetime.now().date().isoformat()
                                             supabase.table("bank_transactions").insert({
                                                 "bank_account_id": chosen_bank_obj["id"] if chosen_bank_obj else None,
-                                                "txn_flow": "IN",  # 👈 transaction_type-க்கு பதிலாக txn_flow
+                                                "txn_date": today_date,   # 👈 🌟 கட்டாயத் தேதி
+                                                "txn_flow": "IN",
                                                 "amount": net_credit,
                                                 "reference_no": b_loan_in.strip(),
                                                 "remarks": f"ரீபிளட்ஜ் வரவு: {vl['loan_no']} | வங்கி கடன் எண்: {b_loan_in} (அசல்: ₹{b_amt_in:,.2f} - பிடித்தம்: ₹{b_charges_in:,.2f})",
@@ -3962,17 +3964,20 @@ if st.session_state.get("logged_in", False):
                                         # 1. உங்கள் டேட்டாபேஸ் பத்திகளான txn_flow, reference_no, remarks-க்கு ஏற்ப பாஸ்புக்கில் பதிவு செய்தல்:
                                         if matched_bank:
                                             try:
+                                                today_date = datetime.now().date().isoformat()
                                                 supabase.table("bank_transactions").insert({
                                                     "bank_account_id": matched_bank["id"],
-                                                    "txn_flow": flow_dir,   # 👈 🌟 IN அல்லது OUT
+                                                    "txn_date": today_date,   # 👈 🌟 கட்டாயத் தேதி (NOT NULL தீர்வு)
+                                                    "txn_flow": flow_dir,     # IN அல்லது OUT
                                                     "amount": t_amt,
-                                                    "reference_no": b_loan_no,  # 👈 வங்கி கடன் எண்
-                                                    "remarks": desc_label,   # 👈 ரீபிளட்ஜ் விளக்கம்
+                                                    "reference_no": b_loan_no,
+                                                    "remarks": desc_label,
                                                     "created_by": st.session_state.get("username", "Admin"),
                                                     "created_at": datetime.now().isoformat()
                                                 }).execute()
                                             except Exception as ins_err:
                                                 st.error(f"பாஸ்புக் பதிவில் பிழை: {ins_err}")
+
 
                                         # 2. gold_loans-ல் பாக்கெட்டின் நிலையை இறுதி செய்தல்
                                         target_loc = "IN_BANK_LOCKER" if is_credit else "AT_HQ_VAULT"
