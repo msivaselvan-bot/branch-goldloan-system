@@ -3359,6 +3359,25 @@ if st.session_state.get("logged_in", False):
             )
 
             # (டேப் 1 குறியீடு நீங்கள் வைத்திருப்பது போலவே இருக்கும்...)
+            with p_tab1:
+                st.markdown("##### 📥 கிளைகளிலிருந்து வழியில் உள்ள பாக்கெட்கள் (Bulk Receive)")
+                
+                # கிளை வடிகட்டி
+                sel_transit_branch = st.selectbox(
+                    "வடிகட்ட வேண்டிய கிளை:",
+                    ["அனைத்து கிளைகள்"] + list(b_map_name.values()),
+                    key="flt_transit_branch"
+                )
+                
+                # வழியில் உள்ள பாக்கெட்களை மட்டும் தனியாக வினவல் மூலம் எடுப்பது:
+                transit_query = (
+                    supabase.table("gold_loans")
+                    .select("*")
+                    .eq("packet_location", "IN_TRANSIT_TO_HQ")
+                    .order("id", desc=True)
+                    .limit(3000)
+                )
+                transit_loans = transit_query.execute().data or []
 
             # -------------------------------------------------------------------------
             # 🌟 டேப் 2: வங்கி லாக்கர் மறு-அடமானம் & தேடல் வசதி (Search Filter Added)
