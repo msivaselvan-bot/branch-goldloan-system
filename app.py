@@ -8798,6 +8798,9 @@ if st.session_state.get("logged_in", False):
                         # =========================================================================
                         # விருப்பம் 2: தற்காலிகச் சேமிப்பு (Save as Draft - OTP-க்கு முன் எண்களை லாக் செய்தல்)
                         # =========================================================================
+                        # =========================================================================
+                        # விருப்பம் 2: தற்காலிகச் சேமிப்பு (Save as Draft - act_col2)
+                        # =========================================================================
                         with act_col2:
                             if st.button("💾 தற்காலிகமாகச் சேமி (Draft)", type="secondary", use_container_width=True, key="btn_save_draft_active"):
                                 if not st.session_state.get("transactions_cart"):
@@ -8808,6 +8811,12 @@ if st.session_state.get("logged_in", False):
                                             effective_v_date = str(visit.get("visit_date") or visit_business_date)
                                             current_v_no = visit.get("visit_no")
 
+                                            # 🌟 pm_label மற்றும் ரொக்கம்/வங்கிப் பங்குகளை உறுதிசெய்தல் (Fix for NameError)
+                                            cur_cash = float(cash_portion if 'cash_portion' in locals() else visit.get("cash_amount", 0.0) or 0.0)
+                                            cur_bank = float(bank_portion if 'bank_portion' in locals() else visit.get("bank_amount", 0.0) or 0.0)
+                                            
+                                            draft_pm_label = "Cash" if cur_bank == 0 else ("Bank/UPI" if cur_cash == 0 else "Split")
+
                                             chk_v = supabase.table("customer_visits").select("id").eq("visit_no", current_v_no).execute()
                                             
                                             draft_visit_payload = {
@@ -8817,10 +8826,10 @@ if st.session_state.get("logged_in", False):
                                                 "visit_date": effective_v_date,
                                                 "total_paid": float(visit.get("total_paid", 0.0) or 0.0),
                                                 "total_received": float(visit.get("total_received", 0.0) or 0.0),
-                                                "net_cash_amount": float(cash_portion),
-                                                "cash_amount": float(cash_portion),
-                                                "bank_amount": float(bank_portion),
-                                                "payment_mode": pm_label,
+                                                "net_cash_amount": cur_cash,
+                                                "cash_amount": cur_cash,
+                                                "bank_amount": cur_bank,
+                                                "payment_mode": draft_pm_label,  # 👈 🌟 பாதுகாப்பாக draft_pm_label பயன்படுத்தப்படுகிறது
                                                 "status": "Draft_Pending_OTP",
                                                 "otp_verified": False
                                             }
@@ -8839,8 +8848,14 @@ if st.session_state.get("logged_in", False):
                                                 raw_r_amt = float(item.get("received_amount", 0.0) or 0.0)
                                                 base_amount = float(item.get("amount", 0.0) or 0.0)
 
-                                                is_cash_out = any(k in t_type for k in ["Pledge", "Loan", "நகைக் கடன்", "RD Closure", "RD முதிர்வு", "FD Closure", "FD முதிர்வு", "FD Interest", "FD வட்டி", "GP", "Purchase", "கொள்முதல்"])
-                                                is_cash_in = any(k in t_type for k in ["Release", "Interest Payment", "Part Payment", "மீட்டல்", "அசல் வரவு", "வட்டி வரவு", "RD Open", "புதிய RD", "RD Due", "RD தவணை", "FD Open", "புதிய வைப்பு", "GS", "Sale", "விற்பனை"])
+                                                is_cash_out = any(k in t_type for k in [
+                                                    "Pledge", "Loan", "நகைக் கடன்", "RD Closure", "RD முதிர்வு",
+                                                    "FD Closure", "FD முதிர்வு", "FD Interest", "FD வட்டி", "GP", "Purchase", "கொள்முதல்"
+                                                ])
+                                                is_cash_in = any(k in t_type for k in [
+                                                    "Release", "Interest Payment", "Part Payment", "மீட்டல்", "அசல் வரவு", "வட்டி வரவு",
+                                                    "RD Open", "புதிய RD", "RD Due", "RD தவணை", "FD Open", "புதிய வைப்பு", "GS", "Sale", "விற்பனை"
+                                                ])
 
                                                 if is_cash_out:
                                                     p_amt = raw_p_amt if raw_p_amt > 0 else base_amount
@@ -8878,7 +8893,7 @@ if st.session_state.get("logged_in", False):
                                                     "net_weight": float(item.get("net_weight", 0.0) or 0.0),
                                                     "item_details": item.get("ornament_details") or item.get("item_details", ""),
                                                     "remarks": draft_remarks,
-                                                    "payment_mode": pm_label,
+                                                    "payment_mode": draft_pm_label,  # 👈 🌟 இங்கும் draft_pm_label
                                                     "status": "Draft_Locked"
                                                 }
                                                 supabase.table("transactions").insert(gen_txn).execute()
