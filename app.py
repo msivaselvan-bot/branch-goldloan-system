@@ -3592,6 +3592,26 @@ if st.session_state.get("logged_in", False):
                 )
 
                 # 1. கிளைகள் அவசரமாகக் கோரியுள்ளவை (குறிப்புடன் தெரியும்)
+                # =========================================================================
+                # 🚨 1. அவசரக் கோரிக்கைகளை நேரடியாக சுபாபேஸிலிருந்து அதிவேகமாக எடுத்தல்:
+                # =========================================================================
+                try:
+                    # 2,300 வரிகளை லூப் செய்யாமல், கோரிக்கை வைக்கப்பட்டவற்றை மட்டும் நேரடியாக எடுத்தல்:
+                    urgent_req_res = (
+                        supabase.table("gold_loans")
+                        .select("*")
+                        .or_("release_requested.eq.true,packet_location.eq.BRANCH_REQUESTED_RELEASE")
+                        .order("id", desc=True)
+                        .execute()
+                    )
+                    urgent_requests = urgent_req_res.data or []
+                except Exception as u_err:
+                    st.error(f"மீட்புக் கோரிக்கைகளை எடுப்பதில் பிழை: {u_err}")
+                    urgent_requests = []
+
+                # =========================================================================
+                # 🚚 தலைமையக டேப்: கிளைகளின் அவசர மீட்புக் கோரிக்கைகள் காட்சிப்படுத்துதல்
+                # =========================================================================
                 with adm_sub1:
                     st.markdown(
                         "##### 🚨 வாடிக்கையாளர் மீட்புக் கோரிக்கைகள் (Customer Release Requests)"
@@ -3601,17 +3621,19 @@ if st.session_state.get("logged_in", False):
                             "தற்போது கிளைகளிலிருந்து எந்த மீட்புக் கோரிக்கைகளும் நிலுவையில் இல்லை."
                         )
                     else:
+                        st.warning(f"⚠️ கிளைகள் அனுப்பிய அவசரக் கோரிக்கைகள் எண்ணிக்கை: **{len(urgent_requests)}**")
+                        
                         for uq in urgent_requests:
                             loc_txt = (
                                 "🏢 HQ பெட்டகத்தில் உள்ளது"
-                                if uq["packet_location"] == "AT_HQ_VAULT"
+                                if uq.get("packet_location") in ["AT_HQ_VAULT", "BRANCH_REQUESTED_RELEASE"]
                                 else f"🏦 {uq.get('repledge_bank', 'வங்கி')} லாக்கரில் உள்ளது"
                             )
                             with st.container():
                                 u1, u2, u3, u4 = st.columns([2, 3, 2, 2])
                                 u1.error(f"🏷️ **{uq['loan_no']}**")
                                 u2.write(
-                                    f"கிளை: **{b_map_name.get(uq['branch_id'], '-')}** | எடை: **{uq['gross_weight']}g**\nஇருப்பிடம்: **{loc_txt}**"
+                                    f"கிளை: **{b_map_name.get(uq.get('branch_id'), '-')}** | எடை: **{uq.get('gross_weight')}g**\nஇருப்பிடம்: **{loc_txt}**"
                                 )
 
                                 # 📝 கிளை எழுதிய குறிப்பு (Branch Remarks):
@@ -3624,26 +3646,35 @@ if st.session_state.get("logged_in", False):
                                 u3.caption(
                                     f"கோரப்பட்ட நேரம்:\n{str(uq.get('release_request_date', ''))[:16]}"
                                 )
+                                
+                                # 🚚 கிளைக்கு அனுப்பி வைக்கும் பொத்தான்:
                                 if u4.button(
                                     "🚚 கிளைக்கு அனுப்பி வை",
                                     key=f"tmgmt_disp_b_{uq['id']}",
+                                    type="primary",
+                                    use_container_width=True
                                 ):
-                                    supabase.table("gold_loans").update(
-                                        {
-                                            "packet_location": "IN_TRANSIT_TO_BRANCH",
-                                            "release_requested": False,
-                                            "packet_dispatched_by": st.session_state.get(
-                                                "username", "Admin"
-                                            ),
-                                            "packet_updated_at": datetime.now().isoformat(),
-                                        }
-                                    ).eq("id", uq["id"]).execute()
-                                    st.success(
-                                        f"{uq['loan_no']} கிளைக்கு அனுப்பி வைக்கப்பட்டது!"
-                                    )
-                                    st.rerun()
-                            st.divider()
+                                    try:
+                                        supabase.table("gold_loans").update(
+                                            {
+                                                "packet_location": "IN_TRANSIT_TO_BRANCH",
+                                                "release_requested": False,
+                                                "packet_dispatched_by": st.session_state.get(
+                                                    "username", "Admin"
+                                                ),
+                                                "packet_dispatched_at": datetime.now().isoformat(),
+                                                "packet_updated_at": datetime.now().isoformat(),
+                                            }
+                                        ).eq("id", uq["id"]).execute()
 
+                                        st.success(
+                                            f"✅ {uq['loan_no']} பாக்கெட் கிளைக்கு அனுப்பி வைக்கப்பட்டது (IN_TRANSIT_TO_BRANCH)!"
+                                        )
+                                        st.rerun()
+                                    except Exception as disp_err:
+                                        st.error(f"அனுப்புவதில் பிழை: {disp_err}")
+
+                            st.divider()
                 # 2. வாடிக்கையாளர் வராததால் திருப்பி அனுப்ப அனுமதி கோரும் பாக்கெட்கள்
                 with adm_sub2:
                     st.markdown(
