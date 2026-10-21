@@ -11092,7 +11092,7 @@ if st.session_state.get("logged_in", False):
 
                 st.markdown("---")
             # -----------------------------------------------------------------
-            # நிலை 2: பாக்கெட்டைத் தேடி, குறிப்புடன் தலைமையகத்திடம் கோருதல்
+            # நிலை 2: பாக்கெட்டைத் தேடி, குறிப்புடன் தலைமையகத்திடம் கோருதல் (திருத்தப்பட்டது)
             # -----------------------------------------------------------------
             with sub_bp2:
                 st.markdown(
@@ -11106,6 +11106,7 @@ if st.session_state.get("logged_in", False):
                     key="br_pkt_search_input",
                 )
 
+                # HQ அல்லது வங்கி லாக்கரில் உள்ள பாக்கெட்கள் (இன்னும் கோரிக்கை வைக்கப்படாதவை)
                 hq_hold_loans = [
                     l
                     for l in b_loans
@@ -11123,44 +11124,47 @@ if st.session_state.get("logged_in", False):
 
                 if not hq_hold_loans:
                     st.info(
-                        "தலைமையகப் பாதுகாப்பில் கோருவதற்கு பாக்கெட்கள் ஏதும் இல்லை /"
-                        " பொருந்தவில்லை."
+                        "தலைமையகப் பாதுகாப்பில் கோருவதற்கு பாக்கெட்கள் ஏதும் இல்லை / பொருந்தவில்லை."
                     )
                 else:
                     st.caption(f"கண்டறியப்பட்ட பாக்கெட்கள்: **{len(hq_hold_loans)}**")
                     for hl in hq_hold_loans:
                         with st.expander(
-                            f"🪙 {hl['loan_no']} | எடை: {hl['gross_weight']}g |"
-                            f" 🏢 தலைமையகப் பாதுகாப்பில் உள்ளது"
+                            f"🪙 {hl['loan_no']} | எடை: {hl['gross_weight']}g | 🏢 தலைமையகப் பாதுகாப்பில் உள்ளது"
                         ):
                             with st.form(key=f"br_req_form_{hl['id']}"):
                                 # 📝 2. குறிப்பு எழுதும் புலம் (Remarks Field)
                                 req_note = st.text_area(
                                     "கோரிக்கைக்கான குறிப்பு / காரணம் (Branch Remarks):",
                                     placeholder=(
-                                        "எ.கா: வாடிக்கையாளர் இன்று மாலை 4 மணிக்கு கடனை அடைத்து"
-                                        " நகையை மீட்க வருகிறார்."
+                                        "எ.கா: வாடிக்கையாளர் இன்று மாலை 4 மணிக்கு கடனை அடைத்து நகையை மீட்க வருகிறார்."
                                     ),
                                 )
                                 if st.form_submit_button(
                                     "🚨 தலைமையகத்திடம் பாக்கெட்டைக் கோரு (Send Request)"
                                 ):
-                                    supabase.table("gold_loans").update(
-                                        {
-                                            "release_requested": True,
-                                            "release_request_date": datetime.now().isoformat(),
-                                            "release_request_remarks": (
-                                                req_note.strip()
-                                                if req_note
-                                                else "காரணம் குறிப்பிடப்படவில்லை"
-                                            ),
-                                        }
-                                    ).eq("id", hl["id"]).execute()
-                                    st.success(
-                                        f"{hl['loan_no']} அவசரக் கோரிக்கை குறிப்புடன்"
-                                        " தலைமையகத்திற்கு அனுப்பப்பட்டது!"
-                                    )
-                                    st.rerun()
+                                    try:
+                                        # 🌟 3. packet_location உட்பட நிலையை மாற்றுதல்:
+                                        supabase.table("gold_loans").update(
+                                            {
+                                                "packet_location": "BRANCH_REQUESTED_RELEASE",  # 👈 🌟 இந்த வரி மிகக் கட்டாயம்!
+                                                "release_requested": True,
+                                                "release_request_date": datetime.now().isoformat(),
+                                                "release_request_remarks": (
+                                                    req_note.strip()
+                                                    if req_note
+                                                    else "காரணம் குறிப்பிடப்படவில்லை"
+                                                ),
+                                                "packet_updated_at": datetime.now().isoformat()
+                                            }
+                                        ).eq("id", hl["id"]).execute()
+
+                                        st.success(
+                                            f"✅ {hl['loan_no']} பாக்கெட்டிற்கான அவசரக் கோரிக்கை தலைமையகத்திற்கு அனுப்பப்பட்டது!"
+                                        )
+                                        st.rerun()
+                                    except Exception as req_err:
+                                        st.error(f"கோரிக்கை அனுப்புவதில் பிழை: {req_err}")
 
             # -----------------------------------------------------------------
             # நிலை 3: வாடிக்கையாளரிடம் ஒப்படைத்தல் அல்லது அட்மின் அனுமதியுடன் திருப்புதல்
