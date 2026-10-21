@@ -3308,44 +3308,63 @@ if st.session_state.get("logged_in", False):
                 all_gp_pkts = []
 
             # =========================================================================
-            # 3. தலைமை நிலவரக் கார்டுகள் (Top Status KPI Metrics)
+            # 3. தலைமை நிலவரக் கார்டுகள் (Top Status KPI Metrics - Optimized & Fixed)
             # =========================================================================
-            branch_loans = [p for p in all_loan_pkts if p.get("packet_location", "AT_BRANCH") == "AT_BRANCH"]
+            # 🌟 அ. கிளைகளில் உள்ளவை
+            branch_loans = [p for p in all_loan_pkts if p.get("packet_location", "AT_BRANCH") in ["AT_BRANCH", "DELIVERED_TO_CUSTOMER"]]
             branch_gps = [g for g in all_gp_pkts if g.get("packet_location", "AT_BRANCH") == "AT_BRANCH"]
             cnt_branch = len(branch_loans) + len(branch_gps)
             branch_wt = sum(float(p.get("gross_weight", 0) or 0) for p in branch_loans) + sum(float(g.get("gross_weight", 0) or 0) for g in branch_gps)
             branch_amt = sum(float(p.get("sanctioned_amount", 0) or 0) for p in branch_loans) + sum(float(g.get("purchase_amount", 0) or 0) for g in branch_gps)
 
+            # 🌟 ஆ. தலைமையகத்திற்கு வழியில் உள்ளவை
             transit_loans = [p for p in all_loan_pkts if p.get("packet_location") == "IN_TRANSIT_TO_HQ"]
             transit_gps = [g for g in all_gp_pkts if g.get("packet_location") == "IN_TRANSIT_TO_HQ"]
             cnt_transit_hq = len(transit_loans) + len(transit_gps)
             transit_wt = sum(float(p.get("gross_weight", 0) or 0) for p in transit_loans) + sum(float(g.get("gross_weight", 0) or 0) for g in transit_gps)
             transit_amt = sum(float(p.get("sanctioned_amount", 0) or 0) for p in transit_loans) + sum(float(g.get("purchase_amount", 0) or 0) for g in transit_gps)
 
-            hq_loans = [p for p in all_loan_pkts if p.get("packet_location") == "AT_HQ_VAULT"]
+            # 🌟 இ. கிளைக் கோரிக்கைகள் (முழுமையாகச் சரிசெய்யப்பட்ட வடிகட்டல்)
+            urgent_requests = [
+                p for p in all_loan_pkts 
+                if (
+                    p.get("release_requested") is True 
+                    or p.get("packet_location") in ["BRANCH_REQUESTED_RELEASE", "REQUEST_RELEASE"]
+                    or (str(p.get("status", "")).lower() == "closed" and p.get("packet_location") not in ["AT_BRANCH", "DELIVERED_TO_CUSTOMER"])
+                )
+            ]
+            ret_requests = [p for p in all_loan_pkts if p.get("return_request_status") == "REQUESTED"]
+            total_branch_alerts = len(urgent_requests) + len(ret_requests)
+
+            # 🌟 ஈ. HQ பெட்டக இருப்பு (கிளை கோரிய பாக்கெட்கள் இதிலிருந்து கழிக்கப்பட வேண்டும்)
+            hq_loans = [
+                p for p in all_loan_pkts 
+                if p.get("packet_location") == "AT_HQ_VAULT" 
+                and not p.get("release_requested") 
+                and p.get("packet_location") != "BRANCH_REQUESTED_RELEASE"
+            ]
             hq_gps = [g for g in all_gp_pkts if g.get("packet_location") == "AT_HQ_VAULT" and g.get("disposal_type") == "PENDING"]
             cnt_hq_vault = len(hq_loans) + len(hq_gps)
             hq_wt = sum(float(p.get("gross_weight", 0) or 0) for p in hq_loans) + sum(float(g.get("gross_weight", 0) or 0) for g in hq_gps)
             hq_amt = sum(float(p.get("sanctioned_amount", 0) or 0) for p in hq_loans) + sum(float(g.get("purchase_amount", 0) or 0) for g in hq_gps)
 
+            # 🌟 உ. வங்கி லாக்கரில் உள்ளவை
             repledge_pkts = [p for p in all_loan_pkts if p.get("packet_location") == "IN_BANK_LOCKER"]
             tot_repledge_amt = sum(float(p.get("repledge_amount", 0) or 0) for p in repledge_pkts)
             repledge_wt = sum(float(p.get("gross_weight", 0) or 0) for p in repledge_pkts)
 
-            # 🌟 வாடிக்கையாளர் மீட்ட கடன்கள் (Closed) ஆனால் இன்னும் கிளைக்கு வந்து சேராதவை:
-            urgent_requests = [
-                p for p in all_loan_pkts 
-                if p.get("release_requested") or (p.get("status") == "Closed" and p.get("packet_location") not in ["AT_BRANCH", "DELIVERED_TO_CUSTOMER"])
-            ]
-            ret_requests = [p for p in all_loan_pkts if p.get("return_request_status") == "REQUESTED"]
-            total_branch_alerts = len(urgent_requests) + len(ret_requests)
-
+            # 🌟 ஊ. திரையில் கார்டுகளைக் காட்டுதல்
             k1, k2, k3, k4, k5 = st.columns(5)
             k1.metric("📍 கிளைகளில் உள்ளவை", f"{cnt_branch} பாக்கெட்கள்", f"எடை: {branch_wt:.1f}g | ₹{branch_amt:,.0f}")
             k2.metric("🚚 HQ-க்கு வழியில்", f"{cnt_transit_hq} பாக்கெட்கள்", f"எடை: {transit_wt:.1f}g | ₹{transit_amt:,.0f}")
             k3.metric("🏢 HQ பெட்டக இருப்பு", f"{cnt_hq_vault} பாக்கெட்கள்", f"எடை: {hq_wt:.1f}g | ₹{hq_amt:,.0f}")
             k4.metric("🏦 வங்கி லாக்கரில்", f"{len(repledge_pkts)} பாக்கெட்கள்", f"எடை: {repledge_wt:.1f}g | கடன்: ₹{tot_repledge_amt:,.0f}")
-            k5.metric("🚨 கிளைக் கோரிக்கைகள்", f"{total_branch_alerts} பாக்கெட்கள்", delta=f"மீட்பு: {len(urgent_requests)} | திருப்புதல்: {len(ret_requests)}" if total_branch_alerts > 0 else "நிலுவை இல்லை")
+            k5.metric(
+                "🚨 கிளைக் கோரிக்கைகள்", 
+                f"{total_branch_alerts} பாக்கெட்கள்", 
+                delta=f"மீட்பு: {len(urgent_requests)} | திருப்புதல்: {len(ret_requests)}" if total_branch_alerts > 0 else "நிலுவை இல்லை",
+                delta_color="inverse" if total_branch_alerts > 0 else "off"
+            )
             st.markdown("---")
 
             # 4. மேலாண்மை உள்-டேப்கள்
@@ -3353,7 +3372,7 @@ if st.session_state.get("logged_in", False):
                 [
                     "📥 1. கிளைகளிலிருந்து பெறுதல் (Receive at HQ)",
                     "🏦 2. வங்கி லாக்கர் (Re-Pledge)",
-                    "🚚 3. கிளைகளின் மீட்புக் கோரிக்கைகள் & திருப்புதல் அனுமதி",
+                    f"🚚 3. கிளைகளின் மீட்புக் கோரிக்கைகள் ({total_branch_alerts})",  # 👈 கோரிக்கை எண்ணிக்கையை டேப் தலைப்பிலேயே காட்டலாம்
                     "🔥 4. GP உருக்குதல் & மறுவிற்பனை",
                     "🔍 5. அனைத்து பாக்கெட் தேடல்",
                 ]
