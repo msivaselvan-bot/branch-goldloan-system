@@ -3404,7 +3404,7 @@ if st.session_state.get("logged_in", False):
                             .select("id, loan_no, branch_id, gross_weight, packet_location")
                             .eq("packet_location", "IN_TRANSIT_TO_HQ")
                             .order("id", desc=True)
-                            .limit(500)
+                            .limit(3500)
                             .execute()
                             .data or []
                         )
