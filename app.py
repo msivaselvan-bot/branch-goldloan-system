@@ -3310,7 +3310,8 @@ if st.session_state.get("logged_in", False):
                             "id, loan_no, branch_id, gross_weight, net_weight, "
                             "packet_location, release_requested, release_request_remarks, "
                             "release_request_date, repledge_bank, repledge_loan_no, "
-                            "repledge_amount, repledge_charges, status, sanctioned_amount"
+                            "repledge_amount, repledge_charges, status, sanctioned_amount, "
+                            "return_request_status, return_reason, return_requested_at"
                         )
                         .neq("packet_location", "DELIVERED_TO_CUSTOMER")
                         .order("id", desc=True)
@@ -3414,13 +3415,15 @@ if st.session_state.get("logged_in", False):
                 [
                     "📥 1. கிளைகளிலிருந்து பெறுதல் (Receive at HQ)",
                     "🏦 2. வங்கி லாக்கர் (Re-Pledge)",
-                    f"🚚 3. கிளைகளின் மீட்புக் கோரிக்கைகள் ({total_branch_alerts})",  # 👈 கோரிக்கை எண்ணிக்கையை டேப் தலைப்பிலேயே காட்டலாம்
+                    f"🚚 3. கிளைகளின் மீட்புக் கோரிக்கைகள் ({total_branch_alerts})",
                     "🔥 4. GP உருக்குதல் & மறுவிற்பனை",
                     "🔍 5. அனைத்து பாக்கெட் தேடல்",
                 ]
             )
 
-            # (டேப் 1 குறியீடு நீங்கள் வைத்திருப்பது போலவே இருக்கும்...)
+            # -------------------------------------------------------------------------
+            # டேப் 1: கிளைகளிலிருந்து பெறுதல்
+            # -------------------------------------------------------------------------
             with p_tab1:
                 st.markdown("##### 📥 கிளைகளிலிருந்து வழியில் உள்ள பாக்கெட்கள் (Bulk Receive)")
                 
@@ -3441,7 +3444,6 @@ if st.session_state.get("logged_in", False):
                 )
                 transit_loans = transit_query.execute().data or []
 
-        
             # -------------------------------------------------------------------------
             # 🏦 டேப் 2: வங்கி லாக்கர் மறு-அடமானம் & அனுமதி மேலாண்மை (Maker Submission)
             # -------------------------------------------------------------------------
@@ -3460,7 +3462,7 @@ if st.session_state.get("logged_in", False):
                     except Exception:
                         company_banks = []
 
-                # வங்கிகளின் பெயர்ப் பட்டியல் தயாரித்தல் (Syntax Error சரிசெய்யப்பட்டது)
+                # வங்கிகளின் பெயர்ப் பட்டியல் தயாரித்தல் (Syntax Error முற்றிலும் சரிசெய்யப்பட்டது)
                 if company_banks:
                     bank_options = [
                         f"{b.get('bank_name')} - {str(b.get('account_number', ''))[-4:]} (இருப்பு: ₹{float(b.get('current_balance', 0) or 0):,.2f})"
@@ -3524,10 +3526,7 @@ if st.session_state.get("logged_in", False):
                                         step=100.0,
                                     )
 
-                                    # 🌟 நீங்கள் உள்ளிட்ட Maker Submission குறியீடு இங்கே இணைக்கப்பட்டுள்ளது:
-                                    # -------------------------------------------------------------
-                                    # அ. ரீபிளட்ஜ் செய்யும் போது (Maker Submission) - திருத்தப்பட்ட வடிவம்:
-                                    # -------------------------------------------------------------
+                                    # 🌟 ரீபிளட்ஜ் செய்யும் போது (Maker Submission):
                                     if st.form_submit_button("🏦 வங்கி லாக்கருக்கு அனுமதி கோரு"):
                                         if b_amt_in > 0:
                                             chosen_bank_obj = None
@@ -3538,7 +3537,7 @@ if st.session_state.get("logged_in", False):
                                                     actual_bank_name = b.get("bank_name")
                                                     break
 
-                                            # 🌟 1. gold_loans நிலையை மட்டும் இடைக்கால நிலைக்கு மாற்றுதல் (பாஸ்புக் பதிவு இங்கே தேவையில்லை):
+                                            # 🌟 1. gold_loans நிலையை மட்டும் இடைக்கால நிலைக்கு மாற்றுதல்:
                                             supabase.table("gold_loans").update({
                                                 "packet_location": "RE_PLEDGE_PENDING_APPROVAL",
                                                 "repledge_bank": actual_bank_name,
@@ -3547,6 +3546,9 @@ if st.session_state.get("logged_in", False):
                                                 "repledge_charges": b_charges_in,
                                                 "packet_updated_at": datetime.now().isoformat()
                                             }).eq("id", vl["id"]).execute()
+
+                                            # கேச் அழித்து புதுப்பித்தல்
+                                            get_bulk_packet_counts.clear()
 
                                             st.info(f"⏳ {vl['loan_no']} ரீபிளட்ஜ் அனுமதிக்காக அனுப்பப்பட்டது. அட்மின் ஒப்புதல் அளித்த பின்னரே பாஸ்புக்கில் பதிவாகும்.")
                                             st.rerun()
@@ -3627,11 +3629,11 @@ if st.session_state.get("logged_in", False):
                                             "packet_updated_at": datetime.now().isoformat(),
                                         }).eq("id", rpk["id"]).execute()
 
-                                        # 2. பாஸ்புக் ஏட்டில் பற்று 'Pending' பதிவு
-                                        # ✅ மீட்புப் பகுதிக்கான சரியான இன்சர்ட்:
+                                        # 2. பாஸ்புக் ஏட்டில் பற்று பதிவு
                                         supabase.table("bank_transactions").insert({
                                             "bank_account_id": chosen_debit_obj["id"] if chosen_debit_obj else None,
-                                            "txn_flow": "OUT",  # 👈 transaction_type-க்கு பதிலாக txn_flow
+                                            "txn_date": datetime.now().date().isoformat(),
+                                            "txn_flow": "OUT",
                                             "amount": total_payout,
                                             "reference_no": rpk.get("repledge_loan_no", "-"),
                                             "remarks": f"ரீபிளட்ஜ் மீட்பு பற்று: {rpk['loan_no']} (அசல்: ₹{rep_amt:,.2f} + வட்டி: ₹{int_paid_in:,.2f})",
@@ -3639,8 +3641,12 @@ if st.session_state.get("logged_in", False):
                                             "created_at": datetime.now().isoformat()
                                         }).execute()
 
+                                        # கேச் அழித்து புதுப்பித்தல்
+                                        get_bulk_packet_counts.clear()
+
                                         st.info(f"⏳ {rpk['loan_no']} மீட்புப் பதிவு மேலாளர் அப்ரூவலுக்கு அனுப்பப்பட்டது. உறுதிசெய்த பின் வங்கி இருப்பு குறையும்.")
                                         st.rerun()
+
             # -------------------------------------------------------------------------
             # டேப் 3: கிளைகளின் மீட்புக் கோரிக்கைகள் & திருப்பி அனுப்பும் அனுமதி மேலாண்மை
             # -------------------------------------------------------------------------
@@ -3652,26 +3658,8 @@ if st.session_state.get("logged_in", False):
                     ]
                 )
 
-                # 1. கிளைகள் அவசரமாகக் கோரியுள்ளவை (குறிப்புடன் தெரியும்)
                 # =========================================================================
-                # 🚨 1. அவசரக் கோரிக்கைகளை நேரடியாக சுபாபேஸிலிருந்து அதிவேகமாக எடுத்தல்:
-                # =========================================================================
-                try:
-                    # 2,300 வரிகளை லூப் செய்யாமல், கோரிக்கை வைக்கப்பட்டவற்றை மட்டும் நேரடியாக எடுத்தல்:
-                    urgent_req_res = (
-                        supabase.table("gold_loans")
-                        .select("*")
-                        .or_("release_requested.eq.true,packet_location.eq.BRANCH_REQUESTED_RELEASE")
-                        .order("id", desc=True)
-                        .execute()
-                    )
-                    urgent_requests = urgent_req_res.data or []
-                except Exception as u_err:
-                    st.error(f"மீட்புக் கோரிக்கைகளை எடுப்பதில் பிழை: {u_err}")
-                    urgent_requests = []
-
-                # =========================================================================
-                # 🚚 தலைமையக டேப்: கிளைகளின் அவசர மீட்புக் கோரிக்கைகள் காட்சிப்படுத்துதல்
+                # 🚚 தலைமையக டேப் 3.1: அவசர மீட்புக் கோரிக்கைகள் (Direct Cache Display)
                 # =========================================================================
                 with adm_sub1:
                     st.markdown(
@@ -3697,7 +3685,7 @@ if st.session_state.get("logged_in", False):
                                     f"கிளை: **{b_map_name.get(uq.get('branch_id'), '-')}** | எடை: **{uq.get('gross_weight')}g**\nஇருப்பிடம்: **{loc_txt}**"
                                 )
 
-                                # 📝 கிளை எழுதிய குறிப்பு (Branch Remarks):
+                                # 📝 கிளை எழுதிய குறிப்பு:
                                 rem_text = (
                                     uq.get("release_request_remarks")
                                     or "குறிப்பு இல்லை"
@@ -3708,7 +3696,7 @@ if st.session_state.get("logged_in", False):
                                     f"கோரப்பட்ட நேரம்:\n{str(uq.get('release_request_date', ''))[:16]}"
                                 )
                             
-                                # 🚚 கிளைக்கு அனுப்பி வைக்கும் பொத்தான் (Lag-Free & Safe Update):
+                                # 🚚 கிளைக்கு அனுப்பி வைக்கும் பொத்தான் (0.2 வினாடி பதில்):
                                 if u4.button("🚚 கிளைக்கு அனுப்பி வை", key=f"tmgmt_disp_b_{uq['id']}", type="primary", use_container_width=True):
                                     try:
                                         supabase.table("gold_loans").update({
@@ -3717,7 +3705,7 @@ if st.session_state.get("logged_in", False):
                                             "packet_updated_at": datetime.now().isoformat()
                                         }).eq("id", uq["id"]).execute()
 
-                                        # ⚡ அவசரக் கோரிக்கை கேச்சை மட்டும் உடனே அழித்து நொடியில் திரையை மாற்றுதல்:
+                                        # ⚡ கேச் உடனே அழிக்கப்பட்டு உடனடியாகத் திரை மாறும்
                                         get_urgent_requests_fast.clear()
                                         get_bulk_packet_counts.clear()
 
@@ -3727,7 +3715,10 @@ if st.session_state.get("logged_in", False):
                                         st.error(f"அனுப்புவதில் பிழை: {disp_err}")
 
                             st.divider()
-                # 2. வாடிக்கையாளர் வராததால் திருப்பி அனுப்ப அனுமதி கோரும் பாக்கெட்கள்
+
+                # =========================================================================
+                # தலைமையக டேப் 3.2: திருப்பி அனுப்ப அனுமதி கோரும் பாக்கெட்கள்
+                # =========================================================================
                 with adm_sub2:
                     st.markdown(
                         "##### 🔄 கிளைகள் திருப்பி அனுப்ப அனுமதி கோரும் பாக்கெட்கள்"
@@ -3768,8 +3759,11 @@ if st.session_state.get("logged_in", False):
                                             "return_approved_by": st.session_state.get(
                                                 "username", "Admin"
                                             ),
+                                            "packet_updated_at": datetime.now().isoformat()
                                         }
                                     ).eq("id", rq["id"]).execute()
+
+                                    get_bulk_packet_counts.clear()
                                     st.success(
                                         f"{rq['loan_no']}-க்கு அனுமதி வழங்கப்பட்டது!"
                                     )
@@ -3782,14 +3776,17 @@ if st.session_state.get("logged_in", False):
                                         {
                                             "return_request_status": "NONE",
                                             "return_reason": None,
+                                            "packet_updated_at": datetime.now().isoformat()
                                         }
                                     ).eq("id", rq["id"]).execute()
+
+                                    get_bulk_packet_counts.clear()
                                     st.warning(
                                         f"{rq['loan_no']} கோரிக்கை நிராகரிக்கப்பட்டது!"
                                     )
                                     st.rerun()
-                            st.divider()
 
+                            st.divider()
             # -------------------------------------------------------------------------
             # டேப் 4: ஜிபி (GP) உருக்குதல் & மறுவிற்பனை
             # -------------------------------------------------------------------------
