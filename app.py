@@ -11149,38 +11149,50 @@ if st.session_state.get("logged_in", False):
                     "##### 🚨 வாடிக்கையாளர் கடன் அடைப்பிற்காக HQ-டம் பாக்கெட்டைக் கோருதல்"
                 )
 
-                # 🔍 1. விரைவுத் தேடல் வசதி (Fast Search Box)
+                # 🌟 1. நடப்புக் கிளையின் ID-யை பாதுகாப்பாக எடுப்பது (NameError தீர்வு):
+                branch_id = (
+                    st.session_state.get("branch_id") 
+                    or st.session_state.get("user_branch_id") 
+                    or st.session_state.get("selected_branch_id")
+                )
+
+                # 🔍 2. விரைவுத் தேடல் வசதி
                 search_q = st.text_input(
                     "🔍 கடன் எண் கொண்டு தேடுக (Quick Search):",
                     placeholder="எ.கா: MYL/0970 அல்லது 0970",
                     key="br_pkt_search_input",
                 ).strip()
 
-                # 🌟 2. தலைமையகப் பெட்டகம் அல்லது வங்கி லாக்கரில் உள்ள பாக்கெட்களை நேரடியாக எடுத்தல்
-                # (b_loans-ஐச் சார்ந்திருக்காமல், இறங்குவரிசையில் 3,000 பதிவுகள் வரை எடுப்பதால் MYL/0970 கட்டாயம் வரும்)
+                # 🌟 3. தலைமையகப் பெட்டகம் அல்லது வங்கி லாக்கரில் உள்ள பாக்கெட்களை எடுத்தல்:
                 try:
-                    req_pkt_query = (
+                    # கிளையின் ஐடி இருந்தால் அதைக் கொண்டு வடிகட்டும் வினவல்:
+                    query = (
                         supabase.table("gold_loans")
                         .select("id, loan_no, branch_id, gross_weight, packet_location, release_requested")
-                        .eq("branch_id", current_branch_id)
                         .in_("packet_location", ["AT_HQ_VAULT", "IN_BANK_LOCKER"])
                         .neq("release_requested", True)
                         .order("id", desc=True)
                         .limit(3000)
                     )
-                    hq_hold_loans = req_pkt_query.execute().data or []
+                    
+                    # கிளை ID இருந்தால் மட்டும் வடிகட்டுதல் (பாதுகாப்பானது):
+                    if branch_id:
+                        query = query.eq("branch_id", branch_id)
+
+                    hq_hold_loans = query.execute().data or []
+
                 except Exception as fetch_err:
                     st.error(f"பாக்கெட்களைப் பெறுவதில் பிழை: {fetch_err}")
                     hq_hold_loans = []
 
-                # 🔍 3. தேடல் வடிகட்டல்
+                # 🔍 4. தேடல் வடிகட்டல்
                 if search_q:
                     hq_hold_loans = [
                         l for l in hq_hold_loans
                         if search_q.lower() in str(l.get("loan_no", "")).lower()
                     ]
 
-                # 📋 4. திரையில் காட்சிப்படுத்துதல்
+                # 📋 5. திரையில் காட்சிப்படுத்துதல்
                 if not hq_hold_loans:
                     st.info(
                         "தலைமையகப் பாதுகாப்பில் கோருவதற்கு பாக்கெட்கள் ஏதும் இல்லை / பொருந்தவில்லை."
@@ -11192,36 +11204,26 @@ if st.session_state.get("logged_in", False):
                             f"🪙 {hl['loan_no']} | எடை: {hl['gross_weight']}g | 🏢 தலைமையகப் பாதுகாப்பில் உள்ளது"
                         ):
                             with st.form(key=f"br_req_form_{hl['id']}"):
-                                # 📝 குறிப்பு எழுதும் புலம்
                                 req_note = st.text_area(
                                     "கோரிக்கைக்கான குறிப்பு / காரணம் (Branch Remarks):",
-                                    placeholder=(
-                                        "எ.கா: வாடிக்கையாளர் பணம் கட்டிவிட்டார் வவுச்சர் எண்:12354 "
-                                    ),
+                                    placeholder="எ.கா: வாடிக்கையாளர் பணம் கட்டிவிட்டார் வவுச்சர் எண் : 0001 .",
                                 )
                                 
-                                if st.form_submit_button(
-                                    "🚨 தலைமையகத்திடம் பாக்கெட்டைக் கோரு (Send Request)"
-                                ):
+                                if st.form_submit_button("🚨 தலைமையகத்திடம் பாக்கெட்டைக் கோரு (Send Request)"):
                                     try:
-                                        # 🌟 packet_location உட்பட நிலையை மாற்றுதல்:
                                         supabase.table("gold_loans").update(
                                             {
                                                 "packet_location": "BRANCH_REQUESTED_RELEASE",
                                                 "release_requested": True,
                                                 "release_request_date": datetime.now().isoformat(),
                                                 "release_request_remarks": (
-                                                    req_note.strip()
-                                                    if req_note
-                                                    else "காரணம் குறிப்பிடப்படவில்லை"
+                                                    req_note.strip() if req_note else "காரணம் குறிப்பிடப்படவில்லை"
                                                 ),
                                                 "packet_updated_at": datetime.now().isoformat()
                                             }
                                         ).eq("id", hl["id"]).execute()
 
-                                        st.success(
-                                            f"✅ {hl['loan_no']} பாக்கெட்டிற்கான அவசரக் கோரிக்கை தலைமையகத்திற்கு அனுப்பப்பட்டது!"
-                                        )
+                                        st.success(f"✅ {hl['loan_no']} பாக்கெட்டிற்கான அவசரக் கோரிக்கை தலைமையகத்திற்கு அனுப்பப்பட்டது!")
                                         st.rerun()
                                     except Exception as req_err:
                                         st.error(f"கோரிக்கை அனுப்புவதில் பிழை: {req_err}")
