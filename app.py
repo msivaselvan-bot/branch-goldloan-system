@@ -8899,8 +8899,29 @@ if st.session_state.get("logged_in", False):
 
                                                     except Exception as gl_err:
                                                         st.error(f"⚠️ gold_loans அட்டவணையில் சேமிப்பதில் பிழை: {gl_err}")
+                                                # A.1 அடமானம் மீட்டல் (கடன் அடைக்கப்பட்டால் Closed செய்தல்):
+                                                elif any(k in t_type for k in ["Release", "மீட்டல்", "அடைப்பு"]):
+                                                    try:
+                                                        rel_gl_no = item.get("loan_no") or item.get("gp_number")
+                                                        if not rel_gl_no and "GL:" in combined_remarks:
+                                                            try:
+                                                                rel_gl_no = combined_remarks.split("GL:")[1].split("|")[0].strip()
+                                                            except Exception:
+                                                                rel_gl_no = None
+                                                        
+                                                        if rel_gl_no:
+                                                            # 🌟 gold_loans அட்டவணையில் நிலையை உடனே Closed என மாற்றுதல்:
+                                                            supabase.table("gold_loans").update({
+                                                                "status": "Closed",
+                                                                "closed_date": effective_v_date,
+                                                                "closed_by": s_name,
+                                                                "settled_amount": final_amt,
+                                                                "packet_updated_at": datetime.now().isoformat()
+                                                            }).eq("loan_no", rel_gl_no).execute()
+                                                    except Exception as rel_err:
+                                                        st.error(f"⚠️ gold_loans கடனை மூடுவதில் பிழை: {rel_err}")
 
-                                                # B. FD Open
+                                               # B. FD Open
                                                 elif "FD Open" in t_type or ("FD" in t_type and any(x in t_type for x in ["Open", "புதிய"])):
                                                     try:
                                                         fd_meta = item.get("extra_meta_data", {}) or item
@@ -9210,7 +9231,9 @@ if st.session_state.get("logged_in", False):
                                                             "gross_weight": float(item.get("total_weight", 0.0) or item.get("gross_weight", 0.0) or 0.0),
                                                             "net_weight": float(item.get("net_weight", 0.0) or 0.0),
                                                             "purity": item.get("purity", "916 KDM"),
-                                                            "sanctioned_amount": float(item.get("paid_amount", 0.0) or item.get("amount", 0.0)),
+                                                            "sanctioned_amount": d_gross,       # 👈 முழு அசல் தொகை
+                                                            "processing_charges": d_proc,
+                                                            "disbursed_amount": d_net,
                                                             "scheme_name": item.get("scheme_name", "Regular"),
                                                             "interest_rate": float(item.get("interest_rate", 18.0) or 18.0),
                                                             "market_rate_per_gram": float(item.get("market_rate", 0.0) or 0.0),
