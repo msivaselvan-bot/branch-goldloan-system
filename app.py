@@ -3262,25 +3262,29 @@ if st.session_state.get("logged_in", False):
                 "கிளைகள் ➔ தலைமையகம் ➔ வங்கி லாக்கர் பாக்கெட் நகர்வுகள் மற்றும் ஜிபி உருக்குதல்/மறுவிற்பனை கண்காணிப்பு."
             )
 
-            # 1. கிளைகள் மேப்பிங்
-            try:
-                b_res = (
-                    supabase.table("branches")
-                    .select("id, branch_name, branch_code")
-                    .execute()
-                )
-                b_map_name = {
-                    b["id"]: f"{b['branch_name']} ({b.get('branch_code', 'BR')})"
-                    for b in (b_res.data or [])
-                }
-            except Exception:
-                b_map_name = {}
+            # 1. கிளைகள் மேப்பிங் (1 மணி நேர கேச் - மீண்டும் மீண்டும் இழுக்காது)
+            @st.cache_data(ttl=3600)
+            def get_cached_branches():
+                try:
+                    b_res = (
+                        supabase.table("branches")
+                        .select("id, branch_name, branch_code")
+                        .execute()
+                    )
+                    return {
+                        b["id"]: f"{b['branch_name']} ({b.get('branch_code', 'BR')})"
+                        for b in (b_res.data or [])
+                    }
+                except Exception:
+                    return {}
+
+            b_map_name = get_cached_branches()
 
             # =========================================================================
-            # ⚡ 2. அதிவேக வினவல் முறை (Ultra-Fast Targeted Querying - 0.5s Speed)
+            # ⚡ 2. அதிவேக வினவல் (தேவையானவை மட்டுமே - Zero Heavy Load)
             # =========================================================================
 
-            # அ. அவசர மீட்புக் கோரிக்கைகள் மட்டும் (டேட்டாபேஸிலிருந்து நேரடி அதிவேக வினவல் - 50 வரம்பிற்குள்)
+            # அ. அவசர மீட்புக் கோரிக்கைகள் மட்டும் (டேப் 3-க்கான நேரடி வினவல்)
             @st.cache_data(ttl=15)
             def get_urgent_requests_fast():
                 try:
@@ -3300,169 +3304,85 @@ if st.session_state.get("logged_in", False):
                 except Exception:
                     return []
 
-            # ஆ. அனைத்து பாக்கெட்களுக்கான கேச் (10 நிமிடங்களுக்கு ஒருமுறை மட்டும் எடுத்தால் போதுமானது)
-            @st.cache_data(ttl=600)
-            def get_bulk_packet_counts():
-                try:
-                    res = (
-                        supabase.table("gold_loans")
-                        .select(
-                            "id, loan_no, branch_id, gross_weight, net_weight, "
-                            "packet_location, release_requested, release_request_remarks, "
-                            "release_request_date, repledge_bank, repledge_loan_no, "
-                            "repledge_amount, repledge_charges, status, sanctioned_amount, "
-                            "return_request_status, return_reason, return_requested_at"
-                        )
-                        .neq("packet_location", "DELIVERED_TO_CUSTOMER")
-                        .order("id", desc=True)
-                        .limit(2000)
-                        .execute()
-                        .data or []
-                    )
-                    return res
-                except Exception:
-                    return []
-
-            # இ. GP கொள்முதல் பாக்கெட்கள் கேச்
-            @st.cache_data(ttl=600)
-            def get_bulk_gp_packets():
-                try:
-                    gp_pkt_res = supabase.table("gold_purchases").select("*").execute()
-                    raw_gps = gp_pkt_res.data or []
-                    all_gp_pkts = []
-                    for g in raw_gps:
-                        gp_id = (
-                            g.get("gp_no")
-                            or g.get("bill_no")
-                            or g.get("purchase_no")
-                            or g.get("voucher_no")
-                            or f"GP-{g.get('id', '')}"
-                        )
-                        g["gp_no"] = gp_id
-                        all_gp_pkts.append(g)
-                    return all_gp_pkts
-                except Exception:
-                    return []
-
-            # வினவல் தரவுகளைப் பெறுதல்
             urgent_requests = get_urgent_requests_fast()
-            all_loan_pkts = get_bulk_packet_counts()
-            all_gp_pkts = get_bulk_gp_packets()
 
-            # 🔄 கைமுறைப் புதுப்பித்தல் பட்டன் (கார்டுகளுக்கு மேல்)
-            r_col1, r_col2 = st.columns([8, 2])
-            with r_col2:
-                if st.button("🔄 தரவைப் புதுப்பி (Refresh)", key="refresh_all_pkts_btn", use_container_width=True):
-                    get_urgent_requests_fast.clear()
-                    get_bulk_packet_counts.clear()
-                    get_bulk_gp_packets.clear()
+            # 🔄 எளிய விரைவு புதுப்பித்தல் வரி (கார்டுகளுக்குப் பதிலாக சிறிய தகவல் பட்டி)
+            col_hdr1, col_hdr2 = st.columns([8, 2])
+            with col_hdr1:
+                if urgent_requests:
+                    st.warning(f"🚨 **கவனிக்க:** கிளைகளிலிருந்து **{len(urgent_requests)}** அவசர மீட்புக் கோரிக்கைகள் நிலுவையில் உள்ளன!")
+                else:
+                    st.success("✅ அனைத்து பாக்கெட் நகர்வுகளும் சீராக உள்ளன. புதிய மீட்புக் கோரிக்கைகள் ஏதுமில்லை.")
+            with col_hdr2:
+                if st.button("🔄 புதுப்பி (Refresh)", key="refresh_all_pkts_btn", use_container_width=True):
+                    st.cache_data.clear()
                     st.rerun()
 
-            # =========================================================================
-            # 3. தலைமை நிலவரக் கார்டுகள் (Top Status KPI Metrics - Optimized & Fixed)
-            # =========================================================================
-            # 🌟 அ. கிளைகளில் உள்ளவை
-            branch_loans = [p for p in all_loan_pkts if p.get("packet_location", "AT_BRANCH") in ["AT_BRANCH", "DELIVERED_TO_CUSTOMER"]]
-            branch_gps = [g for g in all_gp_pkts if g.get("packet_location", "AT_BRANCH") == "AT_BRANCH"]
-            cnt_branch = len(branch_loans) + len(branch_gps)
-            branch_wt = sum(float(p.get("gross_weight", 0) or 0) for p in branch_loans) + sum(float(g.get("gross_weight", 0) or 0) for g in branch_gps)
-            branch_amt = sum(float(p.get("sanctioned_amount", 0) or 0) for p in branch_loans) + sum(float(g.get("purchase_amount", 0) or 0) for g in branch_gps)
-
-            # 🌟 ஆ. தலைமையகத்திற்கு வழியில் உள்ளவை
-            transit_loans = [p for p in all_loan_pkts if p.get("packet_location") == "IN_TRANSIT_TO_HQ"]
-            transit_gps = [g for g in all_gp_pkts if g.get("packet_location") == "IN_TRANSIT_TO_HQ"]
-            cnt_transit_hq = len(transit_loans) + len(transit_gps)
-            transit_wt = sum(float(p.get("gross_weight", 0) or 0) for p in transit_loans) + sum(float(g.get("gross_weight", 0) or 0) for g in transit_gps)
-            transit_amt = sum(float(p.get("sanctioned_amount", 0) or 0) for p in transit_loans) + sum(float(g.get("purchase_amount", 0) or 0) for g in transit_gps)
-
-            # 🌟 இ. கிளைக் கோரிக்கைகள்
-            ret_requests = [p for p in all_loan_pkts if p.get("return_request_status") == "REQUESTED"]
-            total_branch_alerts = len(urgent_requests) + len(ret_requests)
-
-            # 🌟 ஈ. HQ பெட்டக இருப்பு (கோரப்பட்ட பாக்கெட்கள் கழிக்கப்படுகின்றன)
-            hq_loans = [
-                p for p in all_loan_pkts 
-                if p.get("packet_location") == "AT_HQ_VAULT" 
-                and not p.get("release_requested") 
-                and p.get("packet_location") != "BRANCH_REQUESTED_RELEASE"
-            ]
-            hq_gps = [g for g in all_gp_pkts if g.get("packet_location") == "AT_HQ_VAULT" and g.get("disposal_type") == "PENDING"]
-            cnt_hq_vault = len(hq_loans) + len(hq_gps)
-            hq_wt = sum(float(p.get("gross_weight", 0) or 0) for p in hq_loans) + sum(float(g.get("gross_weight", 0) or 0) for g in hq_gps)
-            hq_amt = sum(float(p.get("sanctioned_amount", 0) or 0) for p in hq_loans) + sum(float(g.get("purchase_amount", 0) or 0) for g in hq_gps)
-
-            # 🌟 உ. வங்கி லாக்கரில் உள்ளவை
-            repledge_pkts = [p for p in all_loan_pkts if p.get("packet_location") == "IN_BANK_LOCKER"]
-            tot_repledge_amt = sum(float(p.get("repledge_amount", 0) or 0) for p in repledge_pkts)
-            repledge_wt = sum(float(p.get("gross_weight", 0) or 0) for p in repledge_pkts)
-
-            # 🌟 ஊ. கார்டுகளைக் காட்டுதல்
-            k1, k2, k3, k4, k5 = st.columns(5)
-            k1.metric("📍 கிளைகளில் உள்ளவை", f"{cnt_branch} பாக்கெட்கள்", f"எடை: {branch_wt:.1f}g | ₹{branch_amt:,.0f}")
-            k2.metric("🚚 HQ-க்கு வழியில்", f"{cnt_transit_hq} பாக்கெட்கள்", f"எடை: {transit_wt:.1f}g | ₹{transit_amt:,.0f}")
-            k3.metric("🏢 HQ பெட்டக இருப்பு", f"{cnt_hq_vault} பாக்கெட்கள்", f"எடை: {hq_wt:.1f}g | ₹{hq_amt:,.0f}")
-            k4.metric("🏦 வங்கி லாக்கரில்", f"{len(repledge_pkts)} பாக்கெட்கள்", f"எடை: {repledge_wt:.1f}g | கடன்: ₹{tot_repledge_amt:,.0f}")
-            k5.metric(
-                "🚨 கிளைக் கோரிக்கைகள்", 
-                f"{total_branch_alerts} பாக்கெட்கள்", 
-                delta=f"மீட்பு: {len(urgent_requests)} | திருப்புதல்: {len(ret_requests)}" if total_branch_alerts > 0 else "நிலுவை இல்லை",
-                delta_color="inverse" if total_branch_alerts > 0 else "off"
-            )
             st.markdown("---")
 
-            # 4. மேலாண்மை உள்-டேப்கள்
+            # =========================================================================
+            # 3. மேலாண்மை உள்-டேப்கள் (கார்டுகள் இல்லாமல் நேரடியாகத் தொடங்கும்)
+            # =========================================================================
             p_tab1, p_tab2, p_tab3, p_tab4, p_tab5 = st.tabs(
                 [
                     "📥 1. கிளைகளிலிருந்து பெறுதல் (Receive at HQ)",
                     "🏦 2. வங்கி லாக்கர் (Re-Pledge)",
-                    f"🚚 3. கிளைகளின் மீட்புக் கோரிக்கைகள் ({total_branch_alerts})",
+                    f"🚚 3. கிளைகளின் மீட்புக் கோரிக்கைகள் ({len(urgent_requests)})",
                     "🔥 4. GP உருக்குதல் & மறுவிற்பனை",
                     "🔍 5. அனைத்து பாக்கெட் தேடல்",
                 ]
             )
 
             # -------------------------------------------------------------------------
-            # டேப் 1: கிளைகளிலிருந்து பெறுதல்
+            # டேப் 1: கிளைகளிலிருந்து பெறுதல் (கேச் செய்யப்பட்ட வடிவம்)
             # -------------------------------------------------------------------------
             with p_tab1:
                 st.markdown("##### 📥 கிளைகளிலிருந்து வழியில் உள்ள பாக்கெட்கள் (Bulk Receive)")
                 
-                # கிளை வடிகட்டி
                 sel_transit_branch = st.selectbox(
                     "வடிகட்ட வேண்டிய கிளை:",
                     ["அனைத்து கிளைகள்"] + list(b_map_name.values()),
                     key="flt_transit_branch"
                 )
                 
-                # வழியில் உள்ள பாக்கெட்களை மட்டும் தனியாக வினவல் மூலம் எடுப்பது:
-                transit_query = (
-                    supabase.table("gold_loans")
-                    .select("*")
-                    .eq("packet_location", "IN_TRANSIT_TO_HQ")
-                    .order("id", desc=True)
-                    .limit(3000)
-                )
-                transit_loans = transit_query.execute().data or []
+                @st.cache_data(ttl=60)
+                def get_cached_transit():
+                    try:
+                        return (
+                            supabase.table("gold_loans")
+                            .select("id, loan_no, branch_id, gross_weight, packet_location")
+                            .eq("packet_location", "IN_TRANSIT_TO_HQ")
+                            .order("id", desc=True)
+                            .limit(500)
+                            .execute()
+                            .data or []
+                        )
+                    except Exception:
+                        return []
+
+                transit_loans = get_cached_transit()
 
             # -------------------------------------------------------------------------
-            # 🏦 டேப் 2: வங்கி லாக்கர் மறு-அடமானம் & அனுமதி மேலாண்மை (Maker Submission)
+            # 🏦 டேப் 2: வங்கி லாக்கர் மறு-அடமானம் & நிதி மேலாண்மை
             # -------------------------------------------------------------------------
             with p_tab2:
                 st.markdown("##### 🏦 வங்கி லாக்கர் மறு-அடமானம் & நிதி மேலாண்மை (Re-Pledge)")
 
-                # 🌟 1. ஏற்கனவே உள்ள நிறுவன வங்கிக் கணக்குகளைப் பெறுதல் (Selectbox-க்கு)
-                company_banks = []
-                try:
-                    bank_res = supabase.table("company_bank_accounts").select("*").execute()
-                    company_banks = bank_res.data or []
-                except Exception:
+                # வங்கிக் கணக்குகள்
+                @st.cache_data(ttl=300)
+                def get_company_banks_cached():
                     try:
-                        bank_res = supabase.table("bank_accounts").select("*").execute()
-                        company_banks = bank_res.data or []
+                        res = supabase.table("company_bank_accounts").select("*").execute()
+                        return res.data or []
                     except Exception:
-                        company_banks = []
+                        try:
+                            res = supabase.table("bank_accounts").select("*").execute()
+                            return res.data or []
+                        except Exception:
+                            return []
 
-                # வங்கிகளின் பெயர்ப் பட்டியல் தயாரித்தல் (Syntax Error முற்றிலும் சரிசெய்யப்பட்டது)
+                company_banks = get_company_banks_cached()
+
                 if company_banks:
                     bank_options = [
                         f"{b.get('bank_name')} - {str(b.get('account_number', ''))[-4:]} (இருப்பு: ₹{float(b.get('current_balance', 0) or 0):,.2f})"
@@ -3471,16 +3391,29 @@ if st.session_state.get("logged_in", False):
                 else:
                     bank_options = ["HDFC Bank", "Kotak Mahindra Bank", "Indian Overseas Bank", "State Bank of India", "KVB"]
 
-                vault_loans = [p for p in all_loan_pkts if p.get("packet_location") == "AT_HQ_VAULT"]
+                # பெட்டகத்தில் உள்ளவை (தேவைப்பட்டால் மட்டும் எடுக்கும் கேச்)
+                @st.cache_data(ttl=60)
+                def get_vault_loans_cached():
+                    try:
+                        return (
+                            supabase.table("gold_loans")
+                            .select("id, loan_no, branch_id, gross_weight, ornament_details, packet_location")
+                            .eq("packet_location", "AT_HQ_VAULT")
+                            .order("id", desc=True)
+                            .limit(100)
+                            .execute()
+                            .data or []
+                        )
+                    except Exception:
+                        return []
+
+                vault_loans = get_vault_loans_cached()
 
                 col_bk1, col_bk2 = st.columns(2)
 
-                # =============================================================
-                # அ. HQ பெட்டகத்தில் உள்ள கடன்கள் (ரீபிளட்ஜ் அனுமதி கோருதல்)
-                # =============================================================
+                # அ. HQ பெட்டகத்தில் உள்ள கடன்கள்
                 with col_bk1:
                     st.write("🏢 **HQ பெட்டகத்தில் உள்ள கடன்கள் (லாக்கருக்கு அனுப்ப):**")
-
                     search_vault_gl = st.text_input(
                         "🔍 HQ பெட்டக பாக்கெட் தேடல் (கடன் எண் / நகை விவரம்):",
                         placeholder="எ.கா: 1718 அல்லது Ring...",
@@ -3494,7 +3427,7 @@ if st.session_state.get("logged_in", False):
                             or search_vault_gl in str(vl.get("ornament_details", "")).lower()
                         ]
                     else:
-                        filtered_vault_loans = vault_loans
+                        filtered_vault_loans = vault_loans[:15] # 🌟 முதல் 15 மட்டும் (வேகக் கட்டுப்பாடு)
 
                     if not filtered_vault_loans:
                         st.caption("காட்டப்படும் பாக்கெட்கள் ஏதும் இல்லை.")
@@ -3510,23 +3443,10 @@ if st.session_state.get("logged_in", False):
                                         bank_options,
                                         key=f"sel_bank_box_{vl['id']}"
                                     )
+                                    b_loan_in = st.text_input("வங்கி கடன் எண் (Bank Loan No):", placeholder="எ.கா: 88741256")
+                                    b_amt_in = st.number_input("வாங்கிய கடன் தொகை (₹ Loan Amount):", min_value=0.0, step=5000.0)
+                                    b_charges_in = st.number_input("பிடித்தம் / கட்டணங்கள் (₹ Bank Charges):", min_value=0.0, step=100.0)
 
-                                    b_loan_in = st.text_input(
-                                        "வங்கி கடன் எண் (Bank Loan No):",
-                                        placeholder="எ.கா: 88741256",
-                                    )
-                                    b_amt_in = st.number_input(
-                                        "வாங்கிய கடன் தொகை (₹ Loan Amount):",
-                                        min_value=0.0,
-                                        step=5000.0,
-                                    )
-                                    b_charges_in = st.number_input(
-                                        "பிடித்தம் / கட்டணங்கள் (₹ Bank Charges / Processing):",
-                                        min_value=0.0,
-                                        step=100.0,
-                                    )
-
-                                    # 🌟 ரீபிளட்ஜ் செய்யும் போது (Maker Submission):
                                     if st.form_submit_button("🏦 வங்கி லாக்கருக்கு அனுமதி கோரு"):
                                         if b_amt_in > 0:
                                             chosen_bank_obj = None
@@ -3537,7 +3457,6 @@ if st.session_state.get("logged_in", False):
                                                     actual_bank_name = b.get("bank_name")
                                                     break
 
-                                            # 🌟 1. gold_loans நிலையை மட்டும் இடைக்கால நிலைக்கு மாற்றுதல்:
                                             supabase.table("gold_loans").update({
                                                 "packet_location": "RE_PLEDGE_PENDING_APPROVAL",
                                                 "repledge_bank": actual_bank_name,
@@ -3547,23 +3466,35 @@ if st.session_state.get("logged_in", False):
                                                 "packet_updated_at": datetime.now().isoformat()
                                             }).eq("id", vl["id"]).execute()
 
-                                            # கேச் அழித்து புதுப்பித்தல்
-                                            get_bulk_packet_counts.clear()
-
-                                            st.info(f"⏳ {vl['loan_no']} ரீபிளட்ஜ் அனுமதிக்காக அனுப்பப்பட்டது. அட்மின் ஒப்புதல் அளித்த பின்னரே பாஸ்புக்கில் பதிவாகும்.")
+                                            st.cache_data.clear()
+                                            st.info(f"⏳ {vl['loan_no']} ரீபிளட்ஜ் அனுமதிக்காக அனுப்பப்பட்டது.")
                                             st.rerun()
                                         else:
                                             st.error("❌ கடன் தொகையை உள்ளிடவும்!")
 
-                # =============================================================
-                # ஆ. வங்கி லாக்கரில் உள்ள பாக்கெட்கள் (மீட்பு அனுமதி கோருதல்)
-                # =============================================================
+                # ஆ. வங்கி லாக்கரில் உள்ள பாக்கெட்கள்
                 with col_bk2:
                     st.write("🏦 **வங்கி லாக்கரில் உள்ள பாக்கெட்கள் (HQ-க்கு திருப்ப):**")
+                    
+                    @st.cache_data(ttl=60)
+                    def get_repledge_pkts_cached():
+                        try:
+                            return (
+                                supabase.table("gold_loans")
+                                .select("id, loan_no, gross_weight, repledge_bank, repledge_loan_no, repledge_amount, repledge_charges")
+                                .eq("packet_location", "IN_BANK_LOCKER")
+                                .limit(100)
+                                .execute()
+                                .data or []
+                            )
+                        except Exception:
+                            return []
 
+                    repledge_pkts = get_repledge_pkts_cached()
+                    
                     search_locker_gl = st.text_input(
-                        "🔍 வங்கி லாக்கர் பாக்கெட் தேடல் (கடன் எண் / வங்கி எண் / வங்கிப் பெயர்):",
-                        placeholder="எ.கா: SBI அல்லது 88741256 அல்லது 1718...",
+                        "🔍 வங்கி லாக்கர் பாக்கெட் தேடல்:",
+                        placeholder="எ.கா: SBI அல்லது 88741256...",
                         key="search_locker_gl_box"
                     ).strip().lower()
 
@@ -3575,7 +3506,7 @@ if st.session_state.get("logged_in", False):
                             or search_locker_gl in str(rpk.get("repledge_bank", "")).lower()
                         ]
                     else:
-                        filtered_repledge_pkts = repledge_pkts
+                        filtered_repledge_pkts = repledge_pkts[:15]
 
                     if not filtered_repledge_pkts:
                         st.caption("வங்கி லாக்கரில் பாக்கெட்கள் ஏதும் இல்லை.")
@@ -3585,51 +3516,25 @@ if st.session_state.get("logged_in", False):
                             with st.expander(
                                 f"🏦 {rpk['loan_no']} | {rpk.get('repledge_bank', '-')} | கடன்: ₹{float(rpk.get('repledge_amount', 0)):,.0f}"
                             ):
-                                st.write(
-                                    f"வங்கி கடன் எண்: **{rpk.get('repledge_loan_no', '-')}** | எடை: **{rpk['gross_weight']}g**"
-                                )
                                 rep_amt = float(rpk.get('repledge_amount', 0) or 0)
-                                st.caption(f"அசல் கடன்: ₹{rep_amt:,.2f} | தொடக்கக் கட்டணம்: ₹{float(rpk.get('repledge_charges', 0) or 0):,.2f}")
-
                                 with st.form(key=f"tmgmt_ret_form_{rpk['id']}"):
-                                    int_paid_in = st.number_input(
-                                        "வங்கிக்குச் செலுத்திய வட்டித் தொகை (₹ Interest Paid):",
-                                        min_value=0.0,
-                                        step=100.0,
-                                    )
+                                    int_paid_in = st.number_input("செலுத்திய வட்டி (₹ Interest):", min_value=0.0, step=100.0)
+                                    sel_debit_bank = st.selectbox("பணம் செலுத்தப்படும் வங்கி:", bank_options, key=f"deb_bank_{rpk['id']}")
 
-                                    default_b_name = rpk.get("repledge_bank", "")
-                                    matched_idx = 0
-                                    for idx, b_opt in enumerate(bank_options):
-                                        if default_b_name and default_b_name in b_opt:
-                                            matched_idx = idx
-                                            break
-
-                                    sel_debit_bank = st.selectbox(
-                                        "பணம் செலுத்தப்படும் வங்கிக் கணக்கு:",
-                                        bank_options,
-                                        index=matched_idx,
-                                        key=f"deb_bank_{rpk['id']}"
-                                    )
-
-                                    # 🌟 மீட்புக்கும் நேரடியாக வங்கி இருப்பு கழியாமல் அனுமதி கோரும் முறை:
                                     if st.form_submit_button("🏢 வட்டி + அசல் செலுத்தி மீட்க அனுமதி கோரு"):
                                         total_payout = rep_amt + int_paid_in
-
                                         chosen_debit_obj = None
                                         for b in company_banks:
                                             if b.get("bank_name") in sel_debit_bank:
                                                 chosen_debit_obj = b
                                                 break
 
-                                        # 1. gold_loans இடைக்கால நிலை
                                         supabase.table("gold_loans").update({
                                             "packet_location": "RE_PLEDGE_RELEASE_PENDING_APPROVAL",
                                             "repledge_interest_paid": int_paid_in,
                                             "packet_updated_at": datetime.now().isoformat(),
                                         }).eq("id", rpk["id"]).execute()
 
-                                        # 2. பாஸ்புக் ஏட்டில் பற்று பதிவு
                                         supabase.table("bank_transactions").insert({
                                             "bank_account_id": chosen_debit_obj["id"] if chosen_debit_obj else None,
                                             "txn_date": datetime.now().date().isoformat(),
@@ -3641,14 +3546,12 @@ if st.session_state.get("logged_in", False):
                                             "created_at": datetime.now().isoformat()
                                         }).execute()
 
-                                        # கேச் அழித்து புதுப்பித்தல்
-                                        get_bulk_packet_counts.clear()
-
-                                        st.info(f"⏳ {rpk['loan_no']} மீட்புப் பதிவு மேலாளர் அப்ரூவலுக்கு அனுப்பப்பட்டது. உறுதிசெய்த பின் வங்கி இருப்பு குறையும்.")
+                                        st.cache_data.clear()
+                                        st.info(f"⏳ {rpk['loan_no']} மீட்புப் பதிவு ஒப்புதலுக்கு அனுப்பப்பட்டது.")
                                         st.rerun()
 
             # -------------------------------------------------------------------------
-            # டேப் 3: கிளைகளின் மீட்புக் கோரிக்கைகள் & திருப்பி அனுப்பும் அனுமதி மேலாண்மை
+            # டேப் 3: கிளைகளின் மீட்புக் கோரிக்கைகள் (முழு அதிவேகப் பகுதி)
             # -------------------------------------------------------------------------
             with p_tab3:
                 adm_sub1, adm_sub2 = st.tabs(
@@ -3658,17 +3561,10 @@ if st.session_state.get("logged_in", False):
                     ]
                 )
 
-                # =========================================================================
-                # 🚚 தலைமையக டேப் 3.1: அவசர மீட்புக் கோரிக்கைகள் (Direct Cache Display)
-                # =========================================================================
                 with adm_sub1:
-                    st.markdown(
-                        "##### 🚨 வாடிக்கையாளர் மீட்புக் கோரிக்கைகள் (Customer Release Requests)"
-                    )
+                    st.markdown("##### 🚨 வாடிக்கையாளர் மீட்புக் கோரிக்கைகள் (Customer Release Requests)")
                     if not urgent_requests:
-                        st.info(
-                            "தற்போது கிளைகளிலிருந்து எந்த மீட்புக் கோரிக்கைகளும் நிலுவையில் இல்லை."
-                        )
+                        st.info("தற்போது கிளைகளிலிருந்து எந்த மீட்புக் கோரிக்கைகளும் நிலுவையில் இல்லை.")
                     else:
                         st.warning(f"⚠️ கிளைகள் அனுப்பிய அவசரக் கோரிக்கைகள் எண்ணிக்கை: **{len(urgent_requests)}**")
                         
@@ -3681,20 +3577,11 @@ if st.session_state.get("logged_in", False):
                             with st.container():
                                 u1, u2, u3, u4 = st.columns([2, 3, 2, 2])
                                 u1.error(f"🏷️ **{uq['loan_no']}**")
-                                u2.write(
-                                    f"கிளை: **{b_map_name.get(uq.get('branch_id'), '-')}** | எடை: **{uq.get('gross_weight')}g**\nஇருப்பிடம்: **{loc_txt}**"
-                                )
-
-                                # 📝 கிளை எழுதிய குறிப்பு:
-                                rem_text = (
-                                    uq.get("release_request_remarks")
-                                    or "குறிப்பு இல்லை"
-                                )
+                                u2.write(f"கிளை: **{b_map_name.get(uq.get('branch_id'), '-')}** | எடை: **{uq.get('gross_weight')}g**\nஇருப்பிடம்: **{loc_txt}**")
+                                
+                                rem_text = uq.get("release_request_remarks") or "குறிப்பு இல்லை"
                                 u2.info(f"💬 **கிளைக் குறிப்பு:** {rem_text}")
-
-                                u3.caption(
-                                    f"கோரப்பட்ட நேரம்:\n{str(uq.get('release_request_date', ''))[:16]}"
-                                )
+                                u3.caption(f"கோரப்பட்ட நேரம்:\n{str(uq.get('release_request_date', ''))[:16]}")
                             
                                 # 🚚 கிளைக்கு அனுப்பி வைக்கும் பொத்தான் (0.2 வினாடி பதில்):
                                 if u4.button("🚚 கிளைக்கு அனுப்பி வை", key=f"tmgmt_disp_b_{uq['id']}", type="primary", use_container_width=True):
@@ -3705,9 +3592,8 @@ if st.session_state.get("logged_in", False):
                                             "packet_updated_at": datetime.now().isoformat()
                                         }).eq("id", uq["id"]).execute()
 
-                                        # ⚡ கேச் உடனே அழிக்கப்பட்டு உடனடியாகத் திரை மாறும்
+                                        # அவசரக் கோரிக்கை கேச்சை மட்டும் உடனே அழித்தல்
                                         get_urgent_requests_fast.clear()
-                                        get_bulk_packet_counts.clear()
 
                                         st.toast(f"✅ {uq.get('loan_no')} பாக்கெட் கிளைக்கு அனுப்பப்பட்டது!", icon="🚚")
                                         st.rerun()
@@ -3716,74 +3602,55 @@ if st.session_state.get("logged_in", False):
 
                             st.divider()
 
-                # =========================================================================
-                # தலைமையக டேப் 3.2: திருப்பி அனுப்ப அனுமதி கோரும் பாக்கெட்கள்
-                # =========================================================================
                 with adm_sub2:
-                    st.markdown(
-                        "##### 🔄 கிளைகள் திருப்பி அனுப்ப அனுமதி கோரும் பாக்கெட்கள்"
-                    )
-                    ret_requests = [
-                        p
-                        for p in all_loan_pkts
-                        if p.get("return_request_status") == "REQUESTED"
-                    ]
+                    st.markdown("##### 🔄 கிளைகள் திருப்பி அனுப்ப அனுமதி கோரும் பாக்கெட்கள்")
+                    # திருப்பி அனுப்பக் கோரியவை மட்டும் நேரடியாக வினவல்:
+                    @st.cache_data(ttl=20)
+                    def get_ret_requests_fast():
+                        try:
+                            return (
+                                supabase.table("gold_loans")
+                                .select("id, loan_no, branch_id, gross_weight, return_reason, return_requested_at")
+                                .eq("return_request_status", "REQUESTED")
+                                .execute()
+                                .data or []
+                            )
+                        except Exception:
+                            return []
+
+                    ret_requests = get_ret_requests_fast()
 
                     if not ret_requests:
-                        st.info(
-                            "தற்போது எந்தக் கிளையிலிருந்தும் திருப்பி அனுப்ப அனுமதி கோரிக்கைகள் இல்லை."
-                        )
+                        st.info("தற்போது எந்தக் கிளையிலிருந்தும் திருப்பி அனுப்ப அனுமதி கோரிக்கைகள் இல்லை.")
                     else:
                         for rq in ret_requests:
                             with st.container():
                                 r1, r2, r3, r4 = st.columns([2, 3, 2, 2])
                                 r1.warning(f"🏷️ **{rq['loan_no']}**")
-                                r2.write(
-                                    f"கிளை: **{b_map_name.get(rq['branch_id'], '-')}** | எடை: **{rq['gross_weight']}g**"
-                                )
-                                r2.error(
-                                    f"காரணம்: {rq.get('return_reason', 'காரணம் இல்லை')}"
-                                )
-                                r3.caption(
-                                    f"கோரப்பட்ட நேரம்:\n{str(rq.get('return_requested_at', ''))[:16]}"
-                                )
+                                r2.write(f"கிளை: **{b_map_name.get(rq['branch_id'], '-')}** | எடை: **{rq['gross_weight']}g**")
+                                r2.error(f"காரணம்: {rq.get('return_reason', 'காரணம் இல்லை')}")
+                                r3.caption(f"கோரப்பட்ட நேரம்:\n{str(rq.get('return_requested_at', ''))[:16]}")
 
-                                # அனுமதி அல்லது நிராகரிப்பு
-                                if r4.button(
-                                    "✅ திருப்பி அனுப்ப அனுமதி (Approve)",
-                                    key=f"appr_ret_{rq['id']}",
-                                ):
-                                    supabase.table("gold_loans").update(
-                                        {
-                                            "return_request_status": "APPROVED",
-                                            "return_approved_by": st.session_state.get(
-                                                "username", "Admin"
-                                            ),
-                                            "packet_updated_at": datetime.now().isoformat()
-                                        }
-                                    ).eq("id", rq["id"]).execute()
+                                if r4.button("✅ திருப்பி அனுப்ப அனுமதி (Approve)", key=f"appr_ret_{rq['id']}"):
+                                    supabase.table("gold_loans").update({
+                                        "return_request_status": "APPROVED",
+                                        "return_approved_by": st.session_state.get("username", "Admin"),
+                                        "packet_updated_at": datetime.now().isoformat()
+                                    }).eq("id", rq["id"]).execute()
 
-                                    get_bulk_packet_counts.clear()
-                                    st.success(
-                                        f"{rq['loan_no']}-க்கு அனுமதி வழங்கப்பட்டது!"
-                                    )
+                                    get_ret_requests_fast.clear()
+                                    st.success(f"{rq['loan_no']}-க்கு அனுமதி வழங்கப்பட்டது!")
                                     st.rerun()
 
-                                if r4.button(
-                                    "❌ நிராகரி (Reject)", key=f"rej_ret_{rq['id']}"
-                                ):
-                                    supabase.table("gold_loans").update(
-                                        {
-                                            "return_request_status": "NONE",
-                                            "return_reason": None,
-                                            "packet_updated_at": datetime.now().isoformat()
-                                        }
-                                    ).eq("id", rq["id"]).execute()
+                                if r4.button("❌ நிராகரி (Reject)", key=f"rej_ret_{rq['id']}"):
+                                    supabase.table("gold_loans").update({
+                                        "return_request_status": "NONE",
+                                        "return_reason": None,
+                                        "packet_updated_at": datetime.now().isoformat()
+                                    }).eq("id", rq["id"]).execute()
 
-                                    get_bulk_packet_counts.clear()
-                                    st.warning(
-                                        f"{rq['loan_no']} கோரிக்கை நிராகரிக்கப்பட்டது!"
-                                    )
+                                    get_ret_requests_fast.clear()
+                                    st.warning(f"{rq['loan_no']} கோரிக்கை நிராகரிக்கப்பட்டது!")
                                     st.rerun()
 
                             st.divider()
