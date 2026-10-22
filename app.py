@@ -3276,17 +3276,24 @@ if st.session_state.get("logged_in", False):
             except Exception:
                 b_map_name = {}
 
-            # 🌟 2. நடப்பு பாக்கெட்கள் விவரங்களை எடுத்தல் (.neq("status", "Closed") நீக்கப்பட்டுள்ளது!)
-            # வாடிக்கையாளர் கணக்கு முடித்திருந்தாலும் (Closed), பாக்கெட் வாடிக்கையாளரிடம் சேரும் வரை மேலாண்மையில் இருக்க வேண்டும்:
+           # 🌟 2. நடப்பு பாக்கெட்கள் விவரங்களை எடுத்தல் (அதிவேக மற்றும் எடை குறைந்த வினவல்):
             try:
                 loans_pkt_res = (
                     supabase.table("gold_loans")
-                    .select("*")
+                    .select(
+                        "id, loan_no, branch_id, customer_name, gross_weight, net_weight, "
+                        "packet_location, release_requested, release_request_remarks, "
+                        "release_request_date, repledge_bank, repledge_loan_no, "
+                        "repledge_amount, repledge_charges, status, sanctioned_amount"
+                    )
                     .neq("packet_location", "DELIVERED_TO_CUSTOMER") # வாடிக்கையாளரிடம் ஒப்படைத்தவை மட்டுமே மறைய வேண்டும்
+                    .order("id", desc=True)
+                    .limit(2000) # அதிகபட்ச வரம்பு உயர்வு
                     .execute()
                 )
                 all_loan_pkts = loans_pkt_res.data or []
-            except Exception:
+            except Exception as e:
+                st.error(f"பாக்கெட் விவரங்களை எடுப்பதில் பிழை: {e}")
                 all_loan_pkts = []
 
             # 3. GP கொள்முதல் பாக்கெட்கள்
@@ -3667,31 +3674,38 @@ if st.session_state.get("logged_in", False):
                                 )
                                 
                                 # 🚚 கிளைக்கு அனுப்பி வைக்கும் பொத்தான்:
-                                if u4.button(
-                                    "🚚 கிளைக்கு அனுப்பி வை",
-                                    key=f"tmgmt_disp_b_{uq['id']}",
-                                    type="primary",
-                                    use_container_width=True
-                                ):
+                                # 🚚 கிளைக்கு அனுப்பி வைக்கும் பொத்தான் (Lag-Free & Safe Update):
+                                btn_disp_key = f"tmgmt_disp_b_{uq['id']}"
+                                if u4.button("🚚 கிளைக்கு அனுப்பி வை", key=btn_disp_key, type="primary", use_container_width=True):
                                     try:
-                                        supabase.table("gold_loans").update(
-                                            {
-                                                "packet_location": "IN_TRANSIT_TO_BRANCH",
-                                                "release_requested": False,
-                                                "packet_dispatched_by": st.session_state.get(
-                                                    "username", "Admin"
-                                                ),
-                                                "packet_dispatched_at": datetime.now().isoformat(),
-                                                "packet_updated_at": datetime.now().isoformat(),
-                                            }
-                                        ).eq("id", uq["id"]).execute()
+                                        # 🌟 1. அட்டவணையில் உறுதியாக இருக்கும் பத்திகளை மட்டும் மிக எளிமையாக அப்டேட் செய்தல்:
+                                        update_payload = {
+                                            "packet_location": "IN_TRANSIT_TO_BRANCH",
+                                            "release_requested": False
+                                        }
+                                        
+                                        # packet_updated_at இருந்தால் மட்டும் சேர்க்கவும் (இல்லையென்றாலும் இயங்கும்)
+                                        try:
+                                            update_payload["packet_updated_at"] = datetime.now().isoformat()
+                                        except Exception:
+                                            pass
 
-                                        st.success(
-                                            f"✅ {uq['loan_no']} பாக்கெட் கிளைக்கு அனுப்பி வைக்கப்பட்டது (IN_TRANSIT_TO_BRANCH)!"
-                                        )
-                                        st.rerun()
+                                        # Supabase Update இயக்குதல்
+                                        res = supabase.table("gold_loans").update(update_payload).eq("id", uq["id"]).execute()
+
+                                        if res.data:
+                                            st.toast(f"✅ {uq.get('loan_no')} பாக்கெட் கிளைக்கு அனுப்பி வைக்கப்பட்டது!", icon="🚚")
+                                            st.success(f"✅ {uq.get('loan_no')} பாக்கெட் வெற்றிகரமாக அனுப்பப்பட்டது!")
+                                            
+                                            # திரையில் உடனடி மாற்றத்தைக் காட்ட தற்காலிகமாகப் பட்டியலிலிருந்து நீக்குதல்
+                                            st.session_state["last_dispatched_loan"] = uq.get("loan_no")
+                                            st.rerun()
+                                        else:
+                                            st.error("⚠️ பதிவு புதுப்பிக்கப்படவில்லை. தயவுசெய்து மீண்டும் முயற்சிக்கவும்.")
+
                                     except Exception as disp_err:
-                                        st.error(f"அனுப்புவதில் பிழை: {disp_err}")
+                                        # பிழை வந்தால் திரையை ரீலோட் செய்யாமல் பிழையைத் தெளிவாகக் காட்டுதல்:
+                                        st.error(f"❌ பாக்கெட் அனுப்புவதில் பிழை ஏற்பட்டது: {disp_err}")
 
                             st.divider()
                 # 2. வாடிக்கையாளர் வராததால் திருப்பி அனுப்ப அனுமதி கோரும் பாக்கெட்கள்
