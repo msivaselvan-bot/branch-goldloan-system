@@ -3276,19 +3276,19 @@ if st.session_state.get("logged_in", False):
             except Exception:
                 b_map_name = {}
 
-           # 🌟 2. நடப்பு பாக்கெட்கள் விவரங்களை எடுத்தல் (அதிவேக மற்றும் எடை குறைந்த வினவல்):
+           # 🌟 2. நடப்பு பாக்கெட்கள் விவரங்களை எடுத்தல் (customer_name நீக்கப்பட்ட சரியான வினவல்):
             try:
                 loans_pkt_res = (
                     supabase.table("gold_loans")
                     .select(
-                        "id, loan_no, branch_id, customer_name, gross_weight, net_weight, "
+                        "id, loan_no, branch_id, gross_weight, net_weight, "
                         "packet_location, release_requested, release_request_remarks, "
                         "release_request_date, repledge_bank, repledge_loan_no, "
                         "repledge_amount, repledge_charges, status, sanctioned_amount"
                     )
                     .neq("packet_location", "DELIVERED_TO_CUSTOMER") # வாடிக்கையாளரிடம் ஒப்படைத்தவை மட்டுமே மறைய வேண்டும்
                     .order("id", desc=True)
-                    .limit(2000) # அதிகபட்ச வரம்பு உயர்வு
+                    .limit(2000)
                     .execute()
                 )
                 all_loan_pkts = loans_pkt_res.data or []
