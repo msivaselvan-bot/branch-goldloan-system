@@ -11152,26 +11152,35 @@ if st.session_state.get("logged_in", False):
                 # 🔍 1. விரைவுத் தேடல் வசதி (Fast Search Box)
                 search_q = st.text_input(
                     "🔍 கடன் எண் கொண்டு தேடுக (Quick Search):",
-                    placeholder="எ.கா: KMK/0087 அல்லது 0087",
+                    placeholder="எ.கா: MYL/0970 அல்லது 0970",
                     key="br_pkt_search_input",
-                )
+                ).strip()
 
-                # HQ அல்லது வங்கி லாக்கரில் உள்ள பாக்கெட்கள் (இன்னும் கோரிக்கை வைக்கப்படாதவை)
-                hq_hold_loans = [
-                    l
-                    for l in b_loans
-                    if l.get("packet_location") in ["AT_HQ_VAULT", "IN_BANK_LOCKER"]
-                    and not l.get("release_requested")
-                ]
+                # 🌟 2. தலைமையகப் பெட்டகம் அல்லது வங்கி லாக்கரில் உள்ள பாக்கெட்களை நேரடியாக எடுத்தல்
+                # (b_loans-ஐச் சார்ந்திருக்காமல், இறங்குவரிசையில் 3,000 பதிவுகள் வரை எடுப்பதால் MYL/0970 கட்டாயம் வரும்)
+                try:
+                    req_pkt_query = (
+                        supabase.table("gold_loans")
+                        .select("id, loan_no, branch_id, gross_weight, packet_location, release_requested")
+                        .eq("branch_id", current_branch_id)
+                        .in_("packet_location", ["AT_HQ_VAULT", "IN_BANK_LOCKER"])
+                        .neq("release_requested", True)
+                        .order("id", desc=True)
+                        .limit(3000)
+                    )
+                    hq_hold_loans = req_pkt_query.execute().data or []
+                except Exception as fetch_err:
+                    st.error(f"பாக்கெட்களைப் பெறுவதில் பிழை: {fetch_err}")
+                    hq_hold_loans = []
 
-                # தேடல் வடிகட்டல்
-                if search_q.strip():
+                # 🔍 3. தேடல் வடிகட்டல்
+                if search_q:
                     hq_hold_loans = [
-                        l
-                        for l in hq_hold_loans
-                        if search_q.strip().lower() in str(l.get("loan_no", "")).lower()
+                        l for l in hq_hold_loans
+                        if search_q.lower() in str(l.get("loan_no", "")).lower()
                     ]
 
+                # 📋 4. திரையில் காட்சிப்படுத்துதல்
                 if not hq_hold_loans:
                     st.info(
                         "தலைமையகப் பாதுகாப்பில் கோருவதற்கு பாக்கெட்கள் ஏதும் இல்லை / பொருந்தவில்லை."
@@ -11183,21 +11192,22 @@ if st.session_state.get("logged_in", False):
                             f"🪙 {hl['loan_no']} | எடை: {hl['gross_weight']}g | 🏢 தலைமையகப் பாதுகாப்பில் உள்ளது"
                         ):
                             with st.form(key=f"br_req_form_{hl['id']}"):
-                                # 📝 2. குறிப்பு எழுதும் புலம் (Remarks Field)
+                                # 📝 குறிப்பு எழுதும் புலம்
                                 req_note = st.text_area(
                                     "கோரிக்கைக்கான குறிப்பு / காரணம் (Branch Remarks):",
                                     placeholder=(
                                         "எ.கா: வாடிக்கையாளர் இன்று மாலை 4 மணிக்கு கடனை அடைத்து நகையை மீட்க வருகிறார்."
                                     ),
                                 )
+                                
                                 if st.form_submit_button(
                                     "🚨 தலைமையகத்திடம் பாக்கெட்டைக் கோரு (Send Request)"
                                 ):
                                     try:
-                                        # 🌟 3. packet_location உட்பட நிலையை மாற்றுதல்:
+                                        # 🌟 packet_location உட்பட நிலையை மாற்றுதல்:
                                         supabase.table("gold_loans").update(
                                             {
-                                                "packet_location": "BRANCH_REQUESTED_RELEASE",  # 👈 🌟 இந்த வரி மிகக் கட்டாயம்!
+                                                "packet_location": "BRANCH_REQUESTED_RELEASE",
                                                 "release_requested": True,
                                                 "release_request_date": datetime.now().isoformat(),
                                                 "release_request_remarks": (
