@@ -10122,6 +10122,7 @@ if st.session_state.get("logged_in", False):
                     clean_b_id = 1
 
                 today_date = date.today()
+                today_str = str(today_date)
 
                 # கடைசியாக அதிகாரப்பூர்வமாகப் பூட்டப்பட்ட நாள்
                 last_closed_rec = (
@@ -10200,7 +10201,72 @@ if st.session_state.get("logged_in", False):
                 st.markdown("---")
 
                 # =========================================================================
-                # 1. கிளையின் நடப்பு கல்லா நோட்டுகளின் எண்ணிக்கை மற்றும் இருப்பு (அனுமதி கிடைத்த பின்)
+                # 🌟 1. கிளை கல்லா மேலாண்மை: நேரடி நாள் ஏட்டுடன் ஒருங்கிணைக்கப்பட்ட இருப்பு
+                # =========================================================================
+                # அ. தொடக்க இருப்பு
+                daily_summary = (
+                    supabase.table("branch_daily_cash_summary")
+                    .select("opening_balance, actual_closing, is_closed")
+                    .eq("branch_id", clean_b_id)
+                    .eq("summary_date", today_str)
+                    .execute()
+                    .data or []
+                )
+
+                if daily_summary and daily_summary[0].get("opening_balance") is not None:
+                    live_opening = float(daily_summary[0]["opening_balance"])
+                else:
+                    # முந்தைய நாளின் இறுதி இருப்பு
+                    prev_day = (
+                        supabase.table("branch_daily_cash_summary")
+                        .select("actual_closing, closing_balance")
+                        .eq("branch_id", clean_b_id)
+                        .lt("summary_date", today_str)
+                        .order("summary_date", desc=True)
+                        .limit(1)
+                        .execute()
+                        .data or []
+                    )
+                    live_opening = float(prev_day[0].get("actual_closing") or prev_day[0].get("closing_balance", 0.0)) if prev_day else 0.0
+
+                # ஆ. அன்றைய ரொக்க வரவு & செலவுகளை எடுத்தல் (Customer Visits)
+                today_visits = (
+                    supabase.table("customer_visits")
+                    .select("cash_amount, total_received, total_paid")
+                    .eq("branch_id", clean_b_id)
+                    .eq("visit_date", today_str)
+                    .neq("status", "Rejected")
+                    .execute()
+                    .data or []
+                )
+
+                net_visit_cash = 0.0
+                for v in today_visits:
+                    t_rec = float(v.get("total_received", 0) or 0)
+                    t_paid = float(v.get("total_paid", 0) or 0)
+                    c_amt = float(v.get("cash_amount", 0) or 0)
+                    if t_paid > t_rec:
+                        net_visit_cash -= c_amt  # பட்டுவாடா (Cash Out)
+                    else:
+                        net_visit_cash += c_amt  # வரவு (Cash In)
+
+                # இ. அங்கீகரிக்கப்பட்ட கிளைச் செலவுகள் (Expenses)
+                today_expenses = (
+                    supabase.table("branch_expenses")
+                    .select("amount")
+                    .eq("branch_id", clean_b_id)
+                    .eq("expense_date", today_str)
+                    .eq("status", "Approved")
+                    .execute()
+                    .data or []
+                )
+                tot_exp_cash = sum(float(e.get("amount", 0) or 0) for e in today_expenses)
+
+                # 🌟 துல்லியமான நேரலை கணினி இருப்பு (Day Book Calculation):
+                live_calculated_cash = live_opening + net_visit_cash - tot_exp_cash
+
+                # =========================================================================
+                # 2. கிளையின் நடப்பு கல்லா நோட்டுகளின் எண்ணிக்கை மற்றும் இருப்பு
                 # =========================================================================
                 curr_b_drawer = get_current_branch_cash_drawer(clean_b_id)
                 total_drawer_cash = (
@@ -10214,12 +10280,11 @@ if st.session_state.get("logged_in", False):
                     + float(curr_b_drawer.get("coins", 0.0))
                 )
 
-                # 2. ஆப்பரேஷன்ஸ் அப்ரூவல் / தொலைபேசி அழைப்பு சரிபார்ப்பில் பெண்டிங் உள்ள தொகைகளைக் கணக்கிடுதல்
+                # 3. ஆப்பரேஷன்ஸ் அப்ரூவல் / சரிபார்ப்பில் பெண்டிங் உள்ள தொகைகள்
                 pending_inflow = 0.0
                 pending_outflow = 0.0
 
                 try:
-                    clean_b_id = int(st.session_state.branch_id)
                     pend_txns = (
                         supabase.table("transactions")
                         .select("cash_amount, received_amount, paid_amount, payment_mode, status")
@@ -10256,39 +10321,50 @@ if st.session_state.get("logged_in", False):
 
                 net_pending_diff = pending_inflow - pending_outflow
                 projected_final_balance = total_drawer_cash + net_pending_diff
+                cash_drawer_diff = total_drawer_cash - live_calculated_cash
 
-                # 3. பணியாளர்கள் எளிதாகப் பார்க்கும் 3 முக்கிய அளவீடுகள்
+                # =========================================================================
+                # 4. கல்லா நேரலை நிலை & நாள் ஏட்டு ஒப்பீட்டு அளவீடுகள் (Metrics Dashboard)
+                # =========================================================================
                 st.markdown("#### 💼 கல்லா நேரலை நிலை & நிலுவை சரிபார்ப்பு (Live Cash Desk)")
-                col_stat1, col_stat2, col_stat3 = st.columns(3)
+                col_stat1, col_stat2, col_stat3, col_stat4 = st.columns(4)
                 
                 with col_stat1:
                     st.metric(
-                        label="✅ நடப்பு உறுதிசெய்யப்பட்ட கையிருப்பு",
-                        value=f"₹{total_drawer_cash:,.2f}",
-                        help="தற்போது கல்லா டிராயரில் உள்ள நேரடி நோட்டுகளின் உறுதிசெய்யப்பட்ட கூட்டுத்தொகை"
+                        label="📖 நாள் ஏட்டு கணினி இருப்பு",
+                        value=f"₹{live_calculated_cash:,.2f}",
+                        help="தொடக்க இருப்பு + இன்றைய ரொக்க வரவு - அங்கீகரிக்கப்பட்ட செலவுகள்"
                     )
-                    
+
                 with col_stat2:
-                    pend_symbol = "+" if net_pending_diff >= 0 else "-"
                     st.metric(
-                        label="⏳ சரிபார்ப்பில் உள்ள தொகை (Pending)",
-                        value=f"₹{abs(net_pending_diff):,.2f}",
-                        delta=f"{pend_symbol} ₹{abs(net_pending_diff):,.2f} (வரவு/செலவு நிலுவை)",
-                        delta_color="off" if net_pending_diff == 0 else ("normal" if net_pending_diff > 0 else "inverse"),
-                        help="ஆப்பரேஷன்ஸ் டீம் அப்ரூவல் மற்றும் தொலைபேசி அழைப்பு சரிபார்ப்பில் உள்ள நிகரத் தொகை"
+                        label="💵 கல்லா நேரடி கையிருப்பு",
+                        value=f"₹{total_drawer_cash:,.2f}",
+                        delta=f"வித்தியாசம்: ₹{cash_drawer_diff:,.2f}" if cash_drawer_diff != 0 else "சரியாக உள்ளது",
+                        delta_color="off" if cash_drawer_diff == 0 else ("normal" if cash_drawer_diff > 0 else "inverse"),
+                        help="கல்லா டிராயரில் உள்ள நோட்டுகளின் கூட்டுத்தொகை (கணினி இருப்புடன் பொருந்த வேண்டும்)"
                     )
                     
                 with col_stat3:
+                    pend_symbol = "+" if net_pending_diff >= 0 else "-"
                     st.metric(
-                        label="🎯 அப்ரூவல் முடிந்தால் இருக்க வேண்டிய இருப்பு",
+                        label="⏳ சரிபார்ப்பில் நிலுவை (Pending)",
+                        value=f"₹{abs(net_pending_diff):,.2f}",
+                        delta=f"{pend_symbol} ₹{abs(net_pending_diff):,.2f} நிலுவை",
+                        delta_color="off" if net_pending_diff == 0 else ("normal" if net_pending_diff > 0 else "inverse"),
+                        help="ஆப்பரேஷன்ஸ் டீம் அப்ரூவலில் உள்ள வரவு / செலவு நிலுவை"
+                    )
+                    
+                with col_stat4:
+                    st.metric(
+                        label="🎯 அப்ரூவல் முடிந்தால் இருக்க வேண்டியது",
                         value=f"₹{projected_final_balance:,.2f}",
-                        delta="எதிர்பார்க்கப்படும் இறுதி கையிருப்பு",
-                        help="பெண்டிங்கில் உள்ள வரவு மற்றும் செலவுகள் ஒப்புதல் பெற்ற பின் கல்லாவில் இருக்க வேண்டிய உண்மை இருப்பு"
+                        help="பெண்டிங் பதிவுகள் ஒப்புதல் பெற்ற பின் கல்லாவில் இருக்க வேண்டிய எதிர்பார்க்கப்படும் இருப்பு"
                     )
 
-                # 4. ரூபாய் நோட்டுகள் விவரம்
+                # 5. ரூபாய் நோட்டுகள் விவரம்
                 with st.expander("🔍 நடப்பு ரூபாய் நோட்டு விவரங்கள் (Denomination Breakdown)", expanded=False):
-                    st.markdown(f"**கல்லா நேரடி ரொக்கத் தொகை:** `₹{total_drawer_cash:,.2f}`")
+                    st.markdown(f"**கல்லா நேரடி ரொக்கத் தொகை:** `₹{total_drawer_cash:,.2f}` | **நாள் ஏட்டு கணக்கீடு:** `₹{live_calculated_cash:,.2f}`")
                     st.markdown("---")
 
                     bd1, bd2, bd3, bd4 = st.columns(4)
