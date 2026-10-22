@@ -3387,21 +3387,19 @@ if st.session_state.get("logged_in", False):
             # -------------------------------------------------------------------------
             # டேப் 1: கிளைகளிலிருந்து பெறுதல் (கேச் செய்யப்பட்ட வடிவம்)
             # -------------------------------------------------------------------------
+            # -------------------------------------------------------------------------
+            # டேப் 1: கிளைகளிலிருந்து பெறுதல் (Bulk Receive - காட்சிப்படுத்தலுடன் சரிசெய்யப்பட்டது)
+            # -------------------------------------------------------------------------
             with p_tab1:
                 st.markdown("##### 📥 கிளைகளிலிருந்து வழியில் உள்ள பாக்கெட்கள் (Bulk Receive)")
                 
-                sel_transit_branch = st.selectbox(
-                    "வடிகட்ட வேண்டிய கிளை:",
-                    ["அனைத்து கிளைகள்"] + list(b_map_name.values()),
-                    key="flt_transit_branch"
-                )
-                
-                @st.cache_data(ttl=60)
+                # 1. வழியில் உள்ள பாக்கெட்களை அதிவேகமாக எடுத்தல்
+                @st.cache_data(ttl=30)
                 def get_cached_transit():
                     try:
                         return (
                             supabase.table("gold_loans")
-                            .select("id, loan_no, branch_id, gross_weight, packet_location")
+                            .select("id, loan_no, branch_id, gross_weight, packet_location, packet_updated_at")
                             .eq("packet_location", "IN_TRANSIT_TO_HQ")
                             .order("id", desc=True)
                             .limit(3500)
@@ -3412,6 +3410,62 @@ if st.session_state.get("logged_in", False):
                         return []
 
                 transit_loans = get_cached_transit()
+
+                # 2. கிளை வடிகட்டி
+                col_tr_f1, col_tr_f2 = st.columns([7, 3])
+                with col_tr_f1:
+                    sel_transit_branch = st.selectbox(
+                        "வடிகட்ட வேண்டிய கிளை:",
+                        ["அனைத்து கிளைகள்"] + list(b_map_name.values()),
+                        key="flt_transit_branch"
+                    )
+                with col_tr_f2:
+                    st.write("")
+                    if st.button("🔄 இந்தப் பட்டியலைப் புதுப்பி", key="btn_ref_tab1", use_container_width=True):
+                        get_cached_transit.clear()
+                        st.rerun()
+
+                # கிளை வாரியாக வடிகட்டுதல்
+                if sel_transit_branch == "அனைத்து கிளைகள்":
+                    filtered_transit_loans = transit_loans
+                else:
+                    selected_b_id = None
+                    for b_id, b_name in b_map_name.items():
+                        if b_name == sel_transit_branch:
+                            selected_b_id = b_id
+                            break
+                    filtered_transit_loans = [
+                        p for p in transit_loans 
+                        if str(p.get("branch_id")) == str(selected_b_id)
+                    ]
+
+                # 🌟 3. திரையில் பாக்கெட்களைக் காட்சிப்படுத்துதல் (இதுதான் முன்பு விடுபட்டிருந்தது!):
+                if not filtered_transit_loans:
+                    st.info("ℹ️ வழியில் உள்ள பாக்கெட்கள் (IN_TRANSIT_TO_HQ) ஏதுமில்லை.")
+                else:
+                    st.success(f"📦 வழியில் உள்ள பாக்கெட்கள் எண்ணிக்கை: **{len(filtered_transit_loans)}**")
+                    
+                    for tpkt in filtered_transit_loans:
+                        with st.container():
+                            t1, t2, t3, t4 = st.columns([2, 3, 2, 2])
+                            t1.write(f"🏷️ **{tpkt['loan_no']}**")
+                            t2.write(f"கிளை: **{b_map_name.get(tpkt.get('branch_id'), '-')}** | எடை: **{tpkt.get('gross_weight')}g**")
+                            t3.caption(f"அனுப்பப்பட்ட நேரம்:\n{str(tpkt.get('packet_updated_at', ''))[:16]}")
+                            
+                            # HQ பெட்டகத்தில் பெற்றுக் கொள்ளும் பட்டன்
+                            if t4.button("📥 HQ-ல் பெற்றுக்கொள்", key=f"rcv_hq_{tpkt['id']}", type="primary", use_container_width=True):
+                                try:
+                                    supabase.table("gold_loans").update({
+                                        "packet_location": "AT_HQ_VAULT",
+                                        "packet_updated_at": datetime.now().isoformat()
+                                    }).eq("id", tpkt["id"]).execute()
+                                    
+                                    get_cached_transit.clear()
+                                    st.toast(f"✅ {tpkt['loan_no']} HQ பெட்டகத்தில் பெறப்பட்டது!", icon="📥")
+                                    st.rerun()
+                                except Exception as rcv_err:
+                                    st.error(f"பெறுவதில் பிழை: {rcv_err}")
+                        st.divider()
 
             # -------------------------------------------------------------------------
             # 🏦 டேப் 2: வங்கி லாக்கர் மறு-அடமானம் & நிதி மேலாண்மை
@@ -3434,6 +3488,7 @@ if st.session_state.get("logged_in", False):
 
                 company_banks = get_company_banks_cached()
 
+                # Syntax Error சரிசெய்யப்பட்ட வங்கிப் பட்டியல்:
                 if company_banks:
                     bank_options = [
                         f"{b.get('bank_name')} - {str(b.get('account_number', ''))[-4:]} (இருப்பு: ₹{float(b.get('current_balance', 0) or 0):,.2f})"
@@ -3478,7 +3533,7 @@ if st.session_state.get("logged_in", False):
                             or search_vault_gl in str(vl.get("ornament_details", "")).lower()
                         ]
                     else:
-                        filtered_vault_loans = vault_loans[:15] # 🌟 முதல் 15 மட்டும் (வேகக் கட்டுப்பாடு)
+                        filtered_vault_loans = vault_loans[:15]
 
                     if not filtered_vault_loans:
                         st.caption("காட்டப்படும் பாக்கெட்கள் ஏதும் இல்லை.")
@@ -3517,7 +3572,7 @@ if st.session_state.get("logged_in", False):
                                                 "packet_updated_at": datetime.now().isoformat()
                                             }).eq("id", vl["id"]).execute()
 
-                                            st.cache_data.clear()
+                                            get_vault_loans_cached.clear()
                                             st.info(f"⏳ {vl['loan_no']} ரீபிளட்ஜ் அனுமதிக்காக அனுப்பப்பட்டது.")
                                             st.rerun()
                                         else:
