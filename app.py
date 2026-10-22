@@ -3283,6 +3283,28 @@ if st.session_state.get("logged_in", False):
             # =========================================================================
             # ⚡ 2. அதிவேக வினவல் (தேவையானவை மட்டுமே - Zero Heavy Load)
             # =========================================================================
+            # அ. அவசர மீட்புக் கோரிக்கைகள் மட்டும் (டேப் 3-க்கான நேரடி வினவல்)
+            @st.cache_data(ttl=15)
+            def get_urgent_requests_fast():
+                try:
+                    return (
+                        supabase.table("gold_loans")
+                        .select(
+                            "id, loan_no, branch_id, gross_weight, packet_location, "
+                            "release_requested, release_request_remarks, release_request_date, "
+                            "repledge_bank, status"
+                        )
+                        .or_("release_requested.eq.true,packet_location.eq.BRANCH_REQUESTED_RELEASE")
+                        .order("id", desc=True)
+                        .limit(50)
+                        .execute()
+                        .data or []
+                    )
+                except Exception:
+                    return []
+
+            urgent_requests = get_urgent_requests_fast()
+
             # 🌟 GP பாக்கெட்கள் கேச் (NameError தீர்வு - 10 நிமிட கேச்):
             @st.cache_data(ttl=600)
             def get_gp_packets_cached():
@@ -3310,28 +3332,6 @@ if st.session_state.get("logged_in", False):
 
             # GP பாக்கெட்களைப் பெறுதல்:
             all_gp_pkts = get_gp_packets_cached()
-
-            # அ. அவசர மீட்புக் கோரிக்கைகள் மட்டும் (டேப் 3-க்கான நேரடி வினவல்)
-            @st.cache_data(ttl=15)
-            def get_urgent_requests_fast():
-                try:
-                    return (
-                        supabase.table("gold_loans")
-                        .select(
-                            "id, loan_no, branch_id, gross_weight, packet_location, "
-                            "release_requested, release_request_remarks, release_request_date, "
-                            "repledge_bank, status"
-                        )
-                        .or_("release_requested.eq.true,packet_location.eq.BRANCH_REQUESTED_RELEASE")
-                        .order("id", desc=True)
-                        .limit(50)
-                        .execute()
-                        .data or []
-                    )
-                except Exception:
-                    return []
-
-            urgent_requests = get_urgent_requests_fast()
 
             # 🔄 எளிய விரைவு புதுப்பித்தல் வரி (கார்டுகளுக்குப் பதிலாக சிறிய தகவல் பட்டி)
             col_hdr1, col_hdr2 = st.columns([8, 2])
