@@ -10203,50 +10203,7 @@ if st.session_state.get("logged_in", False):
                 # கல்லா திரையில் கார்டுகளைக் காட்டுதல்:
                 cur_b_id = clean_b_id  # 👈 மாறிலிப் பிழை வராமல் இருக்க இந்த ஒரு வரியுடன் தொடங்கவும்
                 today_str = str(date.today())
-                c_desk1, c_desk2, c_desk3 = st.columns(3)
-                c_desk1.metric("✅ நடப்பு கணினி கையிருப்பு", f"₹{live_calculated_cash:,.2f}")
-                c_desk2.metric("⏳ சரிபார்ப்பில் உள்ளவை", "₹0.00")
-                c_desk3.metric("🎯 எதிர்பார்க்கப்படும் இறுதி இருப்பு", f"₹{live_calculated_cash:,.2f}")
-
-                # -------------------------------------------------------------------------
-                # ரூபாய் நோட்டுகள் சரிபார்ப்பு (Denomination Verification Form)
-                # -------------------------------------------------------------------------
-                with st.expander("🔍 நடப்பு ரூபாய் நோட்டு விவரங்கள் (Denomination Breakdown)", expanded=True):
-                    st.info(f"கல்லாவில் இருக்க வேண்டிய மொத்தத் தொகை: **₹{live_calculated_cash:,.2f}**")
-                    
-                    with st.form("branch_denom_verify_form"):
-                        d_col1, d_col2 = st.columns(2)
-                        
-                        with d_col1:
-                            n500 = st.number_input("₹500 நோட்டுகள்:", min_value=0, step=1, key="den_500")
-                            n200 = st.number_input("₹200 நோட்டுகள்:", min_value=0, step=1, key="den_200")
-                            n100 = st.number_input("₹100 நோட்டுகள்:", min_value=0, step=1, key="den_100")
-                        with d_col2:
-                            n50 = st.number_input("₹50 நோட்டுகள்:", min_value=0, step=1, key="den_50")
-                            n20 = st.number_input("₹20 நோட்டுகள்:", min_value=0, step=1, key="den_20")
-                            n10_coins = st.number_input("₹10 / சில்லறை:", min_value=0.0, step=1.0, key="den_coins")
-                            
-                        total_counted = (n500 * 500) + (n200 * 200) + (n100 * 100) + (n50 * 50) + (n20 * 20) + n10_coins
-                        
-                        diff = total_counted - live_calculated_cash
-                        if diff == 0:
-                            st.success(f"எண்ணப்பட்ட தொகை: **₹{total_counted:,.2f}** (கணக்கு சரியாக உள்ளது ✅)")
-                        else:
-                            st.warning(f"எண்ணப்பட்ட தொகை: **₹{total_counted:,.2f}** | வேறுபாடு: **₹{diff:,.2f}**")
-                            
-                        if st.form_submit_button("💾 கல்லா இருப்பை உறுதிப்படுத்து"):
-                            # branch_cash_box அட்டவணையை நேரலை இருப்புடன் புதுப்பித்தல்
-                            supabase.table("branch_cash_box").upsert({
-                                "branch_id": cur_b_id,
-                                "current_balance": total_counted,
-                                "denomination_breakdown": {
-                                    "500": n500, "200": n200, "100": n100, "50": n50, "20": n20, "coins": n10_coins
-                                },
-                                "updated_at": datetime.now().isoformat()
-                            }).execute()
-                            
-                            st.toast("✅ கல்லா இருப்பு வெற்றிகரமாகப் புதுப்பிக்கப்பட்டது!")
-                            st.rerun()
+                
                 # =========================================================================
                 # 🌟 1. கிளை கல்லா மேலாண்மை: நேரடி நாள் ஏட்டுடன் ஒருங்கிணைக்கப்பட்ட இருப்பு
                 # =========================================================================
@@ -10312,6 +10269,50 @@ if st.session_state.get("logged_in", False):
                 # 🌟 துல்லியமான நேரலை கணினி இருப்பு (Day Book Calculation):
                 live_calculated_cash = live_opening + net_visit_cash - tot_exp_cash
 
+                c_desk1, c_desk2, c_desk3 = st.columns(3)
+                c_desk1.metric("✅ நடப்பு கணினி கையிருப்பு", f"₹{live_calculated_cash:,.2f}")
+                c_desk2.metric("⏳ சரிபார்ப்பில் உள்ளவை", "₹0.00")
+                c_desk3.metric("🎯 எதிர்பார்க்கப்படும் இறுதி இருப்பு", f"₹{live_calculated_cash:,.2f}")
+
+                # -------------------------------------------------------------------------
+                # ரூபாய் நோட்டுகள் சரிபார்ப்பு (Denomination Verification Form)
+                # -------------------------------------------------------------------------
+                with st.expander("🔍 நடப்பு ரூபாய் நோட்டு விவரங்கள் (Denomination Breakdown)", expanded=True):
+                    st.info(f"கல்லாவில் இருக்க வேண்டிய மொத்தத் தொகை: **₹{live_calculated_cash:,.2f}**")
+                    
+                    with st.form("branch_denom_verify_form"):
+                        d_col1, d_col2 = st.columns(2)
+                        
+                        with d_col1:
+                            n500 = st.number_input("₹500 நோட்டுகள்:", min_value=0, step=1, key="den_500")
+                            n200 = st.number_input("₹200 நோட்டுகள்:", min_value=0, step=1, key="den_200")
+                            n100 = st.number_input("₹100 நோட்டுகள்:", min_value=0, step=1, key="den_100")
+                        with d_col2:
+                            n50 = st.number_input("₹50 நோட்டுகள்:", min_value=0, step=1, key="den_50")
+                            n20 = st.number_input("₹20 நோட்டுகள்:", min_value=0, step=1, key="den_20")
+                            n10_coins = st.number_input("₹10 / சில்லறை:", min_value=0.0, step=1.0, key="den_coins")
+                            
+                        total_counted = (n500 * 500) + (n200 * 200) + (n100 * 100) + (n50 * 50) + (n20 * 20) + n10_coins
+                        
+                        diff = total_counted - live_calculated_cash
+                        if diff == 0:
+                            st.success(f"எண்ணப்பட்ட தொகை: **₹{total_counted:,.2f}** (கணக்கு சரியாக உள்ளது ✅)")
+                        else:
+                            st.warning(f"எண்ணப்பட்ட தொகை: **₹{total_counted:,.2f}** | வேறுபாடு: **₹{diff:,.2f}**")
+                            
+                        if st.form_submit_button("💾 கல்லா இருப்பை உறுதிப்படுத்து"):
+                            # branch_cash_box அட்டவணையை நேரலை இருப்புடன் புதுப்பித்தல்
+                            supabase.table("branch_cash_box").upsert({
+                                "branch_id": cur_b_id,
+                                "current_balance": total_counted,
+                                "denomination_breakdown": {
+                                    "500": n500, "200": n200, "100": n100, "50": n50, "20": n20, "coins": n10_coins
+                                },
+                                "updated_at": datetime.now().isoformat()
+                            }).execute()
+                            
+                            st.toast("✅ கல்லா இருப்பு வெற்றிகரமாகப் புதுப்பிக்கப்பட்டது!")
+                            st.rerun()
                 # =========================================================================
                 # 2. கிளையின் நடப்பு கல்லா நோட்டுகளின் எண்ணிக்கை மற்றும் இருப்பு
                 # =========================================================================
