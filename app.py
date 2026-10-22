@@ -3277,24 +3277,31 @@ if st.session_state.get("logged_in", False):
                 b_map_name = {}
 
            # 🌟 2. நடப்பு பாக்கெட்கள் விவரங்களை எடுத்தல் (customer_name நீக்கப்பட்ட சரியான வினவல்):
-            try:
-                loans_pkt_res = (
-                    supabase.table("gold_loans")
-                    .select(
-                        "id, loan_no, branch_id, gross_weight, net_weight, "
-                        "packet_location, release_requested, release_request_remarks, "
-                        "release_request_date, repledge_bank, repledge_loan_no, "
-                        "repledge_amount, repledge_charges, status, sanctioned_amount"
+            # -------------------------------------------------------------------------
+            # 🌟 1. கேச் செய்யப்பட்ட அதிவேக தரவு எடுத்தல் (இங்கே ஒட்டவும்)
+            # -------------------------------------------------------------------------
+            @st.cache_data(ttl=30)
+            def fetch_packet_data_cached():
+                try:
+                    res = (
+                        supabase.table("gold_loans")
+                        .select(
+                            "id, loan_no, branch_id, gross_weight, net_weight, "
+                            "packet_location, release_requested, release_request_remarks, "
+                            "release_request_date, repledge_bank, repledge_loan_no, "
+                            "repledge_amount, repledge_charges, status, sanctioned_amount"
+                        )
+                        .neq("packet_location", "DELIVERED_TO_CUSTOMER")
+                        .order("id", desc=True)
+                        .limit(1500)
+                        .execute()
                     )
-                    .neq("packet_location", "DELIVERED_TO_CUSTOMER") # வாடிக்கையாளரிடம் ஒப்படைத்தவை மட்டுமே மறைய வேண்டும்
-                    .order("id", desc=True)
-                    .limit(2000)
-                    .execute()
-                )
-                all_loan_pkts = loans_pkt_res.data or []
-            except Exception as e:
-                st.error(f"பாக்கெட் விவரங்களை எடுப்பதில் பிழை: {e}")
-                all_loan_pkts = []
+                    return res.data or []
+                except Exception:
+                    return []
+
+            # தரவைப் பெறுதல் (ஒவ்வொரு கிளிக்கிற்கும் டேட்டாபேஸைத் திரும்பத் திரும்ப இழுக்காது):
+            all_loan_pkts = fetch_packet_data_cached()
 
             # 3. GP கொள்முதல் பாக்கெட்கள்
             try:
@@ -3313,6 +3320,14 @@ if st.session_state.get("logged_in", False):
                     all_gp_pkts.append(g)
             except Exception:
                 all_gp_pkts = []
+
+
+            # 🔄 கைமுறைப் புதுப்பித்தல் பட்டன் (கார்டுகளுக்கு மேல்):
+            r_col1, r_col2 = st.columns([8, 2])
+            with r_col2:
+                if st.button("🔄 தரவைப் புதுப்பி (Refresh)", key="refresh_all_pkts_btn", use_container_width=True):
+                    fetch_packet_data_cached.clear()
+                    st.rerun()
 
             # =========================================================================
             # 3. தலைமை நிலவரக் கார்டுகள் (Top Status KPI Metrics - Optimized & Fixed)
@@ -3672,40 +3687,27 @@ if st.session_state.get("logged_in", False):
                                 u3.caption(
                                     f"கோரப்பட்ட நேரம்:\n{str(uq.get('release_request_date', ''))[:16]}"
                                 )
-                                
-                                # 🚚 கிளைக்கு அனுப்பி வைக்கும் பொத்தான்:
+                            
                                 # 🚚 கிளைக்கு அனுப்பி வைக்கும் பொத்தான் (Lag-Free & Safe Update):
                                 btn_disp_key = f"tmgmt_disp_b_{uq['id']}"
                                 if u4.button("🚚 கிளைக்கு அனுப்பி வை", key=btn_disp_key, type="primary", use_container_width=True):
                                     try:
-                                        # 🌟 1. அட்டவணையில் உறுதியாக இருக்கும் பத்திகளை மட்டும் மிக எளிமையாக அப்டேட் செய்தல்:
-                                        update_payload = {
+                                        # 1. நிலையை மாற்றுதல்
+                                        supabase.table("gold_loans").update({
                                             "packet_location": "IN_TRANSIT_TO_BRANCH",
-                                            "release_requested": False
-                                        }
+                                            "release_requested": False,
+                                            "packet_updated_at": datetime.now().isoformat()
+                                        }).eq("id", uq["id"]).execute()
+
+                                        # 2. கேச்சை மட்டும் அழித்து உடனடி ரெஸ்பான்ஸ் தருதல்:
+                                        fetch_packet_data_cached.clear()
                                         
-                                        # packet_updated_at இருந்தால் மட்டும் சேர்க்கவும் (இல்லையென்றாலும் இயங்கும்)
-                                        try:
-                                            update_payload["packet_updated_at"] = datetime.now().isoformat()
-                                        except Exception:
-                                            pass
-
-                                        # Supabase Update இயக்குதல்
-                                        res = supabase.table("gold_loans").update(update_payload).eq("id", uq["id"]).execute()
-
-                                        if res.data:
-                                            st.toast(f"✅ {uq.get('loan_no')} பாக்கெட் கிளைக்கு அனுப்பி வைக்கப்பட்டது!", icon="🚚")
-                                            st.success(f"✅ {uq.get('loan_no')} பாக்கெட் வெற்றிகரமாக அனுப்பப்பட்டது!")
-                                            
-                                            # திரையில் உடனடி மாற்றத்தைக் காட்ட தற்காலிகமாகப் பட்டியலிலிருந்து நீக்குதல்
-                                            st.session_state["last_dispatched_loan"] = uq.get("loan_no")
-                                            st.rerun()
-                                        else:
-                                            st.error("⚠️ பதிவு புதுப்பிக்கப்படவில்லை. தயவுசெய்து மீண்டும் முயற்சிக்கவும்.")
+                                        st.toast(f"✅ {uq.get('loan_no')} பாக்கெட் கிளைக்கு அனுப்பப்பட்டது!", icon="🚚")
+                                        st.success(f"✅ {uq.get('loan_no')} பாக்கெட் வெற்றிகரமாக அனுப்பப்பட்டது!")
+                                        st.rerun()
 
                                     except Exception as disp_err:
-                                        # பிழை வந்தால் திரையை ரீலோட் செய்யாமல் பிழையைத் தெளிவாகக் காட்டுதல்:
-                                        st.error(f"❌ பாக்கெட் அனுப்புவதில் பிழை ஏற்பட்டது: {disp_err}")
+                                        st.error(f"அனுப்புவதில் பிழை: {disp_err}")
 
                             st.divider()
                 # 2. வாடிக்கையாளர் வராததால் திருப்பி அனுப்ப அனுமதி கோரும் பாக்கெட்கள்
