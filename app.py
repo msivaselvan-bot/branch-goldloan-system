@@ -3305,6 +3305,30 @@ if st.session_state.get("logged_in", False):
 
             urgent_requests = get_urgent_requests_fast()
 
+            # 🌟 அனைத்து பாக்கெட்கள் கேச் (இங்கே வைக்கவும்):
+            @st.cache_data(ttl=600)
+            def get_all_loan_pkts_cached():
+                try:
+                    res = (
+                        supabase.table("gold_loans")
+                        .select(
+                            "id, loan_no, branch_id, gross_weight, net_weight, "
+                            "packet_location, release_requested, release_request_remarks, "
+                            "release_request_date, repledge_bank, repledge_loan_no, "
+                            "repledge_amount, repledge_charges, status, sanctioned_amount, "
+                            "return_request_status, return_reason, return_requested_at"
+                        )
+                        .neq("packet_location", "DELIVERED_TO_CUSTOMER")
+                        .order("id", desc=True)
+                        .limit(2000)
+                        .execute()
+                    )
+                    return res.data or []
+                except Exception:
+                    return []
+
+            all_loan_pkts = get_all_loan_pkts_cached()
+
             # 🌟 GP பாக்கெட்கள் கேச் (NameError தீர்வு - 10 நிமிட கேச்):
             @st.cache_data(ttl=600)
             def get_gp_packets_cached():
