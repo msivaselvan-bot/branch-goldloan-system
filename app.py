@@ -3283,6 +3283,33 @@ if st.session_state.get("logged_in", False):
             # =========================================================================
             # ⚡ 2. அதிவேக வினவல் (தேவையானவை மட்டுமே - Zero Heavy Load)
             # =========================================================================
+            # 🌟 GP பாக்கெட்கள் கேச் (NameError தீர்வு - 10 நிமிட கேச்):
+            @st.cache_data(ttl=600)
+            def get_gp_packets_cached():
+                try:
+                    gp_res = (
+                        supabase.table("gold_purchases")
+                        .select("id, gp_no, bill_no, purchase_no, voucher_no, gross_weight, purchase_amount, packet_location, disposal_type, created_at")
+                        .execute()
+                    )
+                    raw_gps = gp_res.data or []
+                    gps = []
+                    for g in raw_gps:
+                        gp_id = (
+                            g.get("gp_no")
+                            or g.get("bill_no")
+                            or g.get("purchase_no")
+                            or g.get("voucher_no")
+                            or f"GP-{g.get('id', '')}"
+                        )
+                        g["gp_no"] = gp_id
+                        gps.append(g)
+                    return gps
+                except Exception:
+                    return []
+
+            # GP பாக்கெட்களைப் பெறுதல்:
+            all_gp_pkts = get_gp_packets_cached()
 
             # அ. அவசர மீட்புக் கோரிக்கைகள் மட்டும் (டேப் 3-க்கான நேரடி வினவல்)
             @st.cache_data(ttl=15)
