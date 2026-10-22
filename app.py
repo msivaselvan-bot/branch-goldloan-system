@@ -10894,20 +10894,17 @@ if st.session_state.get("logged_in", False):
             staff_uname = st.session_state.get("username", "Staff")
 
             # 1. இந்த கிளையின் நகைக் கடன்கள் மற்றும் ஜிபி கொள்முதல் விவரங்களை எடுத்தல்
+            # 🏢 கிளைப் பக்கத்தில் பாக்கெட்களை எடுக்கும் சரியான அதிவேக வினவல்:
             try:
-                b_loans_res = (
+                br_loans_res = (
                     supabase.table("gold_loans")
-                    .select(
-                        "id, loan_no, gross_weight, ornament_details,"
-                        " packet_location, release_requested,"
-                        " release_request_remarks, return_request_status,"
-                        " return_reason, status"
-                    )
-                    .eq("branch_id", curr_b_id)
-                    .neq("status", "Closed")
+                    .select("id, loan_no, branch_id, gross_weight, packet_location, release_requested, release_request_remarks")
+                    .eq("branch_id", current_branch_id)
+                    .order("id", desc=True)  # 👈 🌟 மிக முக்கியம்: சமீபத்திய 2500-வது பதிவு முதலில் வர
+                    .limit(3000)             # 👈 1000 வரம்பைத் தாண்டி எடுக்க
                     .execute()
                 )
-                b_loans = b_loans_res.data or []
+                b_loans = br_loans_res.data or []
             except Exception:
                 b_loans = []
 
