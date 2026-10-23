@@ -2208,20 +2208,10 @@ def get_active_loan_schemes():
             "max_rate_per_gram": 6800.0,
         },
     ]
-
-
 # -------------------------------------------------------------
-# 🔢 கிளை வாரியான நகைக் கடன் எண்ணை உருவாக்கும் நேரடி முறை (FD / RD முறையைப் போல)
+# 🔢 கிளை வாரியான நகைக் கடன் எண்ணை எடுக்கும் துல்லியமான முறை
 # -------------------------------------------------------------
-
 def get_current_display_gl_number(branch_id=None):
-    """
-    1. gold_loans (முடிந்த கடன்கள்)
-    2. branch_loan_sequences (வரிசைப் பதிவேடு)
-    3. transactions / customer_visits (டிராஃப்ட்டில் உள்ள கடன்கள்)
-    ஆகிய அனைத்திலும் உள்ள எண்களில் எது மிகப் பெரியதோ அதைக் கண்டறிந்து,
-    அடுத்த புதிய கடன் எண்ணைத் துல்லியமாக வழங்கும்.
-    """
     clean_b_id = 1
     fallback_prefix = "GL"
 
@@ -2237,13 +2227,19 @@ def get_current_display_gl_number(branch_id=None):
             or st.session_state.get("branch", "GL")[:3]
         ).strip().upper()
 
-        # -------------------------------------------------------------
-        # நிலை A: branch_loan_sequences அட்டவணையில் உள்ள கடைசி எண்
-        # -------------------------------------------------------------
-        seq_last_no = 0
         prefix = fallback_prefix
+        seq_last_no = 0
+
+        # -------------------------------------------------------------
+        # நிலை A: branch_loan_sequences அட்டவணை (bigint clean_b_id)
+        # -------------------------------------------------------------
         try:
-            res = supabase.table("branch_loan_sequences").select("prefix, last_number").eq("branch_id", clean_b_id).execute()
+            res = (
+                supabase.table("branch_loan_sequences")
+                .select("prefix, last_number")
+                .eq("branch_id", clean_b_id)
+                .execute()
+            )
             if res.data:
                 rec = res.data[0]
                 if rec.get("prefix"):
@@ -2254,7 +2250,7 @@ def get_current_display_gl_number(branch_id=None):
             pass
 
         # -------------------------------------------------------------
-        # நிலை B: gold_loans அட்டவணையில் உள்ள கடைசி கடன் எண்
+        # நிலை B: gold_loans அட்டவணையில் உள்ள நேரடி சமீபத்திய கடன் எண்
         # -------------------------------------------------------------
         gl_last_no = 0
         try:
@@ -2263,105 +2259,105 @@ def get_current_display_gl_number(branch_id=None):
                 .select("loan_no")
                 .eq("branch_id", clean_b_id)
                 .order("id", desc=True)
-                .limit(40)
+                .limit(50)
                 .execute()
                 .data or []
             )
             for r in recent_loans:
                 l_str = str(r.get("loan_no", "")).strip()
                 if "/" in l_str:
-                    num_part = l_str.split("/")[-1].strip()
-                    digits = "".join(ch for ch in num_part if ch.isdigit())
-                    if digits and int(digits) > gl_last_no:
-                        gl_last_no = int(digits)
+                    parts = l_str.split("/")
+                    pfx_candidate = parts[0].strip()
+                    num_candidate = parts[-1].strip()
+                    digits = "".join(ch for ch in num_candidate if ch.isdigit())
+                    if digits:
+                        d_val = int(digits)
+                        if d_val > gl_last_no:
+                            gl_last_no = d_val
+                            if pfx_candidate and prefix == fallback_prefix:
+                                prefix = pfx_candidate
         except Exception:
             pass
 
         # -------------------------------------------------------------
-        # 🌟 நிலை C: டிராஃப்ட்டில் (Drafts) ஒதுக்கப்பட்ட அதிகபட்ச கடன் எண்
+        # நிலை C: transactions அட்டவணையில் டிராஃப்ட்டில் உள்ள எண்கள்
         # -------------------------------------------------------------
         draft_gl_last_no = 0
         try:
-            # transactions அட்டவணையில் Draft_Locked நிலையில் உள்ள Pledge-களை எடுத்தல்
             draft_txns = (
                 supabase.table("transactions")
-                .select("item_details, remarks, transaction_details")
+                .select("remarks, gp_number, voucher_no, transaction_details")
                 .eq("branch_id", clean_b_id)
-                .in_("status", ["Draft_Locked", "Draft_Pending_OTP", "Pending", "Pending_Calling_Verification"])
+                .in_("status", ["Draft_Locked", "Draft_Pending_OTP", "Pending"])
                 .order("id", desc=True)
-                .limit(50)
+                .limit(30)
                 .execute()
                 .data or []
             )
             for d in draft_txns:
-                # remarks அல்லது transaction_details-ல் இருந்து GL எண்ணைத் தேடுதல்
-                t_details = d.get("transaction_details") or {}
-                d_loan_no = ""
-                if isinstance(t_details, dict):
-                    d_loan_no = str(t_details.get("loan_no") or t_details.get("gp_number") or "")
-                
-                if not d_loan_no and "GL:" in str(d.get("remarks", "")):
+                d_str = str(d.get("voucher_no") or d.get("gp_number") or "")
+                if not d_str and "GL:" in str(d.get("remarks", "")):
                     try:
-                        d_loan_no = str(d.get("remarks")).split("GL:")[1].split("|")[0].strip()
+                        d_str = str(d.get("remarks")).split("GL:")[1].split("|")[0].strip()
                     except Exception:
-                        d_loan_no = ""
-
-                if "/" in d_loan_no:
-                    num_p = d_loan_no.split("/")[-1].strip()
-                    d_digits = "".join(c for c in num_p if c.isdigit())
-                    if d_digits and int(d_digits) > draft_gl_last_no:
-                        draft_gl_last_no = int(d_digits)
+                        d_str = ""
+                
+                if "/" in d_str:
+                    digits = "".join(c for c in d_str.split("/")[-1] if c.isdigit())
+                    if digits and int(digits) > draft_gl_last_no:
+                        draft_gl_last_no = int(digits)
         except Exception:
             pass
 
         # -------------------------------------------------------------
-        # 🌟 நிலை D: மூன்றிலும் எது அதிகபட்ச எண்ணோ அதைக் கண்டறிதல்
+        # நிலை D: மூன்றிலும் உச்சபட்ச எண் + 1
         # -------------------------------------------------------------
         absolute_max = max(seq_last_no, gl_last_no, draft_gl_last_no)
-        if absolute_max == 0:
-            absolute_max = 1000
 
-        # கார்ட்டில் தற்போது சேர்க்கப்பட்டு பயன்பாட்டில் உள்ள தற்காலிக எண்ணிக்கை
         cart_items_count = 0
         if "transactions_cart" in st.session_state and isinstance(st.session_state["transactions_cart"], list):
             for item in st.session_state["transactions_cart"]:
                 if isinstance(item, dict):
                     t_type = str(item.get("transaction_type", ""))
-                    if "Pledge" in t_type or "நகைக்கடன்" in t_type:
+                    if any(k in t_type for k in ["Pledge", "Loan", "நகைக்கடன்"]):
                         cart_items_count += 1
 
         next_num = absolute_max + cart_items_count + 1
 
-        suggested_gl_no = (
-            f"{prefix}/{next_num:04d}"
-            if next_num < 1000
-            else f"{prefix}/{next_num}"
-        )
+        # 4 இலக்க எண் சீரிஸ் (எ.கா: MYL/0977)
+        suggested_gl_no = f"{prefix}/{next_num:04d}" if next_num < 10000 else f"{prefix}/{next_num}"
 
         return suggested_gl_no, next_num
 
     except Exception:
         dyn_prefix = str(st.session_state.get("branch_code", fallback_prefix))[:3].upper()
-        return f"{dyn_prefix}/1001", 1001
+        return f"{dyn_prefix}/0001", 1
 
 
-# 🌟 அடுத்த எண்ணை டேட்டாபேஸில் பதிவு செய்யும் பங்க்ஷன் (இதை மாற்ற வேண்டாம்)
+# -------------------------------------------------------------
+# 🌟 அடுத்த எண்ணை உறுதியாக டேட்டாபேஸில் ஏற்றி வைக்கும் ஃபங்ஷன்
+# -------------------------------------------------------------
 def commit_next_gl_number(branch_id, used_number, prefix=None):
-    """கடன் வழங்கப்பட்ட பிறகு அடுத்த வரிசை எண்ணை டேட்டாபேஸில் பதிவு செய்தல்"""
+    """branch_loan_sequences அட்டவணையில் last_number-ஐப் புதுப்பித்தல்"""
     try:
         clean_b_id = int(branch_id)
+        
         payload = {
             "branch_id": clean_b_id,
-            "last_number": int(used_number)
+            "last_number": int(used_number),
+            "updated_at": datetime.now().isoformat()
         }
         if prefix:
             payload["prefix"] = str(prefix).strip().rstrip("/-")
 
+        # branch_id என்பது Primary Key என்பதால் upsert 100% செயல்படும்:
         supabase.table("branch_loan_sequences").upsert(
             payload, on_conflict="branch_id"
         ).execute()
-    except Exception:
-        pass
+
+        st.cache_data.clear()
+    except Exception as commit_err:
+        st.error(f"⚠️ கடன் வரிசை எண்ணைப் புதுப்பிப்பதில் பிழை: {commit_err}")
 
 
 # -----------------------------------------------------------------------------------------
@@ -8899,6 +8895,7 @@ if st.session_state.get("logged_in", False):
 
                                                     except Exception as gl_err:
                                                         st.error(f"⚠️ gold_loans அட்டவணையில் சேமிப்பதில் பிழை: {gl_err}")
+    
                                                 # A.1 அடமானம் மீட்டல் (கடன் அடைக்கப்பட்டால் Closed செய்தல்):
                                                 elif any(k in t_type for k in ["Release", "மீட்டல்", "அடைப்பு"]):
                                                     try:
@@ -8910,14 +8907,14 @@ if st.session_state.get("logged_in", False):
                                                                 rel_gl_no = None
                                                         
                                                         if rel_gl_no:
-                                                            # 🌟 gold_loans அட்டவணையில் நிலையை உடனே Closed என மாற்றுதல்:
+                                                            # 1. gold_loans அட்டவணையில் நிலையை Closed என மாற்றுதல்:
                                                             supabase.table("gold_loans").update({
                                                                 "status": "Closed",
-                                                                "closed_date": effective_v_date,
-                                                                "closed_by": s_name,
-                                                                "settled_amount": final_amt,
                                                                 "packet_updated_at": datetime.now().isoformat()
                                                             }).eq("loan_no", rel_gl_no).execute()
+
+                                                            # 2. transactions அட்டவணைக்கான item-ல் closed_gl_no-ஐயும் நிரப்புதல்:
+                                                            item["closed_gl_no"] = rel_gl_no
                                                     except Exception as rel_err:
                                                         st.error(f"⚠️ gold_loans கடனை மூடுவதில் பிழை: {rel_err}")
 
