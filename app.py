@@ -7711,6 +7711,15 @@ if st.session_state.get("logged_in", False):
                             help="கார்ட்டில் கடன் சேர்க்கப்படும்போது அடுத்தடுத்த வரிசை எண்கள் தானாக மாறும்"
                         )
 
+                    # 🌟 scheme_map அல்லது திட்டத் தேர்விலிருந்து மதிப்புகளைப் பாதுகாப்பாக எடுத்தல் (Fix for NameError)
+                    cur_scheme = locals().get('cur_scheme', {})
+                    if not cur_scheme and 'scheme_map' in locals() and 'selected_scheme' in locals():
+                        cur_scheme = scheme_map.get(selected_scheme, {})
+
+                    cur_rpg = float(cur_scheme.get("max_rate_per_gram", 0.0) or cur_scheme.get("rate_per_gram", 0.0) or 0.0)
+                    cur_roi = float(cur_scheme.get("interest_rate", 18.0) or 18.0)
+                    cur_tenure = int(cur_scheme.get("tenure_months", 12) or 12)
+
                     with pl_col2:
                         total_weight = st.number_input("மொத்த எடை (Gross Weight - gms) *", min_value=0.0, step=0.001, format="%.3f", key=f"gwt_in_{fc}")
                         net_weight = st.number_input("நிகர எடை (Net Weight - gms) *", min_value=0.0, step=0.001, format="%.3f", key=f"nwt_in_{fc}")
@@ -9122,7 +9131,7 @@ if st.session_state.get("logged_in", False):
 
                                             if max_used_in_cart > 0:
                                                 commit_next_gl_number(clean_b_id, max_used_in_cart)
-                                                
+
                                             st.session_state.transactions_cart = []
                                             st.session_state.current_visit = None
                                             st.session_state.otp_cleared = False
