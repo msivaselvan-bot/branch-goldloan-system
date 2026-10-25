@@ -7694,31 +7694,28 @@ if st.session_state.get("logged_in", False):
                     db_schemes = get_active_loan_schemes()
                     scheme_map = {s["scheme_name"]: s for s in db_schemes} if db_schemes else {}
                     
+                    # 🌟 1. கடன் எண்ணை வெளியே முன்கூட்டியே உருவாக்குதல் (Fix for NameError)
+                    suggested_gl_no, next_num = get_current_display_gl_number(clean_b_id)
+                    cart_len = len(st.session_state.get("transactions_cart", []))
+                    gl_field_key = f"input_gl_no_{clean_b_id}_{cart_len}_{next_num}"
+                    
                     pl_col1, pl_col2, pl_col3 = st.columns(3)
                     with pl_col1:
-                        # 1. அடுத்த புதிய கடன் எண்ணைப் பெறுதல்:
-                        suggested_gl_no, next_num = get_current_display_gl_number(clean_b_id)
-
-                        # 2. விட்ஜெட் விசை (Dynamic Key): கார்ட்டில் உருப்படிகள் கூடக்கூட இந்த ஃபீல்டு தானாகவே புது எண்ணுக்கு மாறும்!
-                        cart_len = len(st.session_state.get("transactions_cart", []))
-                        gl_field_key = f"input_gl_no_{clean_b_id}_{cart_len}_{next_num}"
-
-                        # 3. கடன் எண் உள்ளீட்டுப் புலம் (Auto-field - இப்போது இது disabled இல்லை, எனவே டைனமிக்காக மாறும்):
+                        # 3. கடன் எண் உள்ளீட்டுப் புலம் (Auto-field)
                         loan_no_val = st.text_input(
                             "கடன் எண் (Loan No) *:",
                             value=suggested_gl_no,
                             key=gl_field_key,
                             help="கார்ட்டில் கடன் சேர்க்கப்படும்போது அடுத்தடுத்த வரிசை எண்கள் தானாக மாறும்"
                         )
-
-                    # 🌟 scheme_map அல்லது திட்டத் தேர்விலிருந்து மதிப்புகளைப் பாதுகாப்பாக எடுத்தல் (Fix for NameError)
-                    cur_scheme = locals().get('cur_scheme', {})
-                    if not cur_scheme and 'scheme_map' in locals() and 'selected_scheme' in locals():
+                        
+                        scheme_options = list(scheme_map.keys()) if scheme_map else ["Standard Gold Loan"]
+                        selected_scheme = st.selectbox("அட்மின் நகைக் கடன் திட்டம் (Scheme) *", options=scheme_options, key=f"sch_sel_{fc}")
+                        scheme_name = selected_scheme
                         cur_scheme = scheme_map.get(selected_scheme, {})
-
-                    cur_rpg = float(cur_scheme.get("max_rate_per_gram", 0.0) or cur_scheme.get("rate_per_gram", 0.0) or 0.0)
-                    cur_roi = float(cur_scheme.get("interest_rate", 18.0) or 18.0)
-                    cur_tenure = int(cur_scheme.get("tenure_months", 12) or 12)
+                        cur_rpg = float(cur_scheme.get("max_rate_per_gram", 0.0))
+                        cur_roi = float(cur_scheme.get("interest_rate", 18.0))
+                        cur_tenure = int(cur_scheme.get("tenure_months", 12))
 
                     with pl_col2:
                         total_weight = st.number_input("மொத்த எடை (Gross Weight - gms) *", min_value=0.0, step=0.001, format="%.3f", key=f"gwt_in_{fc}")
