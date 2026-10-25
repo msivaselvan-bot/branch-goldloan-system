@@ -7701,21 +7701,34 @@ if st.session_state.get("logged_in", False):
                     
                     pl_col1, pl_col2, pl_col3 = st.columns(3)
                     with pl_col1:
-                        # 3. கடன் எண் உள்ளீட்டுப் புலம் (Auto-field)
-                        loan_no_val = st.text_input(
-                            "கடன் எண் (Loan No) *:",
-                            value=suggested_gl_no,
-                            key=gl_field_key,
-                            help="கார்ட்டில் கடன் சேர்க்கப்படும்போது அடுத்தடுத்த வரிசை எண்கள் தானாக மாறும்"
-                        )
-                        
-                        scheme_options = list(scheme_map.keys()) if scheme_map else ["Standard Gold Loan"]
-                        selected_scheme = st.selectbox("அட்மின் நகைக் கடன் திட்டம் (Scheme) *", options=scheme_options, key=f"sch_sel_{fc}")
-                        scheme_name = selected_scheme
-                        cur_scheme = scheme_map.get(selected_scheme, {})
-                        cur_rpg = float(cur_scheme.get("max_rate_per_gram", 0.0))
-                        cur_roi = float(cur_scheme.get("interest_rate", 18.0))
-                        cur_tenure = int(cur_scheme.get("tenure_months", 12))
+                    # 1. அடுத்த புதிய கடன் எண்ணைப் பெறுதல்:
+                    suggested_gl_no, next_num = get_current_display_gl_number(clean_b_id)
+
+                    # 🌟 2. கார்ட்டில் ஏற்கனவே உள்ள Pledge (நகைக்கடன்) எண்ணிக்கையைக் கணக்கிட்டு அடுத்த எண்ணைக் கூட்டுதல்:
+                    cart_pledge_count = 0
+                    if "transactions_cart" in st.session_state and isinstance(st.session_state["transactions_cart"], list):
+                        for itm in st.session_state["transactions_cart"]:
+                            if "Pledge" in str(itm.get("transaction_type", "")):
+                                cart_pledge_count += 1
+
+                    # உண்மையான அடுத்த எண் (கடைசி எண்ணுடன் கார்ட்டில் உள்ளவற்றைக் கூட்டுவது):
+                    actual_next_num = next_num + cart_pledge_count
+                    
+                    # முன்னொட்டு (Prefix) மற்றும் எண்ணைப் பிரித்து புதிய எண்ணை உருவாக்குதல்:
+                    pfx = suggested_gl_no.split("/")[0] if "/" in suggested_gl_no else "AVL"
+                    final_suggested_gl = f"{pfx}/{actual_next_num:04d}" if actual_next_num < 10000 else f"{pfx}/{actual_next_num}"
+
+                    # 3. விட்ஜெட் விசை (Dynamic Key): கார்ட்டில் பொருள் சேரும்போது கீ (Key) மாறி புதிய எண்ணைக் காட்டும்
+                    gl_field_key = f"input_gl_no_{clean_b_id}_{cart_pledge_count}_{actual_next_num}"
+
+                    # 4. கடன் எண் உள்ளீட்டுப் புலம் (Disabled=True ஆக்கப்பட்டுவிட்டதால் எடிட் செய்ய முடியாது):
+                    loan_no_val = st.text_input(
+                        "கடன் எண் (Auto Generated GL No) *:",
+                        value=final_suggested_gl,
+                        disabled=True,  # 👈 ஊழியர்கள் எடிட் செய்ய முடியாதவாறு பூட்டப்பட்டுள்ளது
+                        key=gl_field_key,
+                        help="தானாக உருவாக்கப்பட்ட கடன் எண் (மாற்ற முடியாது)"
+                    )
 
                     with pl_col2:
                         total_weight = st.number_input("மொத்த எடை (Gross Weight - gms) *", min_value=0.0, step=0.001, format="%.3f", key=f"gwt_in_{fc}")
@@ -8179,16 +8192,20 @@ if st.session_state.get("logged_in", False):
                                 "amount": float(actual_paid_amt if actual_paid_amt > 0 else chk_received),
                                 "remarks": all_remarks,
                                 "ornament_details": ornament_details if ('ornament_details' in locals() and ornament_details) else "",
+                                
+                                # 🌟 மிக முக்கியமானது: கடன் எண் கார்ட்டில் சரியாக ஏற வேண்டும்
+                                "loan_no": loan_no_val if 'loan_no_val' in locals() else "",
+                                
                                 "other_charges": float(other_charges) if 'other_charges' in locals() else 0.0,
                                 "ornament_image_url": img_url,
                                 "total_weight": float(total_weight) if 'total_weight' in locals() else 0.0,
                                 "net_weight": float(net_weight) if 'net_weight' in locals() else 0.0,
-                                "gp_number": selected_gl_no if 'selected_gl_no' in locals() else (loan_no_val if 'loan_no_val' in locals() else (gp_number if 'gp_number' in locals() else "")),
+                                "gp_number": loan_no_val if 'loan_no_val' in locals() else "",
                                 "ref1_name": ref1_name if ('ref1_name' in locals() and ref1_name) else "",
                                 "ref1_phone": ref1_phone if ('ref1_phone' in locals() and ref1_phone) else "",
                                 "ref2_name": ref2_name if ('ref2_name' in locals() and ref2_name) else "",
                                 "ref2_phone": ref2_phone if ('ref2_phone' in locals() and ref2_phone) else "",
-                                "principal_amount": float(principal_amount) if 'principal_amount' in locals() else (float(paid_amt) if 'paid_amt' in locals() else 0.0),
+                                "principal_amount": float(paid_amt) if 'paid_amt' in locals() else 0.0, # 👈 முழு அசல் தொகை
                                 "interest_amount": float(interest_amount) if 'interest_amount' in locals() else 0.0,
                                 "nominee_name": nominee_name if ('nominee_name' in locals() and nominee_name) else "",
                                 "nominee_relation": nominee_relation if ('nominee_relation' in locals() and nominee_relation) else "",
@@ -8216,6 +8233,9 @@ if st.session_state.get("logged_in", False):
                                 st.session_state.decl_net_wt = actual_net_wt
                                 st.session_state.declaration_gl_no = gl_number_val
                                 st.session_state.show_declaration_box = True
+
+                            st.success("✅ நகைக் கடன் வெற்றிகரமாகப் பட்டியலில் சேர்க்கப்பட்டது!")
+                            st.rerun()
 
                 # உறுதி ஆவணப் பதிவிறக்கப் பகுதி
                 if st.session_state.get("show_declaration_box", False):
