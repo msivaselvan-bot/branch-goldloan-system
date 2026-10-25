@@ -7696,15 +7696,20 @@ if st.session_state.get("logged_in", False):
                     
                     pl_col1, pl_col2, pl_col3 = st.columns(3)
                     with pl_col1:
-                        suggested_gl, next_seq_num = get_current_display_gl_number(st.session_state.branch_id)
-                        new_gl_no = st.text_input("கடன் எண் (Auto Generated GL No) *", value=suggested_gl, disabled=True, key=f"pledge_gl_box_{suggested_gl}")
-                        scheme_options = list(scheme_map.keys()) if scheme_map else ["Standard Gold Loan"]
-                        selected_scheme = st.selectbox("அட்மின் நகைக் கடன் திட்டம் (Scheme) *", options=scheme_options, key=f"sch_sel_{fc}")
-                        scheme_name = selected_scheme
-                        cur_scheme = scheme_map.get(selected_scheme, {})
-                        cur_rpg = float(cur_scheme.get("max_rate_per_gram", 0.0))
-                        cur_roi = float(cur_scheme.get("interest_rate", 18.0))
-                        cur_tenure = int(cur_scheme.get("tenure_months", 12))
+                        # 1. அடுத்த புதிய கடன் எண்ணைப் பெறுதல்:
+                        suggested_gl_no, next_num = get_current_display_gl_number(clean_b_id)
+
+                        # 2. விட்ஜெட் விசை (Dynamic Key): கார்ட்டில் உருப்படிகள் கூடக்கூட இந்த ஃபீல்டு தானாகவே புது எண்ணுக்கு மாறும்!
+                        cart_len = len(st.session_state.get("transactions_cart", []))
+                        gl_field_key = f"input_gl_no_{clean_b_id}_{cart_len}_{next_num}"
+
+                        # 3. கடன் எண் உள்ளீட்டுப் புலம் (Auto-field - இப்போது இது disabled இல்லை, எனவே டைனமிக்காக மாறும்):
+                        loan_no_val = st.text_input(
+                            "கடன் எண் (Loan No) *:",
+                            value=suggested_gl_no,
+                            key=gl_field_key,
+                            help="கார்ட்டில் கடன் சேர்க்கப்படும்போது அடுத்தடுத்த வரிசை எண்கள் தானாக மாறும்"
+                        )
 
                     with pl_col2:
                         total_weight = st.number_input("மொத்த எடை (Gross Weight - gms) *", min_value=0.0, step=0.001, format="%.3f", key=f"gwt_in_{fc}")
@@ -7727,7 +7732,7 @@ if st.session_state.get("logged_in", False):
                     ornament_details = st.text_area("நகை விபரம் (Ornament Details) *", key=f"orn_det_{fc}")
                     ornament_file = st.file_uploader("நகை படம் (Ornament Photo) *", type=["jpg", "jpeg", "png"], key=f"orn_file_{fc}")
                     
-                    detail_summary = [f"GL: {new_gl_no}", f"ஸ்கீம்: {selected_scheme}", f"வட்டி: {cur_roi}%", f"RPG: ₹{cur_rpg:,.2f}", f"எடை: {net_weight:.3f}g"]
+                    detail_summary = [f"GL: {loan_no_val}", f"ஸ்கீம்: {selected_scheme}", f"வட்டி: {cur_roi}%", f"RPG: ₹{cur_rpg:,.2f}", f"எடை: {net_weight:.3f}g"]
 
                 # 2. அடமானம் மீட்டல் (GL Release)
                 elif txn_category == "GL Release (அடமானம் மீட்டல்)":
@@ -8172,7 +8177,7 @@ if st.session_state.get("logged_in", False):
                                 "ornament_image_url": img_url,
                                 "total_weight": float(total_weight) if 'total_weight' in locals() else 0.0,
                                 "net_weight": float(net_weight) if 'net_weight' in locals() else 0.0,
-                                "gp_number": selected_gl_no if 'selected_gl_no' in locals() else (new_gl_no if 'new_gl_no' in locals() else (gp_number if 'gp_number' in locals() else "")),
+                                "gp_number": selected_gl_no if 'selected_gl_no' in locals() else (loan_no_val if 'loan_no_val' in locals() else (gp_number if 'gp_number' in locals() else "")),
                                 "ref1_name": ref1_name if ('ref1_name' in locals() and ref1_name) else "",
                                 "ref1_phone": ref1_phone if ('ref1_phone' in locals() and ref1_phone) else "",
                                 "ref2_name": ref2_name if ('ref2_name' in locals() and ref2_name) else "",
@@ -8198,7 +8203,7 @@ if st.session_state.get("logged_in", False):
                                 actual_amt = float(paid_amt if 'paid_amt' in locals() and paid_amt else visit.get("amount", 0.0) or 0.0)
                                 actual_gross_wt = float(total_weight if 'total_weight' in locals() and total_weight else visit.get("gross_weight", 0.0) or 0.0)
                                 actual_net_wt = float(net_weight if 'net_weight' in locals() and net_weight else visit.get("net_weight", 0.0) or 0.0)
-                                gl_number_val = new_gl_no if 'new_gl_no' in locals() else "GL"
+                                gl_number_val = loan_no_val if 'loan_no_val' in locals() else "GL"
 
                                 st.session_state.decl_amt = actual_amt
                                 st.session_state.decl_tot_wt = actual_gross_wt
@@ -9104,6 +9109,20 @@ if st.session_state.get("logged_in", False):
                                                 except Exception as txn_ins_err:
                                                     st.error(f"⚠️ transactions அட்டவணையில் சேமிப்பதில் பிழை: {txn_ins_err}")
 
+                                            # =========================================================================
+                                            # 🌟 புதிய இணைப்பு: கார்ட்டில் உள்ள அதிகபட்ச கடன் எண்ணைக் கண்டறிந்து sequence-ல் சேமித்தல்
+                                            # =========================================================================
+                                            max_used_in_cart = 0
+                                            for itm in st.session_state.get("transactions_cart", []):
+                                                l_no = str(itm.get("loan_no", ""))
+                                                if "/" in l_no:
+                                                    digits = "".join(c for c in l_no.split("/")[-1] if c.isdigit())
+                                                    if digits and int(digits) > max_used_in_cart:
+                                                        max_used_in_cart = int(digits)
+
+                                            if max_used_in_cart > 0:
+                                                commit_next_gl_number(clean_b_id, max_used_in_cart)
+                                                
                                             st.session_state.transactions_cart = []
                                             st.session_state.current_visit = None
                                             st.session_state.otp_cleared = False
