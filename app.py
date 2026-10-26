@@ -5382,22 +5382,26 @@ if st.session_state.get("logged_in", False):
             # ----------------------------------------------------------------------------
             if st.button("🔍 விடுபட்ட கடன்களைத் தேடு (Scan Missing Loans)"):
                 try:
-                    st.info("⏳ பரிவர்த்தனைகளை முழுமையாகச் சோதித்து வருகிறது...")
+                    st.info("⏳ பரிவர்த்தனைகளைச் சோதித்து வருகிறது...")
                     
-                    # 1. 1000-க்கும் மேற்பட்ட தரவுகளைப் பெற Range முறையைப் பயன்படுத்துதல்
                     all_txns = []
-                    page_size = 1000
+                    batch_size = 500  # ஒரே நேரத்தில் 500 பதிவுகள் மட்டும் பாதுகாப்பாகப் பெறுதல்
                     start = 0
                     
                     while True:
-                        res = supabase.table("transactions").select("*").range(start, start + page_size - 1).execute()
-                        chunk_data = res.data or []
-                        if not chunk_data:
-                            break
-                        all_txns.extend(chunk_data)
-                        if len(chunk_data) < page_size:
-                            break
-                        start += page_size
+                        try:
+                            res = supabase.table("transactions").select("*").range(start, start + batch_size - 1).execute()
+                            chunk_data = res.data or []
+                            if not chunk_data:
+                                break
+                            all_txns.extend(chunk_data)
+                            if len(chunk_data) < batch_size:
+                                break
+                            start += batch_size
+                        except Exception:
+                            # ஒருவேளை ஒரு பேட்ச் தவறிழைத்தால் அடுத்த பேட்சிற்குச் செல்ல
+                            start += batch_size
+                            continue
 
                     missing_list = []
                     if all_txns:
@@ -5407,7 +5411,6 @@ if st.session_state.get("logged_in", False):
                             t_type = str(tx.get("transaction_type", "")).strip().lower()
                             remarks_str = str(tx.get("remarks", "")).strip()
                             
-                            # நகைக்கடன் தொடர்பான அனைத்துப் பதிவுகளையும் சோதித்தல் (Pledge, Loan அல்லது GL எண் உள்ளவை)
                             is_pledge_type = any(k in t_type for k in ["pledge", "loan", "நகைக்கடன்", "new", "புதிய"]) or "gl:" in remarks_str.lower()
                             
                             if is_pledge_type:
@@ -5419,40 +5422,42 @@ if st.session_state.get("logged_in", False):
                                         gl_no = None
                                 
                                 if gl_no:
-                                    # gold_loans-ல் உள்ளதா எனச் சோதித்தல்
-                                    chk_gl = supabase.table("gold_loans").select("id").eq("loan_no", gl_no).execute()
-                                    if not chk_gl.data:
-                                        missing_list.append({
-                                            "visit_id": tx.get("visit_id"),
-                                            "branch_id": tx.get("branch_id"),
-                                            "customer_id": tx.get("customer_id"),
-                                            "loan_no": gl_no,
-                                            "loan_date": str(tx.get("created_at", datetime.now().isoformat())).split("T")[0],
-                                            "ornament_details": tx.get("ornament_details", remarks_str or "விடுபட்ட கடன் (Synced)"),
-                                            "items_count": int(tx.get("items_count", 1) or 1),
-                                            "gross_weight": float(tx.get("total_weight", 0.0) or tx.get("gross_weight", 0.0) or 0.0),
-                                            "net_weight": float(tx.get("net_weight", 0.0) or 0.0),
-                                            "purity": tx.get("purity", "916 KDM"),
-                                            "sanctioned_amount": float(tx.get("amount", 0.0) or tx.get("paid_amount", 0.0) or 0.0),
-                                            "scheme_name": tx.get("scheme_name", "Regular"),
-                                            "interest_rate": float(tx.get("interest_rate", 18.0) or 18.0),
-                                            "market_rate_per_gram": float(tx.get("market_rate", 0.0) or 0.0),
-                                            "staff_name": tx.get("staff_name", "System"),
-                                            "status": "Active",
-                                            "packet_location": "AT_BRANCH"
-                                        })
+                                    try:
+                                        chk_gl = supabase.table("gold_loans").select("id").eq("loan_no", gl_no).execute()
+                                        if not chk_gl.data:
+                                            missing_list.append({
+                                                "visit_id": tx.get("visit_id"),
+                                                "branch_id": tx.get("branch_id"),
+                                                "customer_id": tx.get("customer_id"),
+                                                "loan_no": gl_no,
+                                                "loan_date": str(tx.get("created_at", datetime.now().isoformat())).split("T")[0],
+                                                "ornament_details": tx.get("ornament_details", remarks_str or "விடுபட்ட கடன் (Synced)"),
+                                                "items_count": int(tx.get("items_count", 1) or 1),
+                                                "gross_weight": float(tx.get("total_weight", 0.0) or tx.get("gross_weight", 0.0) or 0.0),
+                                                "net_weight": float(tx.get("net_weight", 0.0) or 0.0),
+                                                "purity": tx.get("purity", "916 KDM"),
+                                                "sanctioned_amount": float(tx.get("amount", 0.0) or tx.get("paid_amount", 0.0) or 0.0),
+                                                "scheme_name": tx.get("scheme_name", "Regular"),
+                                                "interest_rate": float(tx.get("interest_rate", 18.0) or 18.0),
+                                                "market_rate_per_gram": float(tx.get("market_rate", 0.0) or 0.0),
+                                                "staff_name": tx.get("staff_name", "System"),
+                                                "status": "Active",
+                                                "packet_location": "AT_BRANCH"
+                                            })
+                                    except Exception:
+                                        continue
                     
                     st.session_state.missing_loans_cache = missing_list
                     if missing_list:
                         st.success(f"ℹ️ {len(missing_list)} விடுபட்ட கடன்கள் கண்டறியப்பட்டுள்ளன!")
                         st.rerun()
                     else:
-                        st.warning("⚠️ விடுபட்ட நகைக் கடன்கள் எதுவும் கிடைக்கவில்லை. (அல்லது அனைத்து பரிவர்த்தனைகளும் gold_loans அட்டவணையில் ஏற்கனவே உள்ளன).")
+                        st.warning("⚠️ விடுபட்ட நகைக் கடன்கள் எதுவும் கிடைக்கவில்லை (அல்லது அனைத்து பரிவர்த்தனைகளும் gold_loans அட்டவணையில் ஏற்கனவே உள்ளன).")
                         
                 except Exception as scan_err:
                     st.error(f"⚠️ தேடுவதில் பிழை: {scan_err}")
 
-            # 3. கண்டறியப்பட்ட விடுபட்ட கடன்களைத் டேபிளாகக் காட்டுதல்
+            # விடுபட்ட கடன்களைத் டேபிளாகக் காட்டுதல்
             if "missing_loans_cache" in st.session_state and st.session_state.missing_loans_cache:
                 df_missing = pd.DataFrame(st.session_state.missing_loans_cache)
                 st.write("📋 **விடுபட்ட நகைக் கடன்களின் பட்டியல்:**")
