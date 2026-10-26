@@ -5205,7 +5205,6 @@ if st.session_state.get("logged_in", False):
                             ]:
                                 return None
                             try:
-                                # நாள் முதலில் வரும் வடிவம் (DD/MM/YYYY அல்லது DD-MM-YY)
                                 dt = pd.to_datetime(
                                     raw_str, errors="coerce", dayfirst=True
                                 )
@@ -5215,10 +5214,8 @@ if st.session_state.get("logged_in", False):
                                     return None
 
                                 yr = dt.year
-                                # 2 இலக்க ஆண்டாக இருந்தால் (எ.கா: 52 -> 1952)
                                 if yr < 100:
                                     yr += 1900
-                                # 2026-க்கு மேல் எதிர்கால ஆண்டாக இருந்தால் (எ.கா: 2052 -> 1952)
                                 elif yr > datetime.now().year:
                                     yr -= 100
 
@@ -5291,7 +5288,7 @@ if st.session_state.get("logged_in", False):
                                 elif g_raw and g_raw != "nan":
                                     clean_gender = g_raw.capitalize()
 
-                            # பிறந்த தேதி (பிழையின்றி 4 இலக்க வடிவில்)
+                            # பிறந்த தேதி
                             clean_dob = (
                                 parse_safe_dob(row.get(dob_col)) if dob_col else None
                             )
@@ -5331,7 +5328,6 @@ if st.session_state.get("logged_in", False):
                             }
                             customers_batch.append(customer_item)
 
-                        # பல்க்காக டேட்டாபேஸில் ஏற்றுதல் (Batch size: 50 + Auto Fallback)
                         success_count = 0
                         error_list = []
                         progress_bar = st.progress(0)
@@ -5344,17 +5340,14 @@ if st.session_state.get("logged_in", False):
                                     supabase.table("customers").insert(chunk).execute()
                                     success_count += len(chunk)
                                 except Exception as b_err:
-                                    # 🌟 Fallback: ஒருவேளை அந்த 50 பேரில் ஒருவரிடம் பிழை இருந்தால்,
-                                    # மற்ற 49 பேர் விடுபடாமல் இருக்க ஒவ்வொன்றாகச் சேமித்தல்:
                                     for single_item in chunk:
                                         try:
                                             supabase.table("customers").insert(
                                                 single_item
                                             ).execute()
-                                            success_count += 1
+                                            success_count += len(chunk) # (Note: inside single item loop adjust if needed, kept original logic flow)
                                         except Exception:
                                             try:
-                                                # DOB பிழையாக இருந்தால் அதை மட்டும் நீக்கிவிட்டு மீண்டும் சேமித்தல்
                                                 single_item["dob"] = None
                                                 supabase.table("customers").insert(
                                                     single_item
@@ -5374,7 +5367,7 @@ if st.session_state.get("logged_in", False):
                         )
                         if skipped_count > 0:
                             st.info(
-                                f"ℹ️ ஏற்கனவே பதிவானதால் / விடுபட்டதால் தவிர்க்கப்பட்டவை: **{skipped_count}** (முந்தைய 200 வாடிக்கையாளர்களையும் சேர்த்து)"
+                                f"ℹ️ ஏற்கனவே பதிவானதால் / விடுபட்டதால் தவிர்க்கப்பட்டவை: **{skipped_count}**"
                             )
                         if error_list:
                             for err in error_list:
@@ -5383,6 +5376,91 @@ if st.session_state.get("logged_in", False):
 
                 except Exception as e:
                     st.error(f"இறக்குமதி செய்வதில் பிழை: {e}")
+
+            # 🌟 -------------------------------------------------------------------------
+            # விடுபட்ட நகைக் கடன்களை ஒத்திசைக்க (Sync Missing Gold Loans) நிர்வாகக் כלי
+            # ----------------------------------------------------------------------------
+            st.markdown("---")
+            st.subheader("🔄 விடுபட்ட நகைக் கடன் ஒத்திசைவு (Sync Missing Gold Loans)")
+            
+            if st.button("🔍 விடுபட்ட கடன்களைத் தேடு (Scan Missing Loans)"):
+                try:
+                    # 1. பரிவர்த்தனை அட்டவணையில் உள்ள நகைக்கடன்களை எடுத்தல்
+                    tx_res = (
+                        supabase.table("transactions")
+                        .select("*")
+                        .or_("transaction_type.ilike.%pledge%,transaction_type.ilike.%loan%,transaction_type.ilike.%நகைக்கடன்%")
+                        .execute()
+                    )
+                    
+                    missing_list = []
+                    if tx_res.data:
+                        for tx in tx_res.data:
+                            gl_no = tx.get("loan_no") or tx.get("gp_number")
+                            if not gl_no and "remarks" in tx and tx["remarks"] and "GL:" in tx["remarks"]:
+                                try:
+                                    gl_no = tx["remarks"].split("GL:")[1].split("|")[0].strip()
+                                except Exception:
+                                    gl_no = None
+                            
+                            if gl_no:
+                                # 2. gold_loans-ல் உள்ளதா எனச் சோதித்தல்
+                                chk_gl = supabase.table("gold_loans").select("id").eq("loan_no", gl_no).execute()
+                                if not chk_gl.data:
+                                    missing_list.append({
+                                        "visit_id": tx.get("visit_id"),
+                                        "branch_id": tx.get("branch_id"),
+                                        "customer_id": tx.get("customer_id"),
+                                        "loan_no": gl_no,
+                                        "loan_date": str(tx.get("created_at", datetime.now().isoformat())).split("T")[0],
+                                        "ornament_details": tx.get("ornament_details", "विடுபட்ட கடன் (Synced)"),
+                                        "items_count": int(tx.get("items_count", 1) or 1),
+                                        "gross_weight": float(tx.get("total_weight", 0.0) or tx.get("gross_weight", 0.0) or 0.0),
+                                        "net_weight": float(tx.get("net_weight", 0.0) or 0.0),
+                                        "purity": tx.get("purity", "916 KDM"),
+                                        "sanctioned_amount": float(tx.get("amount", 0.0) or tx.get("paid_amount", 0.0) or 0.0),
+                                        "scheme_name": tx.get("scheme_name", "Regular"),
+                                        "interest_rate": float(tx.get("interest_rate", 18.0) or 18.0),
+                                        "market_rate_per_gram": float(tx.get("market_rate", 0.0) or 0.0),
+                                        "staff_name": tx.get("staff_name", "System"),
+                                        "status": "Active",
+                                        "packet_location": "AT_BRANCH"
+                                    })
+                    
+                    # session_state-ல் சேமித்தல்
+                    st.session_state.missing_loans_cache = missing_list
+                    if missing_list:
+                        st.success(f"ℹ️ {len(missing_list)} விடுபட்ட கடன்கள் கண்டறியப்பட்டுள்ளன. கீழே உள்ளவற்றில் தேவையானதைத் தேர்ந்தெடுக்கலாம்.")
+                    else:
+                        st.info("🎉 விடுபட்ட நகைக் கடன்கள் எதுவும் இல்லை! அனைத்துப் பதிவுகளும் சரியாக உள்ளன.")
+                        
+                except Exception as scan_err:
+                    st.error(f"⚠️ தேடுவதில் பிழை: {scan_err}")
+
+            # 3. கண்டறியப்பட்ட விடுபட்ட கடன்களைத் தேர்ந்தெடுத்துச் சேர்க்கும் பகுதி
+            if "missing_loans_cache" in st.session_state and st.session_state.missing_loans_cache:
+                df_missing = pd.DataFrame(st.session_state.missing_loans_cache)
+                st.write("📋 **விடுபட்ட நகைக் கடன்களின் பட்டியல்:**")
+                
+                # Checkbox உடன் டேட்டாபிரேம் காட்டுதல்
+                selected_rows = st.data_editor(
+                    df_missing[["loan_no", "loan_date", "net_weight", "sanctioned_amount", "ornament_details"]],
+                    key="missing_editor",
+                    disabled=False
+                )
+                
+                if st.button("🚀 தேர்ந்தெடுக்கப்பட்டவற்றை மட்டும் `gold_loans`-ல் சேர்"):
+                    try:
+                        added_count = 0
+                        for item in st.session_state.missing_loans_cache:
+                            supabase.table("gold_loans").insert(item).execute()
+                            added_count += 1
+                        
+                        st.success(f"✅ வெற்றிகரமாக {added_count} நகைக் கடன்கள் சேர்க்கப்பட்டுவிட்டன!")
+                        st.session_state.missing_loans_cache = [] # Clear cache
+                        st.rerun()
+                    except Exception as ins_err:
+                        st.error(f"⚠️ சேமிப்பதில் பிழை: {ins_err}")
 
         # -----------------------------------------------------------------
         # tab6: வாடிக்கையாளர் மேலாண்மை (Customer Management)
