@@ -8839,7 +8839,7 @@ if st.session_state.get("logged_in", False):
                                                 final_amt = r_amt if r_amt > 0 else (p_amt if p_amt > 0 else float(item.get("amount", 0.0) or 0.0))
                                                 combined_remarks = item.get("remarks") or ""
 
-                                                # A. நகைக்கடன் (புதிய நகைக் கடன் பதிவு)
+                                                # 🌟 1. நகைக்கடன் (Pledge) பதிவை gold_loans அட்டவணையில் ஏற்றுதல்:
                                                 if any(k in t_type for k in ["Pledge", "Loan", "நகைக்கடன்"]):
                                                     try:
                                                         actual_gl_no = item.get("loan_no") or item.get("gp_number")
@@ -8857,35 +8857,29 @@ if st.session_state.get("logged_in", False):
                                                             num_val = int(num_digits) if num_digits else 0
 
                                                         item["loan_no"] = actual_gl_no
-                                                        effective_loan_date = effective_v_date
-
-                                                        # முழு அசல் கடன் தொகை மற்றும் கட்டணக் கணக்கீடு:
+                                                        
+                                                        # அசல் மற்றும் கட்டண விவரங்கள்:
                                                         gross_sanction = float(
                                                             item.get("loan_amount") 
                                                             or item.get("principal_amount") 
                                                             or item.get("sanctioned_amount") 
-                                                            or item.get("gross_amount") 
                                                             or item.get("amount", 0.0)
                                                         )
-                                                        
-                                                        proc_fee = float(item.get("processing_charges") or item.get("processing_fee", 0.0) or 0.0)
+                                                        proc_fee = float(item.get("processing_charges", 0.0) or 0.0)
                                                         net_paid = float(item.get("paid_amount", 0.0) or (gross_sanction - proc_fee))
-                                                        
-                                                        if gross_sanction == 0.0 and net_paid > 0.0:
-                                                            gross_sanction = net_paid + proc_fee
 
                                                         loan_payload = {
                                                             "visit_id": new_visit_id,
                                                             "branch_id": clean_b_id,
                                                             "customer_id": c_id,
                                                             "loan_no": actual_gl_no,
-                                                            "loan_date": effective_loan_date,
+                                                            "loan_date": effective_v_date,
                                                             "ornament_details": item.get("ornament_details", ""),
                                                             "items_count": int(item.get("items_count") or 1),
                                                             "gross_weight": float(item.get("total_weight", 0.0) or item.get("gross_weight", 0.0) or 0.0),
                                                             "net_weight": float(item.get("net_weight", 0.0) or 0.0),
                                                             "purity": item.get("purity", "916 KDM"),
-                                                            "sanctioned_amount": gross_sanction,
+                                                            "sanctioned_amount": gross_sanction if gross_sanction > 0 else net_paid,
                                                             "processing_charges": proc_fee,
                                                             "disbursed_amount": net_paid,
                                                             "scheme_name": item.get("scheme_name", "Regular"),
@@ -8896,12 +8890,14 @@ if st.session_state.get("logged_in", False):
                                                             "packet_location": "AT_BRANCH"
                                                         }
 
+                                                        # சுபாபேஸில் ஏற்கனவே உள்ளதா எனச் சோதித்து இன்சர்ட் அல்லது அப்டேட் செய்தல்:
                                                         chk_gl = supabase.table("gold_loans").select("id").eq("loan_no", actual_gl_no).execute()
                                                         if chk_gl.data:
                                                             supabase.table("gold_loans").update(loan_payload).eq("loan_no", actual_gl_no).execute()
                                                         else:
                                                             supabase.table("gold_loans").insert(loan_payload).execute()
 
+                                                        # சீக்வென்ஸ் எண்ணைப் புதுப்பித்தல்:
                                                         if num_val > 0:
                                                             commit_next_gl_number(clean_b_id, num_val)
 
