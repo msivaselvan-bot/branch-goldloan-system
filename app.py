@@ -5381,22 +5381,31 @@ if st.session_state.get("logged_in", False):
             # விடுபட்ட நகைக் கடன்களை ஒத்திசைக்க (Sync Missing Gold Loans) நிர்வாகக் כלי
             # ----------------------------------------------------------------------------
             st.markdown("---")
-            st.subheader("🔄 விடுபட்ட நகைக் கடன் ஒத்திசைவு (Sync Missing Gold Loans)")
-            
             if st.button("🔍 விடுபட்ட கடன்களைத் தேடு (Scan Missing Loans)"):
                 try:
                     st.info("⏳ பரிவர்த்தனைகளைச் சோதித்து வருகிறது...")
                     
-                    # 1. பரிவர்த்தனை அட்டவணையில் உள்ள அனைத்துத் தரவுகளையும் எடுத்தல்
-                    tx_res = supabase.table("transactions").select("*").execute()
+                    # 🌟 1000-க்கும் மேற்பட்ட தரவுகளை முழுமையாக எடுக்க Range முறையைப் பயன்படுத்துதல்
+                    all_txns = []
+                    page_size = 1000
+                    start = 0
                     
+                    while True:
+                        res = supabase.table("transactions").select("*").range(start, start + page_size - 1).execute()
+                        chunk_data = res.data or []
+                        if not chunk_data:
+                            break
+                        all_txns.extend(chunk_data)
+                        if len(chunk_data) < page_size:
+                            break
+                        start += page_size
+
                     missing_list = []
-                    if tx_res.data:
-                        st.write(f"📊 மொத்தம் சரிபார்க்கப்படும் பரிவர்த்தனைகள்: {len(tx_res.data)}")
+                    if all_txns:
+                        st.write(f"📊 மொத்தம் சரிபார்க்கப்படும் பரிவர்த்தனைகள்: {len(all_txns)}")
                         
-                        for tx in tx_res.data:
+                        for tx in all_txns:
                             t_type = str(tx.get("transaction_type", "")).lower()
-                            # நகைக்கடன் தொடர்பான பரிவர்த்தனையா எனச் சோதித்தல்
                             if any(k in t_type for k in ["pledge", "loan", "நகைக்கடன்"]):
                                 gl_no = tx.get("loan_no") or tx.get("gp_number")
                                 if not gl_no and "remarks" in tx and tx["remarks"] and "GL:" in tx["remarks"]:
@@ -5406,7 +5415,6 @@ if st.session_state.get("logged_in", False):
                                         gl_no = None
                                 
                                 if gl_no:
-                                    # 2. gold_loans-ல் உள்ளதா எனச் சோதித்தல்
                                     chk_gl = supabase.table("gold_loans").select("id").eq("loan_no", gl_no).execute()
                                     if not chk_gl.data:
                                         missing_list.append({
@@ -5415,7 +5423,7 @@ if st.session_state.get("logged_in", False):
                                             "customer_id": tx.get("customer_id"),
                                             "loan_no": gl_no,
                                             "loan_date": str(tx.get("created_at", datetime.now().isoformat())).split("T")[0],
-                                            "ornament_details": tx.get("ornament_details", "विடுபட்ட கடன் (Synced)"),
+                                            "ornament_details": tx.get("ornament_details", "விடுபட்ட கடன் (Synced)"),
                                             "items_count": int(tx.get("items_count", 1) or 1),
                                             "gross_weight": float(tx.get("total_weight", 0.0) or tx.get("gross_weight", 0.0) or 0.0),
                                             "net_weight": float(tx.get("net_weight", 0.0) or 0.0),
@@ -5432,7 +5440,7 @@ if st.session_state.get("logged_in", False):
                     st.session_state.missing_loans_cache = missing_list
                     if missing_list:
                         st.success(f"ℹ️ {len(missing_list)} விடுபட்ட கடன்கள் கண்டறியப்பட்டுள்ளன!")
-                        st.rerun() # பக்கத்தை உடனே ரெப்ரெஷ் செய்ய
+                        st.rerun()
                     else:
                         st.warning("⚠️ விடுபட்ட நகைக் கடன்கள் எதுவும் இல்லை. அனைத்துக் கடன்களும் gold_loans அட்டவணையில் ஏற்கனவே உள்ளன.")
                         
