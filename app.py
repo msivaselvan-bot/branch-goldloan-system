@@ -5380,12 +5380,11 @@ if st.session_state.get("logged_in", False):
             # 🌟 -------------------------------------------------------------------------
             # விடுபட்ட நகைக் கடன்களை ஒத்திசைக்க (Sync Missing Gold Loans) நிர்வாகக் כלי
             # ----------------------------------------------------------------------------
-            st.markdown("---")
             if st.button("🔍 விடுபட்ட கடன்களைத் தேடு (Scan Missing Loans)"):
                 try:
-                    st.info("⏳ பரிவர்த்தனைகளைச் சோதித்து வருகிறது...")
+                    st.info("⏳ பரிவர்த்தனைகளை முழுமையாகச் சோதித்து வருகிறது...")
                     
-                    # 🌟 1000-க்கும் மேற்பட்ட தரவுகளை முழுமையாக எடுக்க Range முறையைப் பயன்படுத்துதல்
+                    # 1. 1000-க்கும் மேற்பட்ட தரவுகளைப் பெற Range முறையைப் பயன்படுத்துதல்
                     all_txns = []
                     page_size = 1000
                     start = 0
@@ -5402,19 +5401,25 @@ if st.session_state.get("logged_in", False):
 
                     missing_list = []
                     if all_txns:
-                        st.write(f"📊 மொத்தம் சரிபார்க்கப்படும் பரிவர்த்தனைகள்: {len(all_txns)}")
+                        st.write(f"📊 மொத்தம் சரிபார்க்கப்பட்ட பரிவர்த்தனைகள்: {len(all_txns)}")
                         
                         for tx in all_txns:
-                            t_type = str(tx.get("transaction_type", "")).lower()
-                            if any(k in t_type for k in ["pledge", "loan", "நகைக்கடன்"]):
+                            t_type = str(tx.get("transaction_type", "")).strip().lower()
+                            remarks_str = str(tx.get("remarks", "")).strip()
+                            
+                            # நகைக்கடன் தொடர்பான அனைத்துப் பதிவுகளையும் சோதித்தல் (Pledge, Loan அல்லது GL எண் உள்ளவை)
+                            is_pledge_type = any(k in t_type for k in ["pledge", "loan", "நகைக்கடன்", "new", "புதிய"]) or "gl:" in remarks_str.lower()
+                            
+                            if is_pledge_type:
                                 gl_no = tx.get("loan_no") or tx.get("gp_number")
-                                if not gl_no and "remarks" in tx and tx["remarks"] and "GL:" in tx["remarks"]:
+                                if not gl_no and "GL:" in remarks_str:
                                     try:
-                                        gl_no = tx["remarks"].split("GL:")[1].split("|")[0].strip()
+                                        gl_no = remarks_str.split("GL:")[1].split("|")[0].strip()
                                     except Exception:
                                         gl_no = None
                                 
                                 if gl_no:
+                                    # gold_loans-ல் உள்ளதா எனச் சோதித்தல்
                                     chk_gl = supabase.table("gold_loans").select("id").eq("loan_no", gl_no).execute()
                                     if not chk_gl.data:
                                         missing_list.append({
@@ -5423,7 +5428,7 @@ if st.session_state.get("logged_in", False):
                                             "customer_id": tx.get("customer_id"),
                                             "loan_no": gl_no,
                                             "loan_date": str(tx.get("created_at", datetime.now().isoformat())).split("T")[0],
-                                            "ornament_details": tx.get("ornament_details", "விடுபட்ட கடன் (Synced)"),
+                                            "ornament_details": tx.get("ornament_details", remarks_str or "விடுபட்ட கடன் (Synced)"),
                                             "items_count": int(tx.get("items_count", 1) or 1),
                                             "gross_weight": float(tx.get("total_weight", 0.0) or tx.get("gross_weight", 0.0) or 0.0),
                                             "net_weight": float(tx.get("net_weight", 0.0) or 0.0),
@@ -5442,10 +5447,34 @@ if st.session_state.get("logged_in", False):
                         st.success(f"ℹ️ {len(missing_list)} விடுபட்ட கடன்கள் கண்டறியப்பட்டுள்ளன!")
                         st.rerun()
                     else:
-                        st.warning("⚠️ விடுபட்ட நகைக் கடன்கள் எதுவும் இல்லை. அனைத்துக் கடன்களும் gold_loans அட்டவணையில் ஏற்கனவே உள்ளன.")
+                        st.warning("⚠️ விடுபட்ட நகைக் கடன்கள் எதுவும் கிடைக்கவில்லை. (அல்லது அனைத்து பரிவர்த்தனைகளும் gold_loans அட்டவணையில் ஏற்கனவே உள்ளன).")
                         
                 except Exception as scan_err:
                     st.error(f"⚠️ தேடுவதில் பிழை: {scan_err}")
+
+            # 3. கண்டறியப்பட்ட விடுபட்ட கடன்களைத் டேபிளாகக் காட்டுதல்
+            if "missing_loans_cache" in st.session_state and st.session_state.missing_loans_cache:
+                df_missing = pd.DataFrame(st.session_state.missing_loans_cache)
+                st.write("📋 **விடுபட்ட நகைக் கடன்களின் பட்டியல்:**")
+                
+                edited_df = st.data_editor(
+                    df_missing[["loan_no", "loan_date", "net_weight", "sanctioned_amount", "ornament_details"]],
+                    key="missing_loans_table_editor",
+                    disabled=False
+                )
+                
+                if st.button("🚀 தேர்ந்தெடுக்கப்பட்டவற்றை மட்டும் `gold_loans`-ல் சேர்", type="primary"):
+                    try:
+                        added_count = 0
+                        for item in st.session_state.missing_loans_cache:
+                            supabase.table("gold_loans").insert(item).execute()
+                            added_count += 1
+                        
+                        st.success(f"✅ வெற்றிகரமாக {added_count} நகைக் கடன்கள் `gold_loans` அட்டவணையில் சேர்க்கப்பட்டுவிட்டன!")
+                        st.session_state.missing_loans_cache = []
+                        st.rerun()
+                    except Exception as ins_err:
+                        st.error(f"⚠️ சேமிப்பதில் பிழை: {ins_err}")
 
         # -----------------------------------------------------------------
         # tab6: வாடிக்கையாளர் மேலாண்மை (Customer Management)
