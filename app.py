@@ -5384,8 +5384,9 @@ if st.session_state.get("logged_in", False):
                 try:
                     st.info("⏳ பரிவர்த்தனைகளைச் சோதித்து வருகிறது...")
                     
+                    # 🌟 1000-க்கும் மேற்பட்ட தரவுகளைப் பெற Range முறையைப் பயன்படுத்துதல் (Server Disconnected தவிர்ப்பதற்காக)
                     all_txns = []
-                    batch_size = 500  # ஒரே நேரத்தில் 500 பதிவுகள் மட்டும் பாதுகாப்பாகப் பெறுதல்
+                    batch_size = 500  
                     start = 0
                     
                     while True:
@@ -5399,7 +5400,6 @@ if st.session_state.get("logged_in", False):
                                 break
                             start += batch_size
                         except Exception:
-                            # ஒருவேளை ஒரு பேட்ச் தவறிழைத்தால் அடுத்த பேட்சிற்குச் செல்ல
                             start += batch_size
                             continue
 
@@ -5457,26 +5457,28 @@ if st.session_state.get("logged_in", False):
                 except Exception as scan_err:
                     st.error(f"⚠️ தேடுவதில் பிழை: {scan_err}")
 
-            # விடுபட்ட கடன்களைத் டேபிளாகக் காட்டுதல்
+            # 🌟 விடுபட்ட கடன்களைக் காட்டுதல் மற்றும் ஒரே கிளிக்கில் சேர்ப்பது
             if "missing_loans_cache" in st.session_state and st.session_state.missing_loans_cache:
                 df_missing = pd.DataFrame(st.session_state.missing_loans_cache)
-                st.write("📋 **விடுபட்ட நகைக் கடன்களின் பட்டியல்:**")
+                st.write(f"📋 **விடுபட்ட நகைக் கடன்களின் பட்டியல் (மொத்தம்: {len(df_missing)}):**")
                 
-                edited_df = st.data_editor(
-                    df_missing[["loan_no", "loan_date", "net_weight", "sanctioned_amount", "ornament_details"]],
-                    key="missing_loans_table_editor",
-                    disabled=False
-                )
+                # சாதாரண டேபிளாகக் காட்டுதல் (பார்வைக்கு)
+                st.dataframe(df_missing[["loan_no", "loan_date", "net_weight", "sanctioned_amount", "ornament_details"]], use_container_width=True)
                 
-                if st.button("🚀 தேர்ந்தெடுக்கப்பட்டவற்றை மட்டும் `gold_loans`-ல் சேர்", type="primary"):
+                # டிக் செய்யும் தொந்தரவு இல்லாமல் அனைத்தையும் ஒரே கிளிக்கில் gold_loans-ல் சேர்க்கும் பொத்தான்:
+                if st.button("🚀 விடுபட்ட அனைத்துக் கடன்களையும் `gold_loans`-ல் சேர்", type="primary"):
                     try:
                         added_count = 0
                         for item in st.session_state.missing_loans_cache:
-                            supabase.table("gold_loans").insert(item).execute()
-                            added_count += 1
+                            # ஏற்கனவே உள்ளதா என மீண்டும் ஒருமுறை உறுதிசெய்துவிட்டு சேமித்தல்
+                            chk_exist = supabase.table("gold_loans").select("id").eq("loan_no", item["loan_no"]).execute()
+                            if not chk_exist.data:
+                                supabase.table("gold_loans").insert(item).execute()
+                                added_count += 1
                         
                         st.success(f"✅ வெற்றிகரமாக {added_count} நகைக் கடன்கள் `gold_loans` அட்டவணையில் சேர்க்கப்பட்டுவிட்டன!")
                         st.session_state.missing_loans_cache = []
+                        st.balloons()
                         st.rerun()
                     except Exception as ins_err:
                         st.error(f"⚠️ சேமிப்பதில் பிழை: {ins_err}")
