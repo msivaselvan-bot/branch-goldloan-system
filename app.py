@@ -8851,24 +8851,20 @@ if st.session_state.get("logged_in", False):
 
                                                         if not actual_gl_no:
                                                             actual_gl_no, num_val = get_current_display_gl_number(clean_b_id)
-                                                        else:
-                                                            num_part = actual_gl_no.split("/")[-1] if "/" in actual_gl_no else actual_gl_no
-                                                            num_digits = "".join(c for c in num_part if c.isdigit())
-                                                            num_val = int(num_digits) if num_digits else 0
 
                                                         item["loan_no"] = actual_gl_no
                                                         
-                                                        # அசல் மற்றும் கட்டண விவரங்கள்:
-                                                        gross_sanction = float(
-                                                            item.get("loan_amount") 
+                                                        # சரியான கடன் தொகையைக் கண்டறிதல் (Not Null Constraint-ஐத் தவிர்க்க):
+                                                        final_sanctioned_amt = float(
+                                                            item.get("amount") 
+                                                            or item.get("paid_amount") 
+                                                            or item.get("loan_amount") 
                                                             or item.get("principal_amount") 
                                                             or item.get("sanctioned_amount") 
-                                                            or item.get("gross_amount") 
-                                                            or item.get("amount", 0.0)
+                                                            or 0.0
                                                         )
-                                                        proc_fee = float(item.get("processing_charges", 0.0) or 0.0)
-                                                        net_paid = float(item.get("paid_amount", 0.0) or (gross_sanction - proc_fee))
 
+                                                        # 🌟 gold_loans அட்டவணையின் உண்மையான கட்டமைப்பிற்கு ஏற்ப உருவாக்கப்பட்ட Payload:
                                                         loan_payload = {
                                                             "visit_id": new_visit_id,
                                                             "branch_id": clean_b_id,
@@ -8880,9 +8876,7 @@ if st.session_state.get("logged_in", False):
                                                             "gross_weight": float(item.get("total_weight", 0.0) or item.get("gross_weight", 0.0) or 0.0),
                                                             "net_weight": float(item.get("net_weight", 0.0) or 0.0),
                                                             "purity": item.get("purity", "916 KDM"),
-                                                            "sanctioned_amount": gross_sanction if gross_sanction > 0 else net_paid,
-                                                            "processing_charges": proc_fee,
-                                                            "disbursed_amount": net_paid,
+                                                            "sanctioned_amount": final_sanctioned_amt,
                                                             "scheme_name": item.get("scheme_name", "Regular"),
                                                             "interest_rate": float(item.get("interest_rate", 18.0) or 18.0),
                                                             "market_rate_per_gram": float(item.get("market_rate", 0.0) or 0.0),
@@ -8891,16 +8885,12 @@ if st.session_state.get("logged_in", False):
                                                             "packet_location": "AT_BRANCH"
                                                         }
 
-                                                        # சுபாபேஸில் ஏற்கனவே இந்த எண் உள்ளதா எனச் சோதித்து இன்சர்ட் அல்லது அப்டேட் செய்தல்:
+                                                        # சுபாபேஸில் ஏற்கனவே இந்த கடன் எண் உள்ளதா எனச் சோதித்து இன்சர்ட் அல்லது அப்டேட் செய்தல்:
                                                         chk_gl = supabase.table("gold_loans").select("id").eq("loan_no", actual_gl_no).execute()
                                                         if chk_gl.data:
                                                             supabase.table("gold_loans").update(loan_payload).eq("loan_no", actual_gl_no).execute()
                                                         else:
                                                             supabase.table("gold_loans").insert(loan_payload).execute()
-
-                                                        # சீக்வென்ஸ் எண்ணைத் துல்லியமாகப் புதுப்பித்தல்:
-                                                        if num_val > 0:
-                                                            commit_next_gl_number(clean_b_id, num_val)
 
                                                     except Exception as gl_err:
                                                         st.error(f"⚠️ gold_loans அட்டவணையில் சேமிப்பதில் பிழை: {gl_err}")
