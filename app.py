@@ -8839,7 +8839,7 @@ if st.session_state.get("logged_in", False):
                                                 final_amt = r_amt if r_amt > 0 else (p_amt if p_amt > 0 else float(item.get("amount", 0.0) or 0.0))
                                                 combined_remarks = item.get("remarks") or ""
 
-                                                # A. நகைக்கடன்
+                                                # A. நகைக்கடன் (புதிய நகைக் கடன் பதிவு)
                                                 if any(k in t_type for k in ["Pledge", "Loan", "நகைக்கடன்"]):
                                                     try:
                                                         actual_gl_no = item.get("loan_no") or item.get("gp_number")
@@ -8859,10 +8859,7 @@ if st.session_state.get("logged_in", False):
                                                         item["loan_no"] = actual_gl_no
                                                         effective_loan_date = effective_v_date
 
-                                                        # =========================================================================
-                                                        # 🌟 சரியான கடன் தொகை & செயலாக்கக் கட்டணக் கணக்கீடு:
-                                                        # =========================================================================
-                                                        # முழு அசல் கடன் தொகை (Gross Principal):
+                                                        # முழு அசல் கடன் தொகை மற்றும் கட்டணக் கணக்கீடு:
                                                         gross_sanction = float(
                                                             item.get("loan_amount") 
                                                             or item.get("principal_amount") 
@@ -8871,13 +8868,9 @@ if st.session_state.get("logged_in", False):
                                                             or item.get("amount", 0.0)
                                                         )
                                                         
-                                                        # செயலாக்கக் கட்டணம்:
                                                         proc_fee = float(item.get("processing_charges") or item.get("processing_fee", 0.0) or 0.0)
-                                                        
-                                                        # கைக்குக் கொடுத்த நிகரத் தொகை (Net Payout):
                                                         net_paid = float(item.get("paid_amount", 0.0) or (gross_sanction - proc_fee))
                                                         
-                                                        # ஒருவேளை gross_sanction பூஜ்ஜியமாக இருந்தால் மட்டும் paid_amount-ஐ எடுக்கவும்:
                                                         if gross_sanction == 0.0 and net_paid > 0.0:
                                                             gross_sanction = net_paid + proc_fee
 
@@ -8892,12 +8885,9 @@ if st.session_state.get("logged_in", False):
                                                             "gross_weight": float(item.get("total_weight", 0.0) or item.get("gross_weight", 0.0) or 0.0),
                                                             "net_weight": float(item.get("net_weight", 0.0) or 0.0),
                                                             "purity": item.get("purity", "916 KDM"),
-
-                                                            # 🌟 முழு அசல் தொகை இங்கே சேமிக்கப்படும் (பிடித்தம் கழியாது):
                                                             "sanctioned_amount": gross_sanction,
                                                             "processing_charges": proc_fee,
                                                             "disbursed_amount": net_paid,
-
                                                             "scheme_name": item.get("scheme_name", "Regular"),
                                                             "interest_rate": float(item.get("interest_rate", 18.0) or 18.0),
                                                             "market_rate_per_gram": float(item.get("market_rate", 0.0) or 0.0),
@@ -8917,7 +8907,7 @@ if st.session_state.get("logged_in", False):
 
                                                     except Exception as gl_err:
                                                         st.error(f"⚠️ gold_loans அட்டவணையில் சேமிப்பதில் பிழை: {gl_err}")
-    
+
                                                 # A.1 அடமானம் மீட்டல் (கடன் அடைக்கப்பட்டால் Closed செய்தல்):
                                                 elif any(k in t_type for k in ["Release", "மீட்டல்", "அடைப்பு"]):
                                                     try:
