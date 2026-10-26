@@ -8839,8 +8839,8 @@ if st.session_state.get("logged_in", False):
                                                 final_amt = r_amt if r_amt > 0 else (p_amt if p_amt > 0 else float(item.get("amount", 0.0) or 0.0))
                                                 combined_remarks = item.get("remarks") or ""
 
-                                                # 🌟 1. நகைக்கடன் (Pledge) பதிவை gold_loans அட்டவணையில் ஏற்றுதல்:
-                                                if any(k in t_type for k in ["Pledge", "Loan", "நகைக்கடன்"]):
+                                                # 🌟 அனைத்து வகையான நகைக் கடன் பதிவுகளையும் gold_loans அட்டவணையில் ஏற்றுதல்
+                                                if any(k in t_type.lower() for k in ["pledge", "loan", "நகைக்கடன்"]):
                                                     try:
                                                         actual_gl_no = item.get("loan_no") or item.get("gp_number")
                                                         if not actual_gl_no and "GL:" in combined_remarks:
@@ -8863,6 +8863,7 @@ if st.session_state.get("logged_in", False):
                                                             item.get("loan_amount") 
                                                             or item.get("principal_amount") 
                                                             or item.get("sanctioned_amount") 
+                                                            or item.get("gross_amount") 
                                                             or item.get("amount", 0.0)
                                                         )
                                                         proc_fee = float(item.get("processing_charges", 0.0) or 0.0)
@@ -8890,14 +8891,14 @@ if st.session_state.get("logged_in", False):
                                                             "packet_location": "AT_BRANCH"
                                                         }
 
-                                                        # சுபாபேஸில் ஏற்கனவே உள்ளதா எனச் சோதித்து இன்சர்ட் அல்லது அப்டேட் செய்தல்:
+                                                        # சுபாபேஸில் ஏற்கனவே இந்த எண் உள்ளதா எனச் சோதித்து இன்சர்ட் அல்லது அப்டேட் செய்தல்:
                                                         chk_gl = supabase.table("gold_loans").select("id").eq("loan_no", actual_gl_no).execute()
                                                         if chk_gl.data:
                                                             supabase.table("gold_loans").update(loan_payload).eq("loan_no", actual_gl_no).execute()
                                                         else:
                                                             supabase.table("gold_loans").insert(loan_payload).execute()
 
-                                                        # சீக்வென்ஸ் எண்ணைப் புதுப்பித்தல்:
+                                                        # சீக்வென்ஸ் எண்ணைத் துல்லியமாகப் புதுப்பித்தல்:
                                                         if num_val > 0:
                                                             commit_next_gl_number(clean_b_id, num_val)
 
