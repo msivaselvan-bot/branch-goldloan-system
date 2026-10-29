@@ -8946,60 +8946,69 @@ if st.session_state.get("logged_in", False):
                                                 combined_remarks = item.get("remarks") or ""
 
                                                 # 🌟 அனைத்து வகையான நகைக் கடன் பதிவுகளையும் gold_loans அட்டவணையில் ஏற்றுதல்
-                                                if any(k in t_type.lower() for k in ["pledge", "loan", "நகைக்கடன்"]):
-                                                    try:
-                                                        actual_gl_no = item.get("loan_no") or item.get("gp_number")
-                                                        if not actual_gl_no and "GL:" in combined_remarks:
-                                                            try:
-                                                                actual_gl_no = combined_remarks.split("GL:")[1].split("|")[0].strip()
-                                                            except Exception:
-                                                                actual_gl_no = None
+                                                t_type_lower = str(item.get("transaction_type", "")).strip().lower()
+                                                if any(k in t_type_lower for k in ["pledge", "loan", "நகைக்கடன்"]):
+                                                    # GP எண்கள் மற்றும் பழைய நகை வாங்குதலை முற்றிலும் தவிர்த்தல்
+                                                    is_real_pledge = "purchase" not in t_type_lower and "old gold" not in t_type_lower
+                                                    actual_gl_no = item.get("loan_no") or item.get("gp_number")
+                                                    if actual_gl_no and ("GP" in str(actual_gl_no).upper() or "/GP/" in str(actual_gl_no).upper()):
+                                                        is_real_pledge = False
 
-                                                        if not actual_gl_no:
-                                                            actual_gl_no, num_val = get_current_display_gl_number(clean_b_id)
+                                                    if is_real_pledge:
+                                                        try:
+                                                            if not actual_gl_no and "GL:" in combined_remarks:
+                                                                try:
+                                                                    actual_gl_no = combined_remarks.split("GL:")[1].split("|")[0].strip()
+                                                                except Exception:
+                                                                    actual_gl_no = None
 
-                                                        item["loan_no"] = actual_gl_no
-                                                        
-                                                        # சரியான கடன் தொகையைக் கண்டறிதல் (Not Null Constraint-ஐத் தவிர்க்க):
-                                                        final_sanctioned_amt = float(
-                                                            item.get("amount") 
-                                                            or item.get("paid_amount") 
-                                                            or item.get("loan_amount") 
-                                                            or item.get("principal_amount") 
-                                                            or item.get("sanctioned_amount") 
-                                                            or 0.0
-                                                        )
+                                                            if not actual_gl_no:
+                                                                actual_gl_no, num_val = get_current_display_gl_number(clean_b_id)
+                                                            else:
+                                                                num_part = actual_gl_no.split("/")[-1] if "/" in actual_gl_no else actual_gl_no
+                                                                num_digits = "".join(c for c in num_part if c.isdigit())
+                                                                num_val = int(num_digits) if num_digits else 0
 
-                                                        # 🌟 gold_loans அட்டவணையின் உண்மையான கட்டமைப்பிற்கு ஏற்ப உருவாக்கப்பட்ட Payload:
-                                                        loan_payload = {
-                                                            "visit_id": new_visit_id,
-                                                            "branch_id": clean_b_id,
-                                                            "customer_id": c_id,
-                                                            "loan_no": actual_gl_no,
-                                                            "loan_date": effective_v_date,
-                                                            "ornament_details": item.get("ornament_details", ""),
-                                                            "items_count": int(item.get("items_count") or 1),
-                                                            "gross_weight": float(item.get("total_weight", 0.0) or item.get("gross_weight", 0.0) or 0.0),
-                                                            "net_weight": float(item.get("net_weight", 0.0) or 0.0),
-                                                            "purity": item.get("purity", "916 KDM"),
-                                                            "sanctioned_amount": final_sanctioned_amt,
-                                                            "scheme_name": item.get("scheme_name", "Regular"),
-                                                            "interest_rate": float(item.get("interest_rate", 18.0) or 18.0),
-                                                            "market_rate_per_gram": float(item.get("market_rate", 0.0) or 0.0),
-                                                            "staff_name": s_name,
-                                                            "status": "Active",
-                                                            "packet_location": "AT_BRANCH"
-                                                        }
+                                                            item["loan_no"] = actual_gl_no
+                                                            
+                                                            # முழு அசல் கடன் தொகை:
+                                                            final_sanctioned_amt = float(
+                                                                item.get("amount") 
+                                                                or item.get("paid_amount") 
+                                                                or item.get("loan_amount") 
+                                                                or item.get("principal_amount") 
+                                                                or item.get("sanctioned_amount") 
+                                                                or 0.0
+                                                            )
 
-                                                        # சுபாபேஸில் ஏற்கனவே இந்த கடன் எண் உள்ளதா எனச் சோதித்து இன்சர்ட் அல்லது அப்டேட் செய்தல்:
-                                                        chk_gl = supabase.table("gold_loans").select("id").eq("loan_no", actual_gl_no).execute()
-                                                        if chk_gl.data:
-                                                            supabase.table("gold_loans").update(loan_payload).eq("loan_no", actual_gl_no).execute()
-                                                        else:
-                                                            supabase.table("gold_loans").insert(loan_payload).execute()
+                                                            loan_payload = {
+                                                                "visit_id": new_visit_id,
+                                                                "branch_id": clean_b_id,
+                                                                "customer_id": c_id,
+                                                                "loan_no": actual_gl_no,
+                                                                "loan_date": effective_v_date,
+                                                                "ornament_details": item.get("ornament_details", ""),
+                                                                "items_count": int(item.get("items_count") or 1),
+                                                                "gross_weight": float(item.get("total_weight", 0.0) or item.get("gross_weight", 0.0) or 0.0),
+                                                                "net_weight": float(item.get("net_weight", 0.0) or 0.0),
+                                                                "purity": item.get("purity", "916 KDM"),
+                                                                "sanctioned_amount": final_sanctioned_amt,
+                                                                "scheme_name": item.get("scheme_name", "Regular"),
+                                                                "interest_rate": float(item.get("interest_rate", 18.0) or 18.0),
+                                                                "market_rate_per_gram": float(item.get("market_rate", 0.0) or 0.0),
+                                                                "staff_name": s_name,
+                                                                "status": "Active",
+                                                                "packet_location": "AT_BRANCH"
+                                                            }
 
-                                                    except Exception as gl_err:
-                                                        st.error(f"⚠️ gold_loans அட்டவணையில் சேமிப்பதில் பிழை: {gl_err}")
+                                                            chk_gl = supabase.table("gold_loans").select("id").eq("loan_no", actual_gl_no).execute()
+                                                            if chk_gl.data:
+                                                                supabase.table("gold_loans").update(loan_payload).eq("loan_no", actual_gl_no).execute()
+                                                            else:
+                                                                supabase.table("gold_loans").insert(loan_payload).execute()
+
+                                                        except Exception as gl_err:
+                                                            st.error(f"⚠️ gold_loans அட்டவணையில் சேமிப்பதில் பிழை: {gl_err}")
 
                                                 # A.1 அடமானம் மீட்டல் (கடன் அடைக்கப்பட்டால் Closed செய்தல்):
                                                 elif any(k in t_type for k in ["Release", "மீட்டல்", "அடைப்பு"]):
@@ -9318,56 +9327,69 @@ if st.session_state.get("logged_in", False):
                                                 # -------------------------------------------------------------
                                                 # 🌟 A. நகைக் கடன்: gold_loans அட்டவணையில் டிராஃப்ட்டாகச் சேமித்தல்
                                                 # -------------------------------------------------------------
-                                                if any(k in t_type for k in ["Pledge", "Loan", "நகைக் கடன்"]):
-                                                    try:
-                                                        actual_gl_no = item.get("loan_no") or item.get("gp_number")
-                                                        if not actual_gl_no and "GL:" in str(item.get("remarks", "")):
-                                                            try:
-                                                                actual_gl_no = str(item.get("remarks")).split("GL:")[1].split("|")[0].strip()
-                                                            except Exception:
-                                                                actual_gl_no = None
+                                                t_type_lower = str(item.get("transaction_type", "")).strip().lower()
+                                                if any(k in t_type_lower for k in ["pledge", "loan", "நகைக் கடன்"]):
+                                                    is_real_pledge = "purchase" not in t_type_lower and "old gold" not in t_type_lower
+                                                    actual_gl_no = item.get("loan_no") or item.get("gp_number")
+                                                    if actual_gl_no and ("GP" in str(actual_gl_no).upper() or "/GP/" in str(actual_gl_no).upper()):
+                                                        is_real_pledge = False
 
-                                                        if not actual_gl_no:
-                                                            actual_gl_no, num_val = get_current_display_gl_number(clean_b_id)
-                                                        else:
-                                                            num_part = actual_gl_no.split("/")[-1] if "/" in actual_gl_no else actual_gl_no
-                                                            num_digits = "".join(c for c in num_part if c.isdigit())
-                                                            num_val = int(num_digits) if num_digits else 0
+                                                    if is_real_pledge:
+                                                        try:
+                                                            if not actual_gl_no and "GL:" in str(item.get("remarks", "")):
+                                                                try:
+                                                                    actual_gl_no = str(item.get("remarks")).split("GL:")[1].split("|")[0].strip()
+                                                                except Exception:
+                                                                    actual_gl_no = None
 
-                                                        item["loan_no"] = actual_gl_no
+                                                            if not actual_gl_no:
+                                                                actual_gl_no, num_val = get_current_display_gl_number(clean_b_id)
+                                                            else:
+                                                                num_part = actual_gl_no.split("/")[-1] if "/" in actual_gl_no else actual_gl_no
+                                                                num_digits = "".join(c for c in num_part if c.isdigit())
+                                                                num_val = int(num_digits) if num_digits else 0
 
-                                                        draft_loan_payload = {
-                                                            "visit_id": new_v_id,
-                                                            "branch_id": clean_b_id,
-                                                            "customer_id": c_id,
-                                                            "loan_no": actual_gl_no,
-                                                            "loan_date": effective_v_date,  # 👈 🌟 வணிகத் தேதி நேரடியாகப் பதிகிறது
-                                                            "ornament_details": item.get("ornament_details", ""),
-                                                            "items_count": int(item.get("items_count") or 1),
-                                                            "gross_weight": float(item.get("total_weight", 0.0) or item.get("gross_weight", 0.0) or 0.0),
-                                                            "net_weight": float(item.get("net_weight", 0.0) or 0.0),
-                                                            "purity": item.get("purity", "916 KDM"),
-                                                            "sanctioned_amount": d_gross,       # 👈 முழு அசல் தொகை
-                                                            "processing_charges": d_proc,
-                                                            "disbursed_amount": d_net,
-                                                            "scheme_name": item.get("scheme_name", "Regular"),
-                                                            "interest_rate": float(item.get("interest_rate", 18.0) or 18.0),
-                                                            "market_rate_per_gram": float(item.get("market_rate", 0.0) or 0.0),
-                                                            "staff_name": s_name,
-                                                            "status": "Draft_Locked"
-                                                        }
+                                                            item["loan_no"] = actual_gl_no
+                                                            
+                                                            d_gross = float(
+                                                                item.get("amount") 
+                                                                or item.get("paid_amount") 
+                                                                or item.get("loan_amount") 
+                                                                or item.get("principal_amount") 
+                                                                or item.get("sanctioned_amount") 
+                                                                or 0.0
+                                                            )
+                                                            d_proc = float(item.get("processing_charges", 0.0) or 0.0)
+                                                            d_net = float(item.get("paid_amount", 0.0) or (d_gross - d_proc))
 
-                                                        chk_gl = supabase.table("gold_loans").select("id").eq("loan_no", actual_gl_no).execute()
-                                                        if chk_gl.data:
-                                                            supabase.table("gold_loans").update(draft_loan_payload).eq("loan_no", actual_gl_no).execute()
-                                                        else:
-                                                            supabase.table("gold_loans").insert(draft_loan_payload).execute()
+                                                            draft_loan_payload = {
+                                                                "visit_id": new_v_id,
+                                                                "branch_id": clean_b_id,
+                                                                "customer_id": c_id,
+                                                                "loan_no": actual_gl_no,
+                                                                "loan_date": effective_v_date,
+                                                                "ornament_details": item.get("ornament_details", ""),
+                                                                "items_count": int(item.get("items_count") or 1),
+                                                                "gross_weight": float(item.get("total_weight", 0.0) or item.get("gross_weight", 0.0) or 0.0),
+                                                                "net_weight": float(item.get("net_weight", 0.0) or 0.0),
+                                                                "purity": item.get("purity", "916 KDM"),
+                                                                "sanctioned_amount": d_gross,
+                                                                "scheme_name": item.get("scheme_name", "Regular"),
+                                                                "interest_rate": float(item.get("interest_rate", 18.0) or 18.0),
+                                                                "market_rate_per_gram": float(item.get("market_rate", 0.0) or 0.0),
+                                                                "staff_name": s_name,
+                                                                "status": "Active",
+                                                                "packet_location": "AT_BRANCH"
+                                                            }
 
-                                                        if num_val > 0:
-                                                            commit_next_gl_number(clean_b_id, num_val)
+                                                            chk_gl = supabase.table("gold_loans").select("id").eq("loan_no", actual_gl_no).execute()
+                                                            if chk_gl.data:
+                                                                supabase.table("gold_loans").update(draft_loan_payload).eq("loan_no", actual_gl_no).execute()
+                                                            else:
+                                                                supabase.table("gold_loans").insert(draft_loan_payload).execute()
 
-                                                    except Exception as d_gl_err:
-                                                        st.error(f"⚠️ gold_loans டிராஃப்ட் சேமிப்பில் பிழை: {d_gl_err}")
+                                                        except Exception as d_gl_err:
+                                                            st.error(f"⚠️ gold_loans டிராஃப்ட் சேமிப்பில் பிழை: {d_gl_err}")
 
                                                 # -------------------------------------------------------------
                                                 # 🌟 B. புதிய FD கணக்கு (FD Open)
