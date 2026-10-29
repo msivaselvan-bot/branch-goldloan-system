@@ -5410,47 +5410,52 @@ if st.session_state.get("logged_in", False):
                             t_type = str(tx.get("transaction_type", "")).strip().lower()
                             remarks_str = str(tx.get("remarks", "")).strip()
                             
-                            # 🌟 திருத்தம்: நகை வாங்குதல் (Purchase / Old Gold) மற்றும் இதர பதிவுகளைத் தவிர்த்து,
-                            # முறையான Pledge அல்லது Loan அல்லது குறிப்பில் 'GL:' உள்ள புதிய கடன்களை மட்டும் எடுத்தல்:
-                            is_strict_pledge = any(k in t_type for k in ["pledge", "loan", "நகைக்கடன்"]) or ("gl:" in remarks_str.lower() and "purchase" not in t_type and'purchase' not in remarks_str.lower())
+                            # 🌟 மிக முக்கியத் திருத்தம்: 'GP' எண்கள் மற்றும் பழைய நகை வாங்குதலை முற்றிலும் தடுத்தல்
+                            gl_no = tx.get("loan_no") or tx.get("gp_number")
+                            if not gl_no and "GL:" in remarks_str:
+                                try:
+                                    gl_no = remarks_str.split("GL:")[1].split("|")[0].strip()
+                                except Exception:
+                                    gl_no = None
                             
-                            # பழைய நகை வாங்கும் பதிவுகளை (Old Gold Purchase) திட்டவட்டமாகத் தவிர்த்தல்:
-                            if "purchase" in t_type or "old gold" in t_type or "பழைய நகை" in t_type:
-                                is_strict_pledge = False
+                            # ஒருவேளை loan_no அல்லது gp_number-ல் 'gp' அல்லது 'purchase' இருந்தால் அதைத் தவிர்க்கவும்
+                            if gl_no:
+                                gl_no_str = str(gl_no).strip().upper()
+                                if "/GP/" in gl_no_str or "GP" in gl_no_str or "PURCHASE" in t_type or "OLD GOLD" in t_type:
+                                    continue # இது பழைய நகை வாங்குதல் அல்லது GP ரசீது, எனவே இதைத் தவிர்க்கவும்
 
-                            if is_strict_pledge:
-                                gl_no = tx.get("loan_no") or tx.get("gp_number")
-                                if not gl_no and "GL:" in remarks_str:
-                                    try:
-                                        gl_no = remarks_str.split("GL:")[1].split("|")[0].strip()
-                                    except Exception:
-                                        gl_no = None
-                                
-                                if gl_no:
-                                    try:
-                                        chk_gl = supabase.table("gold_loans").select("id").eq("loan_no", gl_no).execute()
-                                        if not chk_gl.data:
-                                            missing_list.append({
-                                                "visit_id": tx.get("visit_id"),
-                                                "branch_id": tx.get("branch_id"),
-                                                "customer_id": tx.get("customer_id"),
-                                                "loan_no": gl_no,
-                                                "loan_date": str(tx.get("created_at", datetime.now().isoformat())).split("T")[0],
-                                                "ornament_details": tx.get("ornament_details", remarks_str or "விடுபட்ட கடன் (Synced)"),
-                                                "items_count": int(tx.get("items_count", 1) or 1),
-                                                "gross_weight": float(tx.get("total_weight", 0.0) or tx.get("gross_weight", 0.0) or 0.0),
-                                                "net_weight": float(tx.get("net_weight", 0.0) or 0.0),
-                                                "purity": tx.get("purity", "916 KDM"),
-                                                "sanctioned_amount": float(tx.get("amount", 0.0) or tx.get("paid_amount", 0.0) or 0.0),
-                                                "scheme_name": tx.get("scheme_name", "Regular"),
-                                                "interest_rate": float(tx.get("interest_rate", 18.0) or 18.0),
-                                                "market_rate_per_gram": float(tx.get("market_rate", 0.0) or 0.0),
-                                                "staff_name": tx.get("staff_name", "System"),
-                                                "status": "Active",
-                                                "packet_location": "AT_BRANCH"
-                                            })
-                                    except Exception:
-                                        continue
+                            # உண்மையான நகைக் கடன் பதிவுகளை மட்டும் அனுமதித்தல்:
+                            is_strict_pledge = any(k in t_type for k in ["pledge", "loan", "நகைக்கடன்"]) or ("gl:" in remarks_str.lower())
+                            
+                            if is_strict_pledge and gl_no:
+                                # மீண்டும் ஒருமுறை பாதுகாப்பாக GP உள்ளதா எனச் சோதித்தல்
+                                if "/GP/" in str(gl_no).upper() or "GP" in str(gl_no).upper():
+                                    continue
+
+                                try:
+                                    chk_gl = supabase.table("gold_loans").select("id").eq("loan_no", gl_no).execute()
+                                    if not chk_gl.data:
+                                        missing_list.append({
+                                            "visit_id": tx.get("visit_id"),
+                                            "branch_id": tx.get("branch_id"),
+                                            "customer_id": tx.get("customer_id"),
+                                            "loan_no": gl_no,
+                                            "loan_date": str(tx.get("created_at", datetime.now().isoformat())).split("T")[0],
+                                            "ornament_details": tx.get("ornament_details", remarks_str or "விடுபட்ட கடன் (Synced)"),
+                                            "items_count": int(tx.get("items_count", 1) or 1),
+                                            "gross_weight": float(tx.get("total_weight", 0.0) or tx.get("gross_weight", 0.0) or 0.0),
+                                            "net_weight": float(tx.get("net_weight", 0.0) or 0.0),
+                                            "purity": tx.get("purity", "916 KDM"),
+                                            "sanctioned_amount": float(tx.get("amount", 0.0) or tx.get("paid_amount", 0.0) or 0.0),
+                                            "scheme_name": tx.get("scheme_name", "Regular"),
+                                            "interest_rate": float(tx.get("interest_rate", 18.0) or 18.0),
+                                            "market_rate_per_gram": float(tx.get("market_rate", 0.0) or 0.0),
+                                            "staff_name": tx.get("staff_name", "System"),
+                                            "status": "Active",
+                                            "packet_location": "AT_BRANCH"
+                                        })
+                                except Exception:
+                                    continue
                     
                     st.session_state.missing_loans_cache = missing_list
                     if missing_list:
