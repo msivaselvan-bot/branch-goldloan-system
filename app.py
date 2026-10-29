@@ -1400,7 +1400,11 @@ def get_customer_fd_accounts(customer_id: int):
         return []
 
 
-def send_fast2sms_otp(mobile_no: str, otp_code: str):
+def send_fast2sms_otp(mobile_no: str, otp_code: str, customer_name: str, amount: float, txn_type: str = "receive"):
+    """
+    txn_type: "receive" -> பணம் பெறும்போது (Template ID: 229683 - your OTP to receive Rs.)
+              "pay"     -> பணம் அளிக்கும்போது (Template ID: 229682 - your OTP to pay Rs.)
+    """
     try:
         api_key = "eBGQYanRZNKVCpMSg3KB5kUxY2QhDnOjxesh3Hqr7FOG792XV9wut4TPhQia"
         if "sms" in st.secrets and "fast2sms_api_key" in st.secrets["sms"]:
@@ -1408,40 +1412,42 @@ def send_fast2sms_otp(mobile_no: str, otp_code: str):
 
         clean_mobile = "".join(filter(str.isdigit, str(mobile_no)))[-10:]
         url = "https://www.fast2sms.com/dev/bulkV2"
+        
         headers = {
             "authorization": api_key.strip(),
-            "Content-Type": "application/json",
+            "Content-Type": "application/x-www-form-urlencoded",
             "accept": "application/json",
         }
-        params_dlt = {
+
+        # டெம்ப்ளேட் வரிசை: 
+        # டெம்ப்ளேட் 1 (229683): Dear {Name}, your OTP to receive Rs. {Amount} is {OTP}.
+        # டெம்ப்ளேட் 2 (229682): Dear {Name}, your OTP to pay Rs. {Amount} is {OTP}.
+        # Fast2SMS விதிகளின்படி மாறிகளைப் பைப் (|) குறி கொண்டு பிரிக்க வேண்டும்:
+        formatted_amount = f"{abs(amount):,.2f}"
+        var_values = f"{customer_name}|{formatted_amount}|{otp_code}"
+
+        # பரிவர்த்தனை வகைக்கு ஏற்ப சரியான DLT Message ID-ஐத் தேர்ந்தெடுத்தல்
+        dlt_msg_id = "229683" if txn_type == "receive" else "229682"
+
+        payload = {
             "route": "dlt",
-            "sender_id": "MTHSEG",
-            "message": "219823",
-            "variables_values": str(otp_code),
+            "sender_id": "MUTUSI", # நீங்கள் வழங்கிய sender_id
+            "message": dlt_msg_id,
+            "variables_values": var_values,
             "numbers": clean_mobile,
-            "flash": "0",
+            "flash": "0"
         }
-        resp = requests.get(url, headers=headers, params=params_dlt, timeout=10)
+
+        # POST முறையில் கோரிக்கை அனுப்புதல் (Fast2SMS cURL உதாரணத்தின்படி POST சிறந்தது)
+        resp = requests.post(url, headers=headers, data=payload, timeout=10)
         res_json = resp.json()
+        
         if res_json.get("return") is True:
             return True, "SMS வெற்றிகரமாக அனுப்பப்பட்டது!"
 
-        params_otp = {
-            "route": "otp",
-            "variables_values": str(otp_code),
-            "numbers": clean_mobile,
-        }
-        resp_fallback = requests.get(
-            url, headers=headers, params=params_otp, timeout=10
-        )
-        fallback_json = resp_fallback.json()
-        if fallback_json.get("return") is True:
-            return True, "SMS வெற்றிகரமாக அனுப்பப்பட்டது!"
-
-        err_msg = (
-            res_json.get("message") or fallback_json.get("message") or str(res_json)
-        )
+        err_msg = res_json.get("message") or str(res_json)
         return False, str(err_msg)
+
     except Exception as e:
         return False, f"இணைப்புப் பிழை: {e}"
 
@@ -8784,12 +8790,26 @@ if st.session_state.get("logged_in", False):
                                     if len(c_mob_final) == 10:
                                         otp_code = str(random.randint(1000, 9999))
                                         st.session_state.generated_otp = otp_code
+                                        
+                                        # 🌟 நிகர தொகை மற்றும் வகையைத் தீர்மானித்தல்
+                                        # net_target > 0 என்றால் நாம் வாடிக்கையாளருக்கு பணம் தருகிறோம் (Receive Rs.)
+                                        # net_target < 0 என்றால் வாடிக்கையாளர் நமக்கு பணம் தருகிறார் (Pay Rs.)
+                                        current_net_amt = visit.get("net_amount", 0.0)
+                                        action_type = "receive" if current_net_amt > 0 else "pay"
+                                        
                                         with st.spinner("SMS அனுப்பப்படுகிறது..."):
-                                            sms_success, msg_detail = send_fast2sms_otp(c_mob_final, otp_code)
+                                            sms_success, msg_detail = send_fast2sms_otp(
+                                                mobile_no=c_mob_final, 
+                                                otp_code=otp_code, 
+                                                customer_name=c_name, 
+                                                amount=current_net_amt, 
+                                                txn_type=action_type
+                                            )
+                                            
                                         if sms_success:
-                                            st.success("✅ OTP SMS அனுப்பப்பட்டது!")
+                                            st.success(f"✅ OTP மற்றும் தொகை விவரங்கள் கொண்ட SMS {c_mob_final} எண்ணிற்கு அனுப்பப்பட்டது!")
                                         else:
-                                            st.info(f"💡 சோதனை OTP: **{otp_code}**")
+                                            st.info(f"💡 சோதனை OTP: **{otp_code}** (பிழை விவரம்: {msg_detail})")
                                         st.rerun()
                                     else:
                                         st.error("⚠️ சரியான 10 இலக்க மொபைல் எண் இல்லை. கீழே விலக்குக் கோரிக்கை வைக்கவும்.")
