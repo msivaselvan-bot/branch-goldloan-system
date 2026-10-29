@@ -5384,7 +5384,6 @@ if st.session_state.get("logged_in", False):
                 try:
                     st.info("⏳ பரிவர்த்தனைகளைச் சோதித்து வருகிறது...")
                     
-                    # 🌟 1000-க்கும் மேற்பட்ட தரவுகளைப் பெற Range முறையைப் பயன்படுத்துதல் (Server Disconnected தவிர்ப்பதற்காக)
                     all_txns = []
                     batch_size = 500  
                     start = 0
@@ -5411,9 +5410,15 @@ if st.session_state.get("logged_in", False):
                             t_type = str(tx.get("transaction_type", "")).strip().lower()
                             remarks_str = str(tx.get("remarks", "")).strip()
                             
-                            is_pledge_type = any(k in t_type for k in ["pledge", "loan", "நகைக்கடன்", "new", "புதிய"]) or "gl:" in remarks_str.lower()
+                            # 🌟 திருத்தம்: நகை வாங்குதல் (Purchase / Old Gold) மற்றும் இதர பதிவுகளைத் தவிர்த்து,
+                            # முறையான Pledge அல்லது Loan அல்லது குறிப்பில் 'GL:' உள்ள புதிய கடன்களை மட்டும் எடுத்தல்:
+                            is_strict_pledge = any(k in t_type for k in ["pledge", "loan", "நகைக்கடன்"]) or ("gl:" in remarks_str.lower() and "purchase" not in t_type and'purchase' not in remarks_str.lower())
                             
-                            if is_pledge_type:
+                            # பழைய நகை வாங்கும் பதிவுகளை (Old Gold Purchase) திட்டவட்டமாகத் தவிர்த்தல்:
+                            if "purchase" in t_type or "old gold" in t_type or "பழைய நகை" in t_type:
+                                is_strict_pledge = False
+
+                            if is_strict_pledge:
                                 gl_no = tx.get("loan_no") or tx.get("gp_number")
                                 if not gl_no and "GL:" in remarks_str:
                                     try:
@@ -5449,28 +5454,25 @@ if st.session_state.get("logged_in", False):
                     
                     st.session_state.missing_loans_cache = missing_list
                     if missing_list:
-                        st.success(f"ℹ️ {len(missing_list)} விடுபட்ட கடன்கள் கண்டறியப்பட்டுள்ளன!")
+                        st.success(f"ℹ️ {len(missing_list)} விடுபட்ட உண்மையான நகைக் கடன்கள் கண்டறியப்பட்டுள்ளன!")
                         st.rerun()
                     else:
-                        st.warning("⚠️ விடுபட்ட நகைக் கடன்கள் எதுவும் கிடைக்கவில்லை (அல்லது அனைத்து பரிவர்த்தனைகளும் gold_loans அட்டவணையில் ஏற்கனவே உள்ளன).")
+                        st.warning("⚠️ விடுபட்ட நகைக் கடன்கள் எதுவும் கிடைக்கவில்லை.")
                         
                 except Exception as scan_err:
                     st.error(f"⚠️ தேடுவதில் பிழை: {scan_err}")
 
-            # 🌟 விடுபட்ட கடன்களைக் காட்டுதல் மற்றும் ஒரே கிளிக்கில் சேர்ப்பது
+            # விடுபட்ட கடன்களைக் காட்டுதல் மற்றும் ஒரே கிளிக்கில் சேர்ப்பது
             if "missing_loans_cache" in st.session_state and st.session_state.missing_loans_cache:
                 df_missing = pd.DataFrame(st.session_state.missing_loans_cache)
                 st.write(f"📋 **விடுபட்ட நகைக் கடன்களின் பட்டியல் (மொத்தம்: {len(df_missing)}):**")
                 
-                # சாதாரண டேபிளாகக் காட்டுதல் (பார்வைக்கு)
                 st.dataframe(df_missing[["loan_no", "loan_date", "net_weight", "sanctioned_amount", "ornament_details"]], use_container_width=True)
                 
-                # டிக் செய்யும் தொந்தரவு இல்லாமல் அனைத்தையும் ஒரே கிளிக்கில் gold_loans-ல் சேர்க்கும் பொத்தான்:
                 if st.button("🚀 விடுபட்ட அனைத்துக் கடன்களையும் `gold_loans`-ல் சேர்", type="primary"):
                     try:
                         added_count = 0
                         for item in st.session_state.missing_loans_cache:
-                            # ஏற்கனவே உள்ளதா என மீண்டும் ஒருமுறை உறுதிசெய்துவிட்டு சேமித்தல்
                             chk_exist = supabase.table("gold_loans").select("id").eq("loan_no", item["loan_no"]).execute()
                             if not chk_exist.data:
                                 supabase.table("gold_loans").insert(item).execute()
