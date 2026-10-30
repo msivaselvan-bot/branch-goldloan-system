@@ -11243,111 +11243,110 @@ if st.session_state.get("logged_in", False):
             # நிலை 1: கிளையில் உள்ள பாக்கெட்களை HQ-க்கு அனுப்புதல்
             # -----------------------------------------------------------------
             with sub_bp1:
-                            st.markdown(
-                                "##### 🚚 கிளையில் உள்ள பாக்கெட்களை தலைமையகத்திற்கு அனுப்புதல் (Bulk Dispatch)"
-                            )
-                            
-                            # 🌟 branch_id பாதுகாப்பாக integer-ஆக மாற்றுதல்
-                            raw_b_id = st.session_state.get("branch_id")
-                            try:
-                                clean_b_id = int(raw_b_id) if raw_b_id not in (None, "", "null") else 2
-                            except Exception:
-                                clean_b_id = 2
+                st.markdown(
+                    "##### 🚚 கிளையில் உள்ள பாக்கெட்களை தலைமையகத்திற்கு அனுப்புதல் (Bulk Dispatch)"
+                )
+                
+                # 🌟 branch_id பாதுகாப்பாக integer-ஆக மாற்றுதல்
+                raw_b_id = st.session_state.get("branch_id")
+                try:
+                    clean_b_id = int(raw_b_id) if raw_b_id not in (None, "", "null") else 2
+                except Exception:
+                    clean_b_id = 2
 
-                            # 🌟 3000+ பதிவுகளில் இருந்தும் AT_BRANCH பாக்கெட்டுகளை முழுமையாகப் பெற Range முறையைப் பயன்படுத்துதல்
-                            loans_to_send = []
-                            try:
-                                batch_size = 1000
-                                start = 0
-                                while True:
-                                    res = (
-                                        supabase.table("gold_loans")
-                                        .select("*")
-                                        .eq("packet_location", "AT_BRANCH")
-                                        .range(start, start + batch_size - 1)
-                                        .execute()
-                                    )
-                                    chunk_data = res.data or []
-                                    if not chunk_data:
-                                        break
-                                    
-                                    for item in chunk_data:
-                                        # தற்போதைய கிளைக்குரிய பாக்கெட்டுகள் மட்டும்
-                                        if str(item.get("branch_id")) == str(clean_b_id):
-                                            loans_to_send.append(item)
+                # 🌟 3000+ பதிவுகளில் இருந்தும் AT_BRANCH பாக்கெட்டுகளை முழுமையாகப் பெற Range முறையைப் பயன்படுத்துதல்
+                loans_to_send = []
+                try:
+                    batch_size = 1000
+                    start = 0
+                    while True:
+                        res = (
+                            supabase.table("gold_loans")
+                            .select("*")
+                            .eq("packet_location", "AT_BRANCH")
+                            .range(start, start + batch_size - 1)
+                            .execute()
+                        )
+                        chunk_data = res.data or []
+                        if not chunk_data:
+                            break
+                        
+                        for item in chunk_data:
+                            # தற்போதைய கிளைக்குரிய பாக்கெட்டுகள் மட்டும்
+                            if str(item.get("branch_id")) == str(clean_b_id):
+                                loans_to_send.append(item)
 
-                                    if len(chunk_data) < batch_size:
-                                        break
-                                    start += batch_size
-                            except Exception as e:
-                                st.error(f"⚠️ நகைக்கடன் பாக்கெட்டுகளை எடுப்பதில் பிழை: {e}")
-                                # ஒருவேளை பிழை ஏற்பட்டால் பழைய முறையைப் பயன்படுத்துதல்
-                                loans_to_send = [l for l in b_loans if l.get("packet_location", "AT_BRANCH") == "AT_BRANCH"]
+                        if len(chunk_data) < batch_size:
+                            break
+                        start += batch_size
+                except Exception as e:
+                    st.error(f"⚠️ நகைக்கடன் பாக்கெட்டுகளை எடுப்பதில் பிழை: {e}")
+                    loans_to_send = [l for l in b_loans if l.get("packet_location", "AT_BRANCH") == "AT_BRANCH"]
 
-                            gps_to_send = [
-                                g
-                                for g in b_gps
-                                if g.get("packet_location", "AT_BRANCH") == "AT_BRANCH"
-                            ]
+                gps_to_send = [
+                    g
+                    for g in b_gps
+                    if g.get("packet_location", "AT_BRANCH") == "AT_BRANCH"
+                ]
 
-                            if not loans_to_send and not gps_to_send:
-                                st.info(
-                                    "தற்போது கிளையில் தலைமையகத்திற்கு அனுப்ப வேண்டிய பாக்கெட்கள் ஏதும் இல்லை."
-                                )
+                if not loans_to_send and not gps_to_send:
+                    st.info(
+                        "தற்போது கிளையில் தலைமையகத்திற்கு அனுப்ப வேண்டிய பாக்கெட்கள் ஏதும் இல்லை."
+                    )
+                else:
+                    # 1. நகைக்கடன் பாக்கெட்டுகளை பல்க் அனுப்பும் வசதி
+                    if loans_to_send:
+                        st.write(f"🪙 **நகைக்கடன் பாக்கெட்கள் ({len(loans_to_send)}):**")
+                        
+                        df_b_loans = pd.DataFrame(loans_to_send)
+                        df_b_loans.insert(0, "Select", False)
+                        
+                        show_cols_bl = ["Select", "loan_no", "gross_weight", "ornament_details"]
+                        avail_bl = [c for c in show_cols_bl if c in df_b_loans.columns]
+                        
+                        edited_b_loans = st.data_editor(
+                            df_b_loans[avail_bl],
+                            column_config={
+                                "Select": st.column_config.CheckboxColumn("Select", help="அனுப்ப வேண்டியதைத் டிக் செய்யவும்"),
+                                "loan_no": st.column_config.TextColumn("கடன் எண்", disabled=True),
+                                "gross_weight": st.column_config.NumberColumn("எடை (g)", disabled=True),
+                                "ornament_details": st.column_config.TextColumn("நகை விவரம்", disabled=True),
+                            },
+                            hide_index=True,
+                            use_container_width=True,
+                            key="branch_bulk_disp_loans"
+                        )
+                        
+                        selected_b_loans = edited_b_loans[edited_b_loans["Select"] == True]
+                        
+                        if st.button("🚚 தேர்வு செய்த நகைக்கடன் பாக்கெட்டுகளை HQ-க்கு அனுப்பு", type="primary", key="btn_br_bulk_l"):
+                            if selected_b_loans.empty:
+                                st.warning("⚠️ தயவுசெய்து குறைந்தபட்சம் ஒரு பாக்கெட்டையாவது டிக் செய்யவும்!")
                             else:
-                                # 1. நகைக்கடன் பாக்கெட்டுகளை பல்க் அனுப்பும் வசதி
-                                if loans_to_send:
-                                    st.write(f"🪙 **நகைக்கடன் பாக்கெட்கள் ({len(loans_to_send)}):**")
+                                count_l = 0
+                                sent_loan_numbers = []
+                                
+                                for idx, row in selected_b_loans.iterrows():
+                                    orig_id = df_b_loans.loc[idx, "id"]
+                                    loan_number_str = df_b_loans.loc[idx, "loan_no"]
                                     
-                                    df_b_loans = pd.DataFrame(loans_to_send)
-                                    df_b_loans.insert(0, "Select", False)
+                                    supabase.table("gold_loans").update(
+                                        {
+                                            "packet_location": "IN_TRANSIT_TO_HQ",
+                                            "packet_dispatched_by": staff_uname,
+                                            "packet_updated_at": datetime.now().isoformat(),
+                                        }
+                                    ).eq("id", orig_id).execute()
                                     
-                                    show_cols_bl = ["Select", "loan_no", "gross_weight", "ornament_details"]
-                                    avail_bl = [c for c in show_cols_bl if c in df_b_loans.columns]
-                                    
-                                    edited_b_loans = st.data_editor(
-                                        df_b_loans[avail_bl],
-                                        column_config={
-                                            "Select": st.column_config.CheckboxColumn("Select", help="அனுப்ப வேண்டியதைத் டிக் செய்யவும்"),
-                                            "loan_no": st.column_config.TextColumn("கடன் எண்", disabled=True),
-                                            "gross_weight": st.column_config.NumberColumn("எடை (g)", disabled=True),
-                                            "ornament_details": st.column_config.TextColumn("நகை விவரம்", disabled=True),
-                                        },
-                                        hide_index=True,
-                                        use_container_width=True,
-                                        key="branch_bulk_disp_loans"
-                                    )
-                                    
-                                    selected_b_loans = edited_b_loans[edited_b_loans["Select"] == True]
-                                    
-                                    if st.button("🚚 தேர்வு செய்த நகைக்கடன் பாக்கெட்டுகளை HQ-க்கு அனுப்பு", type="primary", key="btn_br_bulk_l"):
-                                        if selected_b_loans.empty:
-                                            st.warning("⚠️ தயவுசெய்து குறைந்தபட்சம் ஒரு பாக்கெட்டையாவது டிக் செய்யவும்!")
-                                        else:
-                                            count_l = 0
-                                            sent_loan_numbers = []
-                                            
-                                            for idx, row in selected_b_loans.iterrows():
-                                                orig_id = df_b_loans.loc[idx, "id"]
-                                                loan_number_str = df_b_loans.loc[idx, "loan_no"]
-                                                
-                                                supabase.table("gold_loans").update(
-                                                    {
-                                                        "packet_location": "IN_TRANSIT_TO_HQ",
-                                                        "packet_dispatched_by": staff_uname,
-                                                        "packet_updated_at": datetime.now().isoformat(),
-                                                    }
-                                                ).eq("id", orig_id).execute()
-                                                
-                                                count_l += 1
-                                                sent_loan_numbers.append(str(loan_number_str))
-                                            
-                                            st.balloons()
-                                            st.success(f"🎉 வெற்றிகரமாக {count_l} நகைக்கடன் பாக்கெட்டுகள் தலைமையகத்திற்கு அனுப்பப்பட்டன!")
-                                            st.info(f"📋 **அனுப்பப்பட்ட எண்கள்:** {', '.join(sent_loan_numbers)}")
-                                            
-                                            if st.button("🔄 திரையைப் புதுப்பி (Refresh Page)", key="ref_btn_l"):
-                                                st.rerun()
+                                    count_l += 1
+                                    sent_loan_numbers.append(str(loan_number_str))
+                                
+                                st.balloons()
+                                st.success(f"🎉 வெற்றிகரமாக {count_l} நகைக்கடன் பாக்கெட்டுகள் தலைமையகத்திற்கு அனுப்பப்பட்டன!")
+                                st.info(f"📋 **அனுப்பப்பட்ட எண்கள்:** {', '.join(sent_loan_numbers)}")
+                                
+                                if st.button("🔄 திரையைப் புதுப்பி (Refresh Page)", key="ref_btn_l"):
+                                    st.rerun()
                 # =========================================================================
                 # 🌟 2. ஜிபி (GP) கொள்முதல் பாக்கெட்டுகளை பல்க் அனுப்பும் வசதி (இதனை இங்கே இணைக்கவும்)
                 # =========================================================================
