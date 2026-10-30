@@ -3499,19 +3499,29 @@ if st.session_state.get("logged_in", False):
                 else:
                     bank_options = ["HDFC Bank", "Kotak Mahindra Bank", "Indian Overseas Bank", "State Bank of India", "KVB"]
 
-                # பெட்டகத்தில் உள்ளவை (தேவைப்பட்டால் மட்டும் எடுக்கும் கேச்)
+                # பெட்டகத்தில் உள்ளவை (3000+ பதிவுகளில் இருந்து முழுமையாக எடுக்க Range முறையைப் பயன்படுத்துதல்)
                 @st.cache_data(ttl=60)
                 def get_vault_loans_cached():
                     try:
-                        return (
-                            supabase.table("gold_loans")
-                            .select("id, loan_no, branch_id, gross_weight, ornament_details, packet_location")
-                            .eq("packet_location", "AT_HQ_VAULT")
-                            .order("id", desc=True)
-                            .limit(100)
-                            .execute()
-                            .data or []
-                        )
+                        all_vault_loans = []
+                        batch_size = 1000
+                        start = 0
+                        while True:
+                            res = (
+                                supabase.table("gold_loans")
+                                .select("id, loan_no, branch_id, gross_weight, ornament_details, packet_location")
+                                .eq("packet_location", "AT_HQ_VAULT")
+                                .range(start, start + batch_size - 1)
+                                .execute()
+                            )
+                            chunk_data = res.data or []
+                            if not chunk_data:
+                                break
+                            all_vault_loans.extend(chunk_data)
+                            if len(chunk_data) < batch_size:
+                                break
+                            start += batch_size
+                        return all_vault_loans
                     except Exception:
                         return []
 
