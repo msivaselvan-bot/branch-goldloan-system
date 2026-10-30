@@ -3685,7 +3685,7 @@ if st.session_state.get("logged_in", False):
                 )
 
                 with adm_sub1:
-                    st.markdown("##### 🚨 வாடிக்கையாளர் மீட்புக் கோரிக்கைகள் (Customer Release Requests)")
+                    st.markdown("##### 🚨 கிளைகளின் அவசர மீட்புக் கோரிக்கைகள் (Customer Release Requests)")
                     
                     # 3000+ பதிவுகளிலிருந்து அவசரக் கோரிக்கைகளை எடுப்பது
                     urgent_requests = []
@@ -3739,7 +3739,6 @@ if st.session_state.get("logged_in", False):
                                     rem_text = uq.get("release_request_remarks") or "குறிப்பு இல்லை"
                                     st.info(f"💬 **கிளைக் குறிப்பு:** {rem_text}")
                                     
-                                    # பாக்கெட் லாக்கரில் இருந்தால் வங்கி விபரங்களைக் காட்டுதல்
                                     if is_in_locker:
                                         st.warning(
                                             "⚠️ **இந்தப் பாக்கெட் தற்போது வங்கி லாக்கரில் உள்ளது!**\n\n"
@@ -3764,12 +3763,11 @@ if st.session_state.get("logged_in", False):
                                         except Exception as rej_err:
                                             st.error(f"நிராகரிப்பதில் பிழை: {rej_err}")
 
-                                    # 2. அனுமதி / ஒப்புதல் அளித்தல் அல்லது கிளைக்கு அனுப்புதல் (லாக்கரில் இருந்தால் தடை செய்யப்படும்)
+                                    # 2. அனுமதி அளித்தல் (Approve)
                                     if is_in_locker:
-                                        st.button("🔒 லாக்கரில் உள்ளது (Locked)", disabled=True, key=f"btn_lock_admin_{uq['id']}", use_container_width=True, help="பாக்கெட் வங்கி லாக்கரில் உள்ளதால் தலைமையகத்திற்கு வந்த பின்பே அனுமதி அளிக்க முடியும்!")
+                                        st.button("🔒 லாக்கரில் உள்ளது", disabled=True, key=f"btn_lock_admin_{uq['id']}", use_container_width=True)
                                     else:
                                         if is_hq_packet:
-                                            # HQ-லிருந்து வந்த பாக்கெட்டுகளுக்கு கிளைக்கு அனுப்பி வைக்க அல்லது ஒப்புதல் அளிக்க
                                             if st.button("🚚 கிளைக்கு அனுப்பி வை", key=f"tmgmt_disp_b_{uq['id']}", type="primary", use_container_width=True):
                                                 try:
                                                     supabase.table("gold_loans").update({
@@ -3778,25 +3776,22 @@ if st.session_state.get("logged_in", False):
                                                         "release_request_remarks": None,
                                                         "packet_updated_at": datetime.now().isoformat()
                                                     }).eq("id", uq["id"]).execute()
-
-                                                    st.toast(f"✅ {uq.get('loan_no')} பாக்கெட் கிளைக்கு அனுப்பப்பட்டது!", icon="🚚")
+                                                    st.toast("✅ பாக்கெட் கிளைக்கு அனுப்பப்பட்டது!", icon="🚚")
                                                     st.rerun()
                                                 except Exception as disp_err:
-                                                    st.error(f"அனுப்புவதில் பிழை: {disp_err}")
+                                                    st.error(f"பிழை: {disp_err}")
                                         else:
-                                            # கிளை அடகு பாக்கெட்டுகளுக்கு நேரடி மீட்புக்கு அனுமதி (Approve) அளித்தல்
+                                            # 🌟 கிளை அடகு பாக்கெட்டுகளுக்கு நேரடி மீட்புக்கு அனுமதி அளித்தல்
                                             if st.button("✅ நேரடி மீட்புக்கு அனுமதி அளி", key=f"adm_app_rel_{uq['id']}", type="primary", use_container_width=True):
                                                 try:
                                                     supabase.table("gold_loans").update({
-                                                        "release_requested": False,  # அட்மின் அனுமதி வழங்கப்பட்டது, கிளை டெலிவரி செய்யலாம்
+                                                        "release_requested": False,  # அனுமதி வழங்கப்பட்டுவிட்டது, கிளை டெலிவரி செய்யலாம்
                                                         "packet_updated_at": datetime.now().isoformat()
                                                     }).eq("id", uq["id"]).execute()
                                                     st.success("✅ நேரடி மீட்புக்கு அனுமதி வழங்கப்பட்டது!")
                                                     st.rerun()
                                                 except Exception as app_err:
-                                                    st.error(f"அனுமதி அளிப்பதில் பிழை: {app_err}")
-
-                                st.divider()
+                                                    st.error(f"பிழை: {app_err}")
 
                 with adm_sub2:
                     st.markdown("##### 🔄 கிளைகள் திருப்பி அனுப்ப அனுமதி கோரும் பாக்கெட்கள்")
