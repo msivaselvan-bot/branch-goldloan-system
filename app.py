@@ -11491,11 +11491,14 @@ if st.session_state.get("logged_in", False):
                 st.markdown(
                     "##### 🤝 வாடிக்கையாளரிடம் ஒப்படைத்தல் / திருப்பி அனுப்புதல்"
                 )
-                transit_to_br = [
-                    l
-                    for l in b_loans
-                    if l.get("packet_location") == "IN_TRANSIT_TO_BRANCH"
-                ]
+                
+                # 🌟 திருத்தம்: 'IN_TRANSIT_TO_HQ' ஐத் தவிர்த்துவிட்டு, கிளைக்கு வந்தடைந்த 'IN_TRANSIT_TO_BRANCH' பாக்கெட்டுகளை மட்டும் எடுத்தல்
+                transit_to_br = []
+                for l in b_loans:
+                    loc = str(l.get("packet_location", "")).strip().upper()
+                    # HQ-க்கு செல்லும் பாக்கெட்டுகளை (IN_TRANSIT_TO_HQ) முற்றிலுமாகத் தவிர்த்தல்
+                    if loc != "IN_TRANSIT_TO_HQ" and ("IN_TRANSIT_TO_BRANCH" in loc or "TRANSIT" in loc or "DISPATCH" in loc):
+                        transit_to_br.append(l)
 
                 if not transit_to_br:
                     st.info(
