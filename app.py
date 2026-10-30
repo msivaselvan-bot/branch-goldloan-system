@@ -11619,19 +11619,24 @@ if st.session_state.get("logged_in", False):
                     st.info("கிளைப் பெட்டகத்தில் பாக்கெட்டுகள் ஏதும் இல்லை.")
                 else:
                     for ab in at_branch_loans:
-                        # packet_received_by உள்ளதா எனப் பார்த்து இது HQ-லிருந்து வந்ததா என அறியலாம்
                         is_from_hq = bool(ab.get("packet_received_by"))
                         ret_status = ab.get("return_request_status", "NONE")
                         rel_req = ab.get("release_requested", False)
+                        source_txt = "HQ-லிருந்து வந்தது" if is_from_hq else "கிளை அடகு"
 
-                        with st.expander(f"🪙 **{ab['loan_no']}** | எடை: {ab.get('gross_weight', 0)}g | மூலம்: {'HQ-லிருந்து வந்தது' if is_from_hq else 'கிளை அடகு'}"):
+                        with st.expander(f"🪙 **{ab['loan_no']}** | எடை: {ab.get('gross_weight', 0)}g | மூலம்: {source_txt}"):
                             
-                            col_c1, col_c2 = st.columns(2)
-                            
+                            # 'HQ-லிருந்து வந்தது' மற்றும் 'கிளை அடகு' பாக்கெட்டுகளுக்கு ஏற்ப பத்திகளைப் பிரித்தல்
+                            if is_from_hq:
+                                col_c1, col_c2 = st.columns(2)
+                            else:
+                                col_c1 = st.container() # கிளை அடகிற்குத் திருப்புதல் பகுதி கிடையாது, எனவே முழு அகலம்
+                                col_c2 = None
+
+                            # 1. வாடிக்கையாளரிடம் ஒப்படைக்கும் பகுதி
                             with col_c1:
                                 st.write("✅ **வாடிக்கையாளரிடம் ஒப்படைத்தல்:**")
                                 if is_from_hq:
-                                    # HQ-லிருந்து வந்த பாக்கெட்டுகளுக்கு அட்மின் அனுமதி தேவையில்லை (நேரடியாக முடிக்கலாம்)
                                     if st.button("🤝 வாடிக்கையாளரிடம் ஒப்படைக்கப்பட்டது (HQ Packet)", key=f"deliv_hq_{ab['id']}"):
                                         supabase.table("gold_loans").update({
                                             "packet_location": "DELIVERED",
@@ -11640,7 +11645,6 @@ if st.session_state.get("logged_in", False):
                                         st.success("✅ நகை வாடிக்கையாளரிடம் ஒப்படைக்கப்பட்டது!")
                                         st.rerun()
                                 else:
-                                    # கிளையிலேயே அடகு வைத்த பாக்கெட்டுகளுக்கு அட்மின் அனுமதி வேண்டும்
                                     if not rel_req:
                                         if st.button("🚨 அட்மினிடம் நேரடி மீட்பு அனுமதி கோரு", key=f"req_rel_{ab['id']}"):
                                             supabase.table("gold_loans").update({
@@ -11661,31 +11665,33 @@ if st.session_state.get("logged_in", False):
                                             st.success("🎉 நகை வாடிக்கையாளரிடம் ஒப்படைக்கப்பட்டு கணக்கு முடிக்கப்பட்டது!")
                                             st.rerun()
 
-                            with col_c2:
-                                st.write("🔙 **தலைமையகத்திற்குத் திருப்பி அனுப்புதல்:**")
-                                if ret_status == "NONE":
-                                    with st.form(key=f"ret_form_{ab['id']}"):
-                                        r_reason = st.text_input("காரணம்:", placeholder="வாடிக்கையாளர் வரவில்லை...")
-                                        if st.form_submit_button("📩 அட்மினிடம் திருப்புதல் அனுமதி கோரு"):
-                                            if r_reason.strip():
-                                                supabase.table("gold_loans").update({
-                                                    "return_request_status": "REQUESTED",
-                                                    "return_reason": r_reason.strip(),
-                                                    "return_requested_at": datetime.now().isoformat()
-                                                }).eq("id", ab["id"]).execute()
-                                                st.warning("அட்மின் ஒப்புதலுக்காக அனுப்பப்பட்டுள்ளது!")
-                                                st.rerun()
-                                elif ret_status == "REQUESTED":
-                                    st.warning("⏳ அட்மின் அனுமதிக்காகக் காத்திருக்கிறது...")
-                                elif ret_status == "APPROVED":
-                                    if st.button("🚚 HQ-க்கு அனுப்பி வை (Dispatch)", key=f"disp_hq_{ab['id']}"):
-                                        supabase.table("gold_loans").update({
-                                            "packet_location": "IN_TRANSIT_TO_HQ",
-                                            "return_request_status": "NONE",
-                                            "packet_updated_at": datetime.now().isoformat()
-                                        }).eq("id", ab["id"]).execute()
-                                        st.success("தலைமையகத்திற்கு அனுப்பப்பட்டது!")
-                                        st.rerun()
+                            # 2. தலைமையகத்திற்குத் திருப்பி அனுப்பும் பகுதி (HQ-லிருந்து வந்த பாக்கெட்டுகளுக்கு மட்டும்)
+                            if is_from_hq and col_c2:
+                                with col_c2:
+                                    st.write("🔙 **தலைமையகத்திற்குத் திருப்பி அனுப்புதல்:**")
+                                    if ret_status == "NONE":
+                                        with st.form(key=f"ret_form_{ab['id']}"):
+                                            r_reason = st.text_input("காரணம்:", placeholder="வாடிக்கையாளர் வரவில்லை...")
+                                            if st.form_submit_button("📩 அட்மினிடம் திருப்புதல் அனுமதி கோரு"):
+                                                if r_reason.strip():
+                                                    supabase.table("gold_loans").update({
+                                                        "return_request_status": "REQUESTED",
+                                                        "return_reason": r_reason.strip(),
+                                                        "return_requested_at": datetime.now().isoformat()
+                                                    }).eq("id", ab["id"]).execute()
+                                                    st.warning("அட்மின் ஒப்புதலுக்காக அனுப்பப்பட்டுள்ளது!")
+                                                    st.rerun()
+                                    elif ret_status == "REQUESTED":
+                                        st.warning("⏳ அட்மின் அனுமதிக்காகக் காத்திருக்கிறது...")
+                                    elif ret_status == "APPROVED":
+                                        if st.button("🚚 HQ-க்கு அனுப்பி வை (Dispatch)", key=f"disp_hq_{ab['id']}"):
+                                            supabase.table("gold_loans").update({
+                                                "packet_location": "IN_TRANSIT_TO_HQ",
+                                                "return_request_status": "NONE",
+                                                "packet_updated_at": datetime.now().isoformat()
+                                            }).eq("id", ab["id"]).execute()
+                                            st.success("தலைமையகத்திற்கு அனுப்பப்பட்டது!")
+                                            st.rerun()
 
         elif selected_section == "🏦 நிதிப் பரிமாற்ற ஒப்புதல்":
             st.subheader("🏦 தலைமையக & கிளை நிதிப் பரிமாற்ற ஒப்புதல் மேசை")
