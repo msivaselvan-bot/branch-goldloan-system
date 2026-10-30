@@ -3785,13 +3785,13 @@ if st.session_state.get("logged_in", False):
                                             if st.button("✅ நேரடி மீட்புக்கு அனுமதி அளி", key=f"adm_app_rel_{uq['id']}", type="primary", use_container_width=True):
                                                 try:
                                                     supabase.table("gold_loans").update({
-                                                        "release_requested": False,  # அனுமதி வழங்கப்பட்டுவிட்டது, கிளை டெலிவரி செய்யலாம்
+                                                        "release_approved": True,  # 🌟 அட்மின் அனுமதி வழங்கப்பட்டது என குறிப்பது
                                                         "packet_updated_at": datetime.now().isoformat()
                                                     }).eq("id", uq["id"]).execute()
                                                     st.success("✅ நேரடி மீட்புக்கு அனுமதி வழங்கப்பட்டது!")
                                                     st.rerun()
                                                 except Exception as app_err:
-                                                    st.error(f"பிழை: {app_err}")
+                                                    st.error(f"அனுமதி அளிப்பதில் பிழை: {app_err}")
 
                 with adm_sub2:
                     st.markdown("##### 🔄 கிளைகள் திருப்பி அனுப்ப அனுமதி கோரும் பாக்கெட்கள்")
@@ -11680,25 +11680,34 @@ if st.session_state.get("logged_in", False):
                                             st.success("✅ நகை வாடிக்கையாளரிடம் ஒப்படைக்கப்பட்டது!")
                                             st.rerun()
                                     else:
+                                        # 🌟 அட்மின் அனுமதி வழங்கப்பட்டுள்ளதா என்பதைச் சரிபார்க்க 'release_approved' அல்லது வேறு கொடியைப் பயன்படுத்துதல்
+                                        is_approved_by_admin = ab.get("release_approved", False)
+                                        
                                         if not rel_req:
                                             if st.button("🚨 அட்மினிடம் நேரடி மீட்பு அனுமதி கோரு", key=f"req_rel_{ab['id']}"):
                                                 supabase.table("gold_loans").update({
                                                     "release_requested": True,
+                                                    "release_approved": False,  # ஆரம்பத்தில் அனுமதி இல்லை
                                                     "release_request_date": datetime.now().isoformat(),
                                                     "packet_updated_at": datetime.now().isoformat()
                                                 }).eq("id", ab["id"]).execute()
                                                 st.warning("⏳ அட்மினிடம் அனுமதி கோரப்பட்டுள்ளது!")
                                                 st.rerun()
                                         else:
-                                            st.info("⏳ அட்மின் அனுமதிக்காகக் காத்திருக்கிறது...")
-                                            if st.button("🤝 அட்மின் அனுமதி பெற்றது - ஒப்படைத்து முடி", key=f"finish_rel_{ab['id']}", type="primary"):
-                                                supabase.table("gold_loans").update({
-                                                    "packet_location": "DELIVERED",
-                                                    "release_requested": False,
-                                                    "packet_updated_at": datetime.now().isoformat()
-                                                }).eq("id", ab["id"]).execute()
-                                                st.success("🎉 நகை வாடிக்கையாளரிடம் ஒப்படைக்கப்பட்டு கணக்கு முடிக்கப்பட்டது!")
-                                                st.rerun()
+                                            if not is_approved_by_admin:
+                                                # அட்மின் இன்னும் அனுமதி அளிக்கவில்லை என்றால் இது காட்டும்
+                                                st.info("⏳ அட்மின் அனுமதிக்காகக் காத்திருக்கிறது...")
+                                            else:
+                                                # அட்மின் அனுமதி அளித்த பிறகு மட்டுமே இந்த பட்டன் வெளிப்படும்
+                                                if st.button("🤝 அட்மின் அனுமதி பெற்றது - ஒப்படைத்து முடி", key=f"finish_rel_{ab['id']}", type="primary"):
+                                                    supabase.table("gold_loans").update({
+                                                        "packet_location": "DELIVERED",
+                                                        "release_requested": False,
+                                                        "release_approved": False,
+                                                        "packet_updated_at": datetime.now().isoformat()
+                                                    }).eq("id", ab["id"]).execute()
+                                                    st.success("🎉 நகை வாடிக்கையாளரிடம் ஒப்படைக்கப்பட்டு கணக்கு முடிக்கப்பட்டது!")
+                                                    st.rerun()
 
                                 if is_from_hq and col_c2:
                                     with col_c2:
