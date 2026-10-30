@@ -11377,7 +11377,14 @@ if st.session_state.get("logged_in", False):
                         for item in chunk_data:
                             # தற்போதைய கிளைக்குரிய பாக்கெட்டுகள் மட்டும்
                             if str(item.get("branch_id")) == str(clean_b_id):
-                                loans_to_send.append(item)
+                                is_hq_pkt = bool(item.get("packet_received_by"))
+                                ret_stat = item.get("return_request_status", "NONE")
+                                
+                                # 🌟 விதிமுறை: 
+                                # 1. கிளை அடகு பாக்கெட்டுகள் (Not from HQ) எப்போது வேண்டுமானாலும் அனுப்பலாம்.
+                                # 2. HQ-லிருந்து வந்த பாக்கெட்டாக இருந்தால், அட்மின் அனுமதி 'APPROVED' பெற்றிருக்க வேண்டும்.
+                                if not is_hq_pkt or (is_hq_pkt and ret_stat == "APPROVED"):
+                                    loans_to_send.append(item)
 
                         if len(chunk_data) < batch_size:
                             break
@@ -11436,6 +11443,7 @@ if st.session_state.get("logged_in", False):
                                     supabase.table("gold_loans").update(
                                         {
                                             "packet_location": "IN_TRANSIT_TO_HQ",
+                                            "return_request_status": "NONE",  # அனுப்பிய பின் நிலையை மீட்டமைத்தல்
                                             "packet_dispatched_by": staff_uname,
                                             "packet_updated_at": datetime.now().isoformat(),
                                         }
