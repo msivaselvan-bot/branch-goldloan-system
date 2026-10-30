@@ -7419,7 +7419,28 @@ if st.session_state.get("logged_in", False):
                                         otp_c = str(random.randint(1000, 9999))
                                         st.session_state[f"active_draft_otp_{d_vno}"] = otp_c
                                         try:
-                                            send_fast2sms_otp(draft_mobile, otp_c)
+                                            # 🌟 டிராஃப்ட் வருகையிலிருந்து தொகை மற்றும் வகையைத் தீர்மானித்தல்
+                                            draft_paid_amt = float(selected_draft.get("total_paid", 0.0) or 0.0)
+                                            draft_recv_amt = float(selected_draft.get("total_received", 0.0) or 0.0)
+                                            
+                                            # ஒருவேளை paid_amt அதிகமாக இருந்தால் வாடிக்கையாளருக்கு பணம் அளிப்பது ("pay"), 
+                                            # இல்லையெனில் வாடிக்கையாளரிடமிருந்து பணம் பெறுவது ("receive")
+                                            if draft_paid_amt > 0:
+                                                d_amount = draft_paid_amt
+                                                d_txn_type = "pay"
+                                            else:
+                                                d_amount = draft_recv_amt if draft_recv_amt > 0 else float(selected_draft.get("net_cash_amount", 0.0) or 0.0)
+                                                d_txn_type = "receive"
+
+                                            # 🌟 புதிய DLT ஃபங்க்ஷனை அனைத்து விபரங்களுடனும் அழைத்தல்
+                                            send_fast2sms_otp(
+                                                mobile_no=draft_mobile, 
+                                                otp_code=otp_c, 
+                                                customer_name=cust_name, 
+                                                amount=d_amount, 
+                                                txn_type=d_txn_type
+                                            )
+                                            
                                             st.success(f"✅ OTP வெற்றிகரமாக {draft_mobile} எண்ணிற்கு அனுப்பப்பட்டது!")
                                         except Exception as sms_err:
                                             st.error(f"❌ SMS பிழை: {sms_err}")
