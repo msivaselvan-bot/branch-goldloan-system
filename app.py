@@ -3716,9 +3716,9 @@ if st.session_state.get("logged_in", False):
                         st.warning(f"⚠️ கிளைகள் அனுப்பிய அவசரக் கோரிக்கைகள் எண்ணிக்கை: **{len(urgent_requests)}**")
                         
                         for uq in urgent_requests:
-                            # 🌟 உண்மையான இருப்பிடத்தை அடிப்படையாக வைத்து நிலை கண்டறிதல்
                             p_loc = str(uq.get("packet_location", "")).strip().upper()
                             is_in_locker = (p_loc == "IN_BANK_LOCKER")
+                            is_hq_packet = bool(uq.get("packet_received_by"))
                             
                             loc_txt = (
                                 "🏢 HQ பெட்டகத்தில் உள்ளது (AT_HQ_VAULT)"
@@ -3732,6 +3732,7 @@ if st.session_state.get("logged_in", False):
                                     st.error(f"🏷️ **{uq['loan_no']}**")
                                     st.write(f"கிளை: **{b_map_name.get(uq.get('branch_id'), '-')}**")
                                     st.write(f"எடை: **{uq.get('gross_weight')}g**")
+                                    st.caption(f"மூலம்: {'HQ-லிருந்து வந்தது' if is_hq_packet else 'கிளை அடகு'}")
                                 
                                 with u2:
                                     st.write(f"உண்மையான இருப்பிடம்: **{loc_txt}**")
@@ -3751,7 +3752,7 @@ if st.session_state.get("logged_in", False):
                                     st.caption(f"கோரப்பட்ட நேரம்:\n{str(uq.get('release_request_date', ''))[:16]}")
                                     
                                     # 1. கோரிக்கையை நிராகரிக்க (Reject)
-                                    if st.button("❌ கோரிக்கையை நிராகри", key=f"tmgmt_rej_{uq['id']}", use_container_width=True):
+                                    if st.button("❌ கோரிக்கையை நிராகரி", key=f"tmgmt_rej_{uq['id']}", use_container_width=True):
                                         try:
                                             supabase.table("gold_loans").update({
                                                 "release_requested": False,
@@ -3762,6 +3763,40 @@ if st.session_state.get("logged_in", False):
                                             st.rerun()
                                         except Exception as rej_err:
                                             st.error(f"நிராகரிப்பதில் பிழை: {rej_err}")
+
+                                    # 2. அனுமதி / ஒப்புதல் அளித்தல் அல்லது கிளைக்கு அனுப்புதல் (லாக்கரில் இருந்தால் தடை செய்யப்படும்)
+                                    if is_in_locker:
+                                        st.button("🔒 லாக்கரில் உள்ளது (Locked)", disabled=True, key=f"btn_lock_admin_{uq['id']}", use_container_width=True, help="பாக்கெட் வங்கி லாக்கரில் உள்ளதால் தலைமையகத்திற்கு வந்த பின்பே அனுமதி அளிக்க முடியும்!")
+                                    else:
+                                        if is_hq_packet:
+                                            # HQ-லிருந்து வந்த பாக்கெட்டுகளுக்கு கிளைக்கு அனுப்பி வைக்க அல்லது ஒப்புதல் அளிக்க
+                                            if st.button("🚚 கிளைக்கு அனுப்பி வை", key=f"tmgmt_disp_b_{uq['id']}", type="primary", use_container_width=True):
+                                                try:
+                                                    supabase.table("gold_loans").update({
+                                                        "packet_location": "IN_TRANSIT_TO_BRANCH",
+                                                        "release_requested": False,
+                                                        "release_request_remarks": None,
+                                                        "packet_updated_at": datetime.now().isoformat()
+                                                    }).eq("id", uq["id"]).execute()
+
+                                                    st.toast(f"✅ {uq.get('loan_no')} பாக்கெட் கிளைக்கு அனுப்பப்பட்டது!", icon="🚚")
+                                                    st.rerun()
+                                                except Exception as disp_err:
+                                                    st.error(f"அனுப்புவதில் பிழை: {disp_err}")
+                                        else:
+                                            # கிளை அடகு பாக்கெட்டுகளுக்கு நேரடி மீட்புக்கு அனுமதி (Approve) அளித்தல்
+                                            if st.button("✅ நேரடி மீட்புக்கு அனுமதி அளி", key=f"adm_app_rel_{uq['id']}", type="primary", use_container_width=True):
+                                                try:
+                                                    supabase.table("gold_loans").update({
+                                                        "release_requested": False,  # அட்மின் அனுமதி வழங்கப்பட்டது, கிளை டெலிவரி செய்யலாம்
+                                                        "packet_updated_at": datetime.now().isoformat()
+                                                    }).eq("id", uq["id"]).execute()
+                                                    st.success("✅ நேரடி மீட்புக்கு அனுமதி வழங்கப்பட்டது!")
+                                                    st.rerun()
+                                                except Exception as app_err:
+                                                    st.error(f"அனுமதி அளிப்பதில் பிழை: {app_err}")
+
+                                st.divider()
 
                                     # 2. கிளைக்கு அனுப்பி வைக்கும் பட்டன் (லாக்கரில் இருந்தால் இயங்காது)
                                     if is_in_locker:
