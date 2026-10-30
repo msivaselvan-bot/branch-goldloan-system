@@ -11492,35 +11492,47 @@ if st.session_state.get("logged_in", False):
                     "##### 🤝 வாடிக்கையாளரிடம் ஒப்படைத்தல் / திருப்பி அனுப்புதல்"
                 )
                 
-                # 🌟 நேரடி Supabase வினவல் மூலம் IN_TRANSIT_TO_BRANCH பாக்கெட்டுகளைத் துல்லியமாக எடுத்தல்
+                # 🌟 3000+ பதிவுகளில் இருந்து 'IN_TRANSIT_TO_BRANCH' பாக்கெட்டுகளை முழுமையாகப் பெற Range முறையைப் பயன்படுத்துதல்
+                transit_to_br = []
                 try:
-                    transit_res = (
-                        supabase.table("gold_loans")
-                        .select("*")
-                        .eq("branch_id", clean_b_id)
-                        .eq("packet_location", "IN_TRANSIT_TO_BRANCH")
-                        .execute()
-                    )
-                    transit_to_br = transit_res.data or []
-                except Exception:
-                    # ஒருவேளை பிழை ஏற்பட்டால் லோக்கல் முறையில் வடிகட்டுதல்
-                    transit_to_br = [
-                        l for l in b_loans 
-                        if str(l.get("packet_location", "")).strip().upper() == "IN_TRANSIT_TO_BRANCH"
-                    ]
+                    batch_size = 1000
+                    start = 0
+                    while True:
+                        res = (
+                            supabase.table("gold_loans")
+                            .select("*")
+                            .eq("packet_location", "IN_TRANSIT_TO_BRANCH")
+                            .range(start, start + batch_size - 1)
+                            .execute()
+                        )
+                        chunk_data = res.data or []
+                        if not chunk_data:
+                            break
+                        
+                        # தற்போதைய கிளைக்குரியவை மட்டும் சேர்ப்பது (அல்லது HQ எனில் அனைத்தையும் காட்டலாம்)
+                        for item in chunk_data:
+                            # இக்கிளைக்குரியது அல்லது அனைத்து கிளைகளையும் அட்மின் பார்க்க வேண்டுமெனில்:
+                            if str(item.get("branch_id")) == str(clean_b_id) or st.session_state.get("user_role") in ["Admin", "Operations"]:
+                                transit_to_br.append(item)
+
+                        if len(chunk_data) < batch_size:
+                            break
+                        start += batch_size
+                except Exception as e:
+                    st.error(f"⚠️ பாக்கெட்டுகளை எடுப்பதில் பிழை: {e}")
 
                 if not transit_to_br:
                     st.info(
                         "HQ-லிருந்து கிளைக்கு வழியில்/வந்த பாக்கெட்கள் ஏதும் இல்லை."
                     )
                 else:
-                    st.caption("HQ-லிருந்து வந்த பாக்கெட்கள் பட்டியல்:")
+                    st.caption(f"HQ-லிருந்து வந்த பாக்கெட்கள் பட்டியல் (மொத்தம்: {len(transit_to_br)}):")
                     for tb in transit_to_br:
                         ret_status = tb.get("return_request_status", "NONE")
+                        curr_b_name = b_map_name.get(tb.get('branch_id'), 'கிளை')
 
                         with st.expander(
-                            f"🏷️ **{tb['loan_no']}** | எடை: {tb['gross_weight']}g | நிலை:"
-                            f" {ret_status}"
+                            f"🏷️ **{tb['loan_no']}** | கிளை: {curr_b_name} | எடை: {tb.get('gross_weight', 0)}g | நிலை: {ret_status}"
                         ):
                             col_del, col_ret = st.columns(2)
 
@@ -11613,6 +11625,7 @@ if st.session_state.get("logged_in", False):
                                             " அனுப்பப்பட்டது!"
                                         )
                                         st.rerun()
+                                        
         elif selected_section == "🏦 நிதிப் பரிமாற்ற ஒப்புதல்":
             st.subheader("🏦 தலைமையக & கிளை நிதிப் பரிமாற்ற ஒப்புதல் மேசை")
 
