@@ -3798,28 +3798,9 @@ if st.session_state.get("logged_in", False):
 
                                 st.divider()
 
-                                    # 2. கிளைக்கு அனுப்பி வைக்கும் பட்டன் (லாக்கரில் இருந்தால் இயங்காது)
-                                    if is_in_locker:
-                                        st.button("🚚 கிளைக்கு அனுப்பி வை (Lock)", disabled=True, key=f"btn_lock_dis_{uq['id']}", use_container_width=True, help="பாக்கெட் லாக்கரில் உள்ளதால் தலைமையக பெட்டகத்திற்கு வந்த பின்பே அனுப்ப முடியும்!")
-                                    else:
-                                        if st.button("🚚 கிளைக்கு அனுப்பி வை", key=f"tmgmt_disp_b_{uq['id']}", type="primary", use_container_width=True):
-                                            try:
-                                                supabase.table("gold_loans").update({
-                                                    "packet_location": "IN_TRANSIT_TO_BRANCH",
-                                                    "release_requested": False,
-                                                    "release_request_remarks": None,
-                                                    "packet_updated_at": datetime.now().isoformat()
-                                                }).eq("id", uq["id"]).execute()
-
-                                                st.toast(f"✅ {uq.get('loan_no')} பாக்கெட் கிளைக்கு அனுப்பப்பட்டது!", icon="🚚")
-                                                st.rerun()
-                                            except Exception as disp_err:
-                                                st.error(f"அனுப்புவதில் பிழை: {disp_err}")
-
-                                st.divider()
-
                 with adm_sub2:
                     st.markdown("##### 🔄 கிளைகள் திருப்பி அனுப்ப அனுமதி கோரும் பாக்கெட்கள்")
+                    
                     # திருப்பி அனுப்பக் கோரியவை மட்டும் நேரடியாக வினவல்:
                     @st.cache_data(ttl=20)
                     def get_ret_requests_fast():
