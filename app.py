@@ -11588,7 +11588,7 @@ if st.session_state.get("logged_in", False):
             # -----------------------------------------------------------------
             # நிலை 3: வாடிக்கையாளரிடம் ஒப்படைத்தல் அல்லது அட்மின் அனுமதியுடன் திருப்புதல்
             # -----------------------------------------------------------------
-            with sub_bp3:
+           with sub_bp3:
                 st.markdown(
                     "##### 🤝 வாடிக்கையாளரிடம் ஒப்படைத்தல் / திருப்பி அனுப்புதல்"
                 )
@@ -11648,6 +11648,24 @@ if st.session_state.get("logged_in", False):
                         with st.expander(
                             f"🏷️ **{tb['loan_no']}** | கிளை: {curr_b_name} | எடை: {tb.get('gross_weight', 0)}g | நிலை: {ret_status}"
                         ):
+                            
+                            # 📦 கிளைப் பாதுகாப்பு பெட்டகத்திற்குப் பெற்றுக்கொள்ளும் புதிய படிநிலை
+                            st.write("📦 **1. கிளைப் பாதுகாப்பு பெட்டகத்திற்குப் பெற்றுக்கொள்ள:**")
+                            if st.button("📥 பாக்கெட்டைப் பெற்றுக்கொண்டேன் (Receive at Branch)", key=f"rcv_br_{tb['id']}"):
+                                try:
+                                    supabase.table("gold_loans").update({
+                                        "packet_location": "AT_BRANCH",
+                                        "packet_received_by": st.session_state.get("username", "Staff"),
+                                        "packet_updated_at": datetime.now().isoformat()
+                                    }).eq("id", tb["id"]).execute()
+
+                                    st.success(f"✅ {tb['loan_no']} பாக்கெட் வெற்றிகரமாகப் பெறப்பட்டு 'AT_BRANCH' நிலைக்கு மாற்றப்பட்டது!")
+                                    st.rerun()
+                                except Exception as rcv_err:
+                                    st.error(f"பெறுவதில் பிழை: {rcv_err}")
+
+                            st.divider()
+
                             col_del, col_ret = st.columns(2)
 
                             # அ. வாடிக்கையாளரிடம் ஒப்படைத்தல்
@@ -11655,22 +11673,25 @@ if st.session_state.get("logged_in", False):
                                 st.write(
                                     "✅ **வாடிக்கையாளர் நகையை மீட்டுச் சென்றால்:**"
                                 )
-                                if st.button(
-                                    "🤝 வாடிக்கையாளரிடம் ஒப்படைக்கப்பட்டது",
-                                    key=f"deliv_c_{tb['id']}",
-                                ):
-                                    supabase.table("gold_loans").update(
-                                        {
-                                            "packet_location": "DELIVERED",
-                                            "return_request_status": "NONE",
-                                            "packet_updated_at": datetime.now().isoformat(),
-                                        }
-                                    ).eq("id", tb["id"]).execute()
-                                    st.success(
-                                        f"{tb['loan_no']} வாடிக்கையாளரிடம் வெற்றிகரமாக"
-                                        " ஒப்படைக்கப்பட்டது!"
-                                    )
-                                    st.rerun()
+                                if tb.get("packet_location") == "IN_TRANSIT_TO_BRANCH":
+                                    st.warning("⚠️ முதலில் மேலே உள்ள 'பாக்கெட்டைப் பெற்றுக்கொண்டேன்' பொத்தானை அழுத்தவும்.")
+                                else:
+                                    if st.button(
+                                        "🤝 வாடிக்கையாளரிடம் ஒப்படைக்கப்பட்டது",
+                                        key=f"deliv_c_{tb['id']}",
+                                    ):
+                                        supabase.table("gold_loans").update(
+                                            {
+                                                "packet_location": "DELIVERED",
+                                                "return_request_status": "NONE",
+                                                "packet_updated_at": datetime.now().isoformat(),
+                                            }
+                                        ).eq("id", tb["id"]).execute()
+                                        st.success(
+                                            f"{tb['loan_no']} வாடிக்கையாளரிடம் வெற்றிகரமாக"
+                                            " ஒப்படைக்கப்பட்டது!"
+                                        )
+                                        st.rerun()
 
                             # ஆ. வாடிக்கையாளர் வராததால் திருப்பி அனுப்புதல் (அட்மின் அனுமதி தேவை)
                             with col_ret:
