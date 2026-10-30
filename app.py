@@ -11651,7 +11651,7 @@ if st.session_state.get("logged_in", False):
                         with st.expander(f"🪙 **{ab['loan_no']}** | எடை: {ab.get('gross_weight', 0)}g | மூலம்: {source_txt}"):
                             
                             # 🌟 HQ-லிருந்து வந்த பாக்கெட்டுகளுக்குப் பெற்றுக்கொள்ளும் வசதி (EDK/1608 போன்றவற்றுக்கு)
-                            if not is_from_hq and ab.get("packet_location") == "IN_TRANSIT_TO_BRANCH":
+                            if ab.get("packet_location") == "IN_TRANSIT_TO_BRANCH":
                                 st.write("📦 **1. கிளைப் பாதுகாப்பு பெட்டகத்திற்குப் பெற்றுக்கொள்ள:**")
                                 if st.button("📥 பாக்கெட்டைப் பெற்றுக்கொண்டேன் (Receive at Branch)", key=f"rcv_at_br_{ab['id']}"):
                                     try:
@@ -11660,6 +11660,7 @@ if st.session_state.get("logged_in", False):
                                             "packet_received_by": st.session_state.get("username", "Staff"),
                                             "packet_updated_at": datetime.now().isoformat()
                                         }).eq("id", ab["id"]).execute()
+                                        
                                         st.success("✅ பாக்கெட் பெறப்பட்டு கிளைப் பெட்டகத்திற்கு (AT_BRANCH) மாற்றப்பட்டது!")
                                         st.rerun()
                                     except Exception as err:
