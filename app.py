@@ -11499,6 +11499,14 @@ if st.session_state.get("logged_in", False):
                 except Exception:
                     clean_b_id = 2
 
+                # 🌟 b_map_name வராமல் இருப்பின் அதனை உருவாக்குதல்
+                if 'b_map_name' not in locals() and 'b_map_name' not in globals():
+                    try:
+                        branches_res = supabase.table("branches").select("id, branch_name").execute().data or []
+                        b_map_name = {b['id']: b['branch_name'] for b in branches_res}
+                    except Exception:
+                        b_map_name = {clean_b_id: "கிளை"}
+
                 # 🌟 3000+ பதிவுகளில் இருந்து 'IN_TRANSIT_TO_BRANCH' பாக்கெட்டுகளை முழுமையாகப் பெற Range முறையைப் பயன்படுத்துதல்
                 transit_to_br = []
                 try:
