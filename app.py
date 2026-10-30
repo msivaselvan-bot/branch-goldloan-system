@@ -11492,13 +11492,22 @@ if st.session_state.get("logged_in", False):
                     "##### 🤝 வாடிக்கையாளரிடம் ஒப்படைத்தல் / திருப்பி அனுப்புதல்"
                 )
                 
-                # 🌟 திருத்தம்: 'IN_TRANSIT_TO_HQ' ஐத் தவிர்த்துவிட்டு, கிளைக்கு வந்தடைந்த 'IN_TRANSIT_TO_BRANCH' பாக்கெட்டுகளை மட்டும் எடுத்தல்
-                transit_to_br = []
-                for l in b_loans:
-                    loc = str(l.get("packet_location", "")).strip().upper()
-                    # HQ-க்கு செல்லும் பாக்கெட்டுகளை (IN_TRANSIT_TO_HQ) முற்றிலுமாகத் தவிர்த்தல்
-                    if loc != "IN_TRANSIT_TO_HQ" and ("IN_TRANSIT_TO_BRANCH" in loc or "TRANSIT" in loc or "DISPATCH" in loc):
-                        transit_to_br.append(l)
+                # 🌟 நேரடி Supabase வினவல் மூலம் IN_TRANSIT_TO_BRANCH பாக்கெட்டுகளைத் துல்லியமாக எடுத்தல்
+                try:
+                    transit_res = (
+                        supabase.table("gold_loans")
+                        .select("*")
+                        .eq("branch_id", clean_b_id)
+                        .eq("packet_location", "IN_TRANSIT_TO_BRANCH")
+                        .execute()
+                    )
+                    transit_to_br = transit_res.data or []
+                except Exception:
+                    # ஒருவேளை பிழை ஏற்பட்டால் லோக்கல் முறையில் வடிகட்டுதல்
+                    transit_to_br = [
+                        l for l in b_loans 
+                        if str(l.get("packet_location", "")).strip().upper() == "IN_TRANSIT_TO_BRANCH"
+                    ]
 
                 if not transit_to_br:
                     st.info(
@@ -11604,7 +11613,6 @@ if st.session_state.get("logged_in", False):
                                             " அனுப்பப்பட்டது!"
                                         )
                                         st.rerun()
-
         elif selected_section == "🏦 நிதிப் பரிமாற்ற ஒப்புதல்":
             st.subheader("🏦 தலைமையக & கிளை நிதிப் பரிமாற்ற ஒப்புதல் மேசை")
 
