@@ -3294,11 +3294,11 @@ if st.session_state.get("logged_in", False):
                         .select(
                             "id, loan_no, branch_id, gross_weight, packet_location, "
                             "release_requested, release_request_remarks, release_request_date, "
-                            "repledge_bank, status"
+                            "repledge_bank, repledge_loan_no, repledge_amount, repledge_charges, status"
                         )
-                        .or_("release_requested.eq.true,packet_location.eq.BRANCH_REQUESTED_RELEASE")
+                        .eq("release_requested", True)
                         .order("id", desc=True)
-                        .limit(50)
+                        .limit(100)
                         .execute()
                         .data or []
                     )
@@ -3687,7 +3687,7 @@ if st.session_state.get("logged_in", False):
                 with adm_sub1:
                     st.markdown("##### 🚨 வாடிக்கையாளர் மீட்புக் கோரிக்கைகள் (Customer Release Requests)")
                     
-                    # 🌟 3000+ பதிவுகளில் இருந்து அவசர மீட்புக் கோரிக்கைகளை முழுமையாக எடுக்க Range முறையைப் பயன்படுத்துதல்
+                    # 3000+ பதிவுகளிலிருந்து அவசரக் கோரிக்கைகளை எடுப்பது
                     urgent_requests = []
                     try:
                         batch_size = 1000
@@ -3708,7 +3708,7 @@ if st.session_state.get("logged_in", False):
                                 break
                             start += batch_size
                     except Exception as e:
-                        st.error(f"⚠️ அவசரக் கோரிக்கைகளை எடுப்பதில் பிழை: {e}")
+                        st.error(f"⚠️ பிழை: {e}")
 
                     if not urgent_requests:
                         st.info("தற்போது கிளைகளிலிருந்து எந்த மீட்புக் கோரிக்கைகளும் நிலுவையில் இல்லை.")
@@ -3716,13 +3716,14 @@ if st.session_state.get("logged_in", False):
                         st.warning(f"⚠️ கிளைகள் அனுப்பிய அவசரக் கோரிக்கைகள் எண்ணிக்கை: **{len(urgent_requests)}**")
                         
                         for uq in urgent_requests:
+                            # 🌟 உண்மையான இருப்பிடத்தை அடிப்படையாக வைத்து நிலை கண்டறிதல்
                             p_loc = str(uq.get("packet_location", "")).strip().upper()
                             is_in_locker = (p_loc == "IN_BANK_LOCKER")
                             
                             loc_txt = (
-                                "🏢 HQ பெட்டகத்தில் உள்ளது"
-                                if p_loc in ["AT_HQ_VAULT", "BRANCH_REQUESTED_RELEASE"]
-                                else f"🏦 {uq.get('repledge_bank', 'வங்கி')} லாக்கரில் உள்ளது (நிலை: {p_loc})"
+                                "🏢 HQ பெட்டகத்தில் உள்ளது (AT_HQ_VAULT)"
+                                if p_loc == "AT_HQ_VAULT"
+                                else (f"🏦 {uq.get('repledge_bank', 'வங்கி')} லாக்கரில் உள்ளது" if is_in_locker else f"📍 இருப்பிடம்: {p_loc}")
                             )
                             
                             with st.container(border=True):
@@ -3733,25 +3734,24 @@ if st.session_state.get("logged_in", False):
                                     st.write(f"எடை: **{uq.get('gross_weight')}g**")
                                 
                                 with u2:
-                                    st.write(f"இருப்பிடம்: **{loc_txt}**")
+                                    st.write(f"உண்மையான இருப்பிடம்: **{loc_txt}**")
                                     rem_text = uq.get("release_request_remarks") or "குறிப்பு இல்லை"
                                     st.info(f"💬 **கிளைக் குறிப்பு:** {rem_text}")
                                     
-                                    # 🌟 பாக்கெட் லாக்கரில் இருந்தால் வங்கி ரீபிளட்ஜ் விபரங்களைக் காட்டுதல்
+                                    # பாக்கெட் லாக்கரில் இருந்தால் வங்கி விபரங்களைக் காட்டுதல்
                                     if is_in_locker:
                                         st.warning(
                                             "⚠️ **இந்தப் பாக்கெட் தற்போது வங்கி லாக்கரில் உள்ளது!**\n\n"
                                             f"🏦 **வங்கி பெயர்:** {uq.get('repledge_bank', '-')}\n"
                                             f"📋 **வங்கி கடன் எண்:** {uq.get('repledge_loan_no', '-')}\n"
-                                            f"💰 **வாங்கிய கடன் தொகை:** ₹{float(uq.get('repledge_amount', 0) or 0):,.2f}\n"
-                                            f"மாகக் கட்டணம்: ₹{float(uq.get('repledge_charges', 0) or 0):,.2f}"
+                                            f"💰 **வாங்கிய கடன் தொகை:** ₹{float(uq.get('repledge_amount', 0) or 0):,.2f}"
                                         )
 
                                 with u3:
                                     st.caption(f"கோரப்பட்ட நேரம்:\n{str(uq.get('release_request_date', ''))[:16]}")
                                     
-                                    # 1. கோரிக்கையை நிராகரிக்க (Reject) பட்டன்
-                                    if st.button("❌ கோரிக்கையை நிராகரி", key=f"tmgmt_rej_{uq['id']}", use_container_width=True):
+                                    # 1. கோரிக்கையை நிராகரிக்க (Reject)
+                                    if st.button("❌ கோரிக்கையை நிராகри", key=f"tmgmt_rej_{uq['id']}", use_container_width=True):
                                         try:
                                             supabase.table("gold_loans").update({
                                                 "release_requested": False,
@@ -11566,9 +11566,11 @@ if st.session_state.get("logged_in", False):
                                 
                                 if st.form_submit_button("🚨 தலைமையகத்திடம் பாக்கெட்டைக் கோரு (Send Request)"):
                                     try:
+                                        # 🌟 மிக முக்கியத் திருத்தம்: packet_location-ஐ மாற்றக்கூடாது! 
+                                        # உண்மையான இருப்பிடம் AT_HQ_VAULT அல்லது IN_BANK_LOCKER என்றே இருக்க வேண்டும்.
+                                        # கிளை கோரிக்கை வைத்துள்ளதை அறிய release_requested மட்டுமே True ஆகும்.
                                         supabase.table("gold_loans").update(
                                             {
-                                                "packet_location": "BRANCH_REQUESTED_RELEASE",
                                                 "release_requested": True,
                                                 "release_request_date": datetime.now().isoformat(),
                                                 "release_request_remarks": (
