@@ -11492,6 +11492,13 @@ if st.session_state.get("logged_in", False):
                     "##### 🤝 வாடிக்கையாளரிடம் ஒப்படைத்தல் / திருப்பி அனுப்புதல்"
                 )
                 
+                # 🌟 branch_id பாதுகாப்பாக integer-ஆக மாற்றுதல்
+                raw_b_id = st.session_state.get("branch_id")
+                try:
+                    clean_b_id = int(raw_b_id) if raw_b_id not in (None, "", "null") else 2
+                except Exception:
+                    clean_b_id = 2
+
                 # 🌟 3000+ பதிவுகளில் இருந்து 'IN_TRANSIT_TO_BRANCH' பாக்கெட்டுகளை முழுமையாகப் பெற Range முறையைப் பயன்படுத்துதல்
                 transit_to_br = []
                 try:
@@ -11509,9 +11516,7 @@ if st.session_state.get("logged_in", False):
                         if not chunk_data:
                             break
                         
-                        # தற்போதைய கிளைக்குரியவை மட்டும் சேர்ப்பது (அல்லது HQ எனில் அனைத்தையும் காட்டலாம்)
                         for item in chunk_data:
-                            # இக்கிளைக்குரியது அல்லது அனைத்து கிளைகளையும் அட்மின் பார்க்க வேண்டுமெனில்:
                             if str(item.get("branch_id")) == str(clean_b_id) or st.session_state.get("user_role") in ["Admin", "Operations"]:
                                 transit_to_br.append(item)
 
@@ -11625,7 +11630,7 @@ if st.session_state.get("logged_in", False):
                                             " அனுப்பப்பட்டது!"
                                         )
                                         st.rerun()
-                                        
+
         elif selected_section == "🏦 நிதிப் பரிமாற்ற ஒப்புதல்":
             st.subheader("🏦 தலைமையக & கிளை நிதிப் பரிமாற்ற ஒப்புதல் மேசை")
 
