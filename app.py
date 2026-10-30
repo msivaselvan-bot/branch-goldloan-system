@@ -3686,44 +3686,102 @@ if st.session_state.get("logged_in", False):
 
                 with adm_sub1:
                     st.markdown("##### 🚨 வாடிக்கையாளர் மீட்புக் கோரிக்கைகள் (Customer Release Requests)")
+                    
+                    # 🌟 3000+ பதிவுகளில் இருந்து அவசர மீட்புக் கோரிக்கைகளை முழுமையாக எடுக்க Range முறையைப் பயன்படுத்துதல்
+                    urgent_requests = []
+                    try:
+                        batch_size = 1000
+                        start = 0
+                        while True:
+                            res = (
+                                supabase.table("gold_loans")
+                                .select("*")
+                                .eq("release_requested", True)
+                                .range(start, start + batch_size - 1)
+                                .execute()
+                            )
+                            chunk_data = res.data or []
+                            if not chunk_data:
+                                break
+                            urgent_requests.extend(chunk_data)
+                            if len(chunk_data) < batch_size:
+                                break
+                            start += batch_size
+                    except Exception as e:
+                        st.error(f"⚠️ அவசரக் கோரிக்கைகளை எடுப்பதில் பிழை: {e}")
+
                     if not urgent_requests:
                         st.info("தற்போது கிளைகளிலிருந்து எந்த மீட்புக் கோரிக்கைகளும் நிலுவையில் இல்லை.")
                     else:
                         st.warning(f"⚠️ கிளைகள் அனுப்பிய அவசரக் கோரிக்கைகள் எண்ணிக்கை: **{len(urgent_requests)}**")
                         
                         for uq in urgent_requests:
+                            p_loc = str(uq.get("packet_location", "")).strip().upper()
+                            is_in_locker = (p_loc == "IN_BANK_LOCKER")
+                            
                             loc_txt = (
                                 "🏢 HQ பெட்டகத்தில் உள்ளது"
-                                if uq.get("packet_location") in ["AT_HQ_VAULT", "BRANCH_REQUESTED_RELEASE"]
-                                else f"🏦 {uq.get('repledge_bank', 'வங்கி')} லாக்கரில் உள்ளது"
+                                if p_loc in ["AT_HQ_VAULT", "BRANCH_REQUESTED_RELEASE"]
+                                else f"🏦 {uq.get('repledge_bank', 'வங்கி')} லாக்கரில் உள்ளது (நிலை: {p_loc})"
                             )
-                            with st.container():
-                                u1, u2, u3, u4 = st.columns([2, 3, 2, 2])
-                                u1.error(f"🏷️ **{uq['loan_no']}**")
-                                u2.write(f"கிளை: **{b_map_name.get(uq.get('branch_id'), '-')}** | எடை: **{uq.get('gross_weight')}g**\nஇருப்பிடம்: **{loc_txt}**")
-                                
-                                rem_text = uq.get("release_request_remarks") or "குறிப்பு இல்லை"
-                                u2.info(f"💬 **கிளைக் குறிப்பு:** {rem_text}")
-                                u3.caption(f"கோரப்பட்ட நேரம்:\n{str(uq.get('release_request_date', ''))[:16]}")
                             
-                                # 🚚 கிளைக்கு அனுப்பி வைக்கும் பொத்தான் (0.2 வினாடி பதில்):
-                                if u4.button("🚚 கிளைக்கு அனுப்பி வை", key=f"tmgmt_disp_b_{uq['id']}", type="primary", use_container_width=True):
-                                    try:
-                                        supabase.table("gold_loans").update({
-                                            "packet_location": "IN_TRANSIT_TO_BRANCH",
-                                            "release_requested": False,
-                                            "packet_updated_at": datetime.now().isoformat()
-                                        }).eq("id", uq["id"]).execute()
+                            with st.container(border=True):
+                                u1, u2, u3 = st.columns([2, 4, 2])
+                                with u1:
+                                    st.error(f"🏷️ **{uq['loan_no']}**")
+                                    st.write(f"கிளை: **{b_map_name.get(uq.get('branch_id'), '-')}**")
+                                    st.write(f"எடை: **{uq.get('gross_weight')}g**")
+                                
+                                with u2:
+                                    st.write(f"இருப்பிடம்: **{loc_txt}**")
+                                    rem_text = uq.get("release_request_remarks") or "குறிப்பு இல்லை"
+                                    st.info(f"💬 **கிளைக் குறிப்பு:** {rem_text}")
+                                    
+                                    # 🌟 பாக்கெட் லாக்கரில் இருந்தால் வங்கி ரீபிளட்ஜ் விபரங்களைக் காட்டுதல்
+                                    if is_in_locker:
+                                        st.warning(
+                                            "⚠️ **இந்தப் பாக்கெட் தற்போது வங்கி லாக்கரில் உள்ளது!**\n\n"
+                                            f"🏦 **வங்கி பெயர்:** {uq.get('repledge_bank', '-')}\n"
+                                            f"📋 **வங்கி கடன் எண்:** {uq.get('repledge_loan_no', '-')}\n"
+                                            f"💰 **வாங்கிய கடன் தொகை:** ₹{float(uq.get('repledge_amount', 0) or 0):,.2f}\n"
+                                            f"மாகக் கட்டணம்: ₹{float(uq.get('repledge_charges', 0) or 0):,.2f}"
+                                        )
 
-                                        # அவசரக் கோரிக்கை கேச்சை மட்டும் உடனே அழித்தல்
-                                        get_urgent_requests_fast.clear()
+                                with u3:
+                                    st.caption(f"கோரப்பட்ட நேரம்:\n{str(uq.get('release_request_date', ''))[:16]}")
+                                    
+                                    # 1. கோரிக்கையை நிராகரிக்க (Reject) பட்டன்
+                                    if st.button("❌ கோரிக்கையை நிராகரி", key=f"tmgmt_rej_{uq['id']}", use_container_width=True):
+                                        try:
+                                            supabase.table("gold_loans").update({
+                                                "release_requested": False,
+                                                "release_request_remarks": None,
+                                                "packet_updated_at": datetime.now().isoformat()
+                                            }).eq("id", uq["id"]).execute()
+                                            st.toast("❌ அவசர மீட்புக் கோரிக்கை நிராகரிக்கப்பட்டது!", icon="🚫")
+                                            st.rerun()
+                                        except Exception as rej_err:
+                                            st.error(f"நிராகரிப்பதில் பிழை: {rej_err}")
 
-                                        st.toast(f"✅ {uq.get('loan_no')} பாக்கெட் கிளைக்கு அனுப்பப்பட்டது!", icon="🚚")
-                                        st.rerun()
-                                    except Exception as disp_err:
-                                        st.error(f"அனுப்புவதில் பிழை: {disp_err}")
+                                    # 2. கிளைக்கு அனுப்பி வைக்கும் பட்டன் (லாக்கரில் இருந்தால் இயங்காது)
+                                    if is_in_locker:
+                                        st.button("🚚 கிளைக்கு அனுப்பி வை (Lock)", disabled=True, key=f"btn_lock_dis_{uq['id']}", use_container_width=True, help="பாக்கெட் லாக்கரில் உள்ளதால் தலைமையக பெட்டகத்திற்கு வந்த பின்பே அனுப்ப முடியும்!")
+                                    else:
+                                        if st.button("🚚 கிளைக்கு அனுப்பி வை", key=f"tmgmt_disp_b_{uq['id']}", type="primary", use_container_width=True):
+                                            try:
+                                                supabase.table("gold_loans").update({
+                                                    "packet_location": "IN_TRANSIT_TO_BRANCH",
+                                                    "release_requested": False,
+                                                    "release_request_remarks": None,
+                                                    "packet_updated_at": datetime.now().isoformat()
+                                                }).eq("id", uq["id"]).execute()
 
-                            st.divider()
+                                                st.toast(f"✅ {uq.get('loan_no')} பாக்கெட் கிளைக்கு அனுப்பப்பட்டது!", icon="🚚")
+                                                st.rerun()
+                                            except Exception as disp_err:
+                                                st.error(f"அனுப்புவதில் பிழை: {disp_err}")
+
+                                st.divider()
 
                 with adm_sub2:
                     st.markdown("##### 🔄 கிளைகள் திருப்பி அனுப்ப அனுமதி கோரும் பாக்கெட்கள்")
