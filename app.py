@@ -3523,17 +3523,22 @@ if st.session_state.get("logged_in", False):
                 with col_bk1:
                     st.write("🏢 **HQ பெட்டகத்தில் உள்ள கடன்கள் (லாக்கருக்கு அனுப்ப):**")
                     search_vault_gl = st.text_input(
-                        "🔍 HQ பெட்டக பாக்கெட் தேடல் (கடன் எண் / நகை விவரம்):",
-                        placeholder="எ.கா: 1718 அல்லது Ring...",
+                        "🔍 HQ பெட்டக பாக்கெட் தேடல் (கடன் எண் / நகை விவரம் / கிளைப் பெயர்):",
+                        placeholder="எ.கா: 1718 அல்லது Ring அல்லது Nagercoil...",
                         key="search_vault_gl_box"
                     ).strip().lower()
 
                     if search_vault_gl:
-                        filtered_vault_loans = [
-                            vl for vl in vault_loans
-                            if search_vault_gl in str(vl.get("loan_no", "")).lower()
-                            or search_vault_gl in str(vl.get("ornament_details", "")).lower()
-                        ]
+                        filtered_vault_loans = []
+                        for vl in vault_loans:
+                            l_no = str(vl.get("loan_no", "")).lower()
+                            orn_det = str(vl.get("ornament_details", "")).lower()
+                            # கிளை ஐடியை வைத்து b_map_name-லிருந்து கிளைப் பெயரைப் பெறுதல்
+                            branch_name_str = str(b_map_name.get(vl.get("branch_id"), "")).lower()
+                            
+                            # கடன் எண் அல்லது நகை விவரம் அல்லது கிளைப் பெயரில் தேடல் பொருந்துதா எனச் சோதித்தல்
+                            if (search_vault_gl in l_no) or (search_vault_gl in orn_det) or (search_vault_gl in branch_name_str):
+                                filtered_vault_loans.append(vl)
                     else:
                         filtered_vault_loans = vault_loans[:15]
 
