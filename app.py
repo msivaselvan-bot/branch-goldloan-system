@@ -4013,7 +4013,7 @@ if st.session_state.get("logged_in", False):
             # =====================================================================
             with sub_appr_tab1:
                 st.markdown("##### 🏦 ரீபிளட்ஜ் & மீட்பு வங்கி பரிவர்த்தனை சரிபார்ப்பு (Pending Approvals)")
-                st.caption("உள்ளிட்ட ரீபிளட்ஜ் தொகையைச் சரிபார்த்து உறுதிசெய்தால் மட்டுமே குறிப்பிட்ட வங்கிக் கணக்கில் இருப்பு கூடும்/குறையும்.")
+                st.caption("உள்ளிட்ட ரீபிளட்ஜ் தொகையைச் சரிபார்த்து உறுதிசெய்தால் மட்டுமே குறிப்பிட்ட வங்கிக் கணக்கில் இருப்பு கூடும்/குறையும். பிழையுள்ள பதிவுகளை நிராகரிக்கலாம்.")
 
                 # 🌟 1. gold_loans அட்டவணையில் இருந்து நேரடியாக நிலுவைப் பாக்கெட்களை எடுத்தல்:
                 try:
@@ -4056,7 +4056,7 @@ if st.session_state.get("logged_in", False):
                         # நிகரத் தொகை கணக்கீடு
                         if is_credit:
                             t_amt = rep_amt - rep_charges
-                            desc_label = f"ரீபிளட்ஜ் வரவு: {gl_no} (அசல்: ₹{rep_amt:,.2f} - கட்டணம்: ₹{rep_charges:,.2f})"
+                            desc_label = f"ரீபிளட்ஜ் வரவு: {gl_no} (அசல்: ₹{rep_amt:,.2f} | கட்டணம்: ₹{rep_charges:,.2f})"
                         else:
                             t_amt = rep_amt + int_paid
                             desc_label = f"ரீபிளட்ஜ் மீட்பு பற்று: {gl_no} (அசல்: ₹{rep_amt:,.2f} + வட்டி: ₹{int_paid:,.2f})"
@@ -4071,10 +4071,10 @@ if st.session_state.get("logged_in", False):
                         cur_bal = float(matched_bank.get("current_balance", 0) or 0) if matched_bank else 0.0
                         bank_title = f"{matched_bank.get('bank_name')} ({str(matched_bank.get('account_number', ''))[-4:]})" if matched_bank else b_name
 
-                        with st.container():
-                            c1, c2, c3, c4 = st.columns([2, 4, 2, 2])
+                        with st.container(border=True):
+                            c1, c2, c3, c4 = st.columns([2, 3, 2, 2])
                             c1.warning(f"🏷️ **கடன் எண்: {gl_no}**\nவங்கி கடன்: `{b_loan_no}`\nஎடை: `{p_loan.get('gross_weight')}g`")
-                            c2.write(f"**{desc_label}**\n🏦 வங்கி: **{bank_title}** | நடப்பு இருப்பு: ₹{cur_bal:,.2f}")
+                            c2.write(f"**{desc_label}**\n🏦 வங்கி: **{bank_title}**\nநடப்பு இருப்பு: ₹{cur_bal:,.2f}")
                             c3.metric(
                                 "பரிவர்த்தனைத் தொகை",
                                 f"₹{t_amt:,.2f}",
@@ -4083,63 +4083,88 @@ if st.session_state.get("logged_in", False):
                             )
 
                             with c4:
-                                    if st.button("✅ சரிபார் (Approve)", key=f"sec_appr_gl_{gl_id}", type="primary", use_container_width=True):
-                                        flow_dir = "IN" if is_credit else "OUT"
-                                        today_str = datetime.now().date().isoformat()
-                                        
-                                        # 🛡️ இரட்டைப் பதிவு சரிபார்ப்பு (Duplicate Check)
-                                        chk_existing = (
-                                            supabase.table("bank_transactions")
-                                            .select("id")
-                                            .eq("reference_no", str(b_loan_no))
-                                            .eq("txn_date", today_str)
-                                            .eq("amount", t_amt)
-                                            .execute()
-                                            .data or []
-                                        )
+                                # 1. சரிபார் / ஒப்புதல் அளி (Approve)
+                                if st.button("✅ சரிபார் (Approve)", key=f"sec_appr_gl_{gl_id}", type="primary", use_container_width=True):
+                                    flow_dir = "IN" if is_credit else "OUT"
+                                    today_str = datetime.now().date().isoformat()
+                                    
+                                    # 🛡️ இரட்டைப் பதிவு சரிபார்ப்பு (Duplicate Check)
+                                    chk_existing = (
+                                        supabase.table("bank_transactions")
+                                        .select("id")
+                                        .eq("reference_no", str(b_loan_no))
+                                        .eq("txn_date", today_str)
+                                        .eq("amount", t_amt)
+                                        .execute()
+                                        .data or []
+                                    )
 
-                                        bank_insert_success = False
+                                    bank_insert_success = False
 
-                                        # ஏற்கனவே பதிவு இல்லை என்றால் மட்டுமே புதிய பதிவைச் சேர்த்தல்
-                                        if not chk_existing and matched_bank:
-                                            try:
-                                                payload = {
-                                                    "bank_account_id": matched_bank["id"],
-                                                    "txn_date": today_str,
-                                                    "txn_flow": flow_dir,
-                                                    "amount": t_amt,
-                                                    "reference_no": str(b_loan_no),
-                                                    "remarks": desc_label,
-                                                    "created_by": st.session_state.get("username", "Admin")
-                                                }
-                                                if p_loan.get("branch_id"):
-                                                    payload["branch_id"] = p_loan.get("branch_id")
-
-                                                ins_res = supabase.table("bank_transactions").insert(payload).execute()
-                                                if ins_res.data:
-                                                    bank_insert_success = True
-                                            except Exception as ins_err:
-                                                st.error(f"பாஸ்புக் பதிவில் பிழை: {ins_err}")
-                                        else:
-                                            bank_insert_success = True
-
-                                        # பாக்கெட்டின் இறுதி நிலையை மாற்றுதல்
-                                        if bank_insert_success:
-                                            target_loc = "IN_BANK_LOCKER" if is_credit else "AT_HQ_VAULT"
-                                            update_gl_payload = {
-                                                "packet_location": target_loc,
-                                                "packet_updated_at": datetime.now().isoformat()
+                                    if not chk_existing and matched_bank:
+                                        try:
+                                            payload = {
+                                                "bank_account_id": matched_bank["id"],
+                                                "txn_date": today_str,
+                                                "txn_flow": flow_dir,
+                                                "amount": t_amt,
+                                                "reference_no": str(b_loan_no),
+                                                "remarks": desc_label,
+                                                "created_by": st.session_state.get("username", "Admin")
                                             }
-                                            if not is_credit:
-                                                update_gl_payload.update({
-                                                    "repledge_bank": None,
-                                                    "repledge_loan_no": None,
-                                                    "repledge_amount": 0.0
-                                                })
+                                            if p_loan.get("branch_id"):
+                                                payload["branch_id"] = p_loan.get("branch_id")
 
-                                            supabase.table("gold_loans").update(update_gl_payload).eq("id", gl_id).execute()
-                                            st.success(f"🎉 கடன் `{gl_no}` வெற்றிகரமாக அங்கீகரிக்கப்பட்டது!")
-                                            st.rerun()
+                                            ins_res = supabase.table("bank_transactions").insert(payload).execute()
+                                            if ins_res.data:
+                                                bank_insert_success = True
+                                        except Exception as ins_err:
+                                            st.error(f"பாஸ்புக் பதிவில் பிழை: {ins_err}")
+                                    else:
+                                        bank_insert_success = True
+
+                                    # பாக்கெட்டின் இறுதி நிலையை மாற்றுதல்
+                                    if bank_insert_success:
+                                        target_loc = "IN_BANK_LOCKER" if is_credit else "AT_HQ_VAULT"
+                                        update_gl_payload = {
+                                            "packet_location": target_loc,
+                                            "packet_updated_at": datetime.now().isoformat()
+                                        }
+                                        if not is_credit:
+                                            update_gl_payload.update({
+                                                "repledge_bank": None,
+                                                "repledge_loan_no": None,
+                                                "repledge_amount": 0.0,
+                                                "repledge_charges": 0.0,
+                                                "repledge_interest_paid": 0.0
+                                            })
+
+                                        supabase.table("gold_loans").update(update_gl_payload).eq("id", gl_id).execute()
+                                        st.success(f"🎉 கடன் `{gl_no}` வெற்றிகரமாக அங்கீகரிக்கப்பட்டது!")
+                                        st.rerun()
+
+                                # 2. 🌟 புதிய வசதி: கோரிக்கையை நிராகரி (Reject / Cancel Request)
+                                if st.button("❌ நிராகரி (Reject)", key=f"sec_rej_gl_{gl_id}", use_container_width=True):
+                                    try:
+                                        # நிராகரிக்கும்போது பாக்கெட் நிலையை முந்தைய சரியான நிலைக்கு மாற்றுதல் 
+                                        # (RE_PLEDGE_PENDING_APPROVAL என்றால் AT_HQ_VAULT, மற்றொன்றுக்கு IN_BANK_LOCKER)
+                                        fallback_loc = "AT_HQ_VAULT" if is_credit else "IN_BANK_LOCKER"
+                                        
+                                        reject_payload = {
+                                            "packet_location": fallback_loc,
+                                            "repledge_bank": None,
+                                            "repledge_loan_no": None,
+                                            "repledge_amount": 0.0,
+                                            "repledge_charges": 0.0,
+                                            "repledge_interest_paid": 0.0,
+                                            "packet_updated_at": datetime.now().isoformat()
+                                        }
+                                        
+                                        supabase.table("gold_loans").update(reject_payload).eq("id", gl_id).execute()
+                                        st.warning(f"❌ கடன் `{gl_no}` ரீபிளட்ஜ் கோரிக்கை நிராகரிக்கப்பட்டது!")
+                                        st.rerun()
+                                    except Exception as rej_err:
+                                        st.error(f"நிராகரிப்பதில் பிழை: {rej_err}")
 
             # =====================================================================
             # தாவல் 2: தலைமையக & கிளை நிதிப் பரிமாற்றம் (Fund Transfers)
